@@ -60,7 +60,7 @@ class NoteFilter(TagFilter):
 class PumpingFilter(TagFilter):
     class Meta:
         model = models.Pumping
-        fields = ["child"]
+        fields = ["parent"]
 
 
 class SleepFilter(TagFilter):

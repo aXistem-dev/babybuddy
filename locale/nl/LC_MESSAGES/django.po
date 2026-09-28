@@ -1762,7 +1762,7 @@ msgstr "Tag verwijderen"
 msgid "There is 1 item tagged with this tag."
 msgid_plural "There are %(count)s items tagged with this tag."
 msgstr[0] "Er is 1 item met deze tag."
-msgstr[1] "Er zijn %(count)d items met deze tag."
+msgstr[1] "Er zijn %(count)s items met deze tag."
 
 #: core/templates/core/tag_confirm_delete.html:29
 msgid ""
@@ -3069,3 +3069,460 @@ msgstr "WHO-gewichtspercentielen voor meisjes (kg)"
 
 #~ msgid "<b>Feeding Pattern</b>"
 #~ msgstr "<b>Voedingspatroon</b>"
+
+#: api/serializers.py:213
+msgid "This child has no single linked parent; send `parent`."
+msgstr "Dit kind heeft geen eenduidige gekoppelde ouder; stuur `parent` mee."
+
+#: api/serializers.py:339
+msgid "Discarding milk needs milk taken from the stash."
+msgstr "Melk weggooien vereist dat er melk uit de voorraad is gehaald."
+
+#: api/serializers.py:351
+msgid "Send stash_discarded with the amount discarded."
+msgstr "Stuur stash_discarded mee met de weggegooide hoeveelheid."
+
+#: api/views.py:133 core/views.py:419
+#, python-format
+msgid "%(name)s still has pumping or stash entries; move or delete them first."
+msgstr ""
+"%(name)s heeft nog kolf- of voorraadgegevens; verplaats of verwijder deze "
+"eerst."
+
+#: babybuddy/models.py:134
+msgid "Show the negative milk stash warning"
+msgstr "Waarschuwing voor negatieve melkvoorraad tonen"
+
+#: babybuddy/models.py:136
+msgid ""
+"Shown on the milk stash page while more milk has left the stash than was "
+"logged going in."
+msgstr ""
+"Wordt getoond op de melkvoorraadpagina zolang er meer melk uit de voorraad "
+"is gehaald dan er is geregistreerd als toegevoegd."
+
+#: babybuddy/site_settings.py:66
+msgid "Store pumped milk in the stash by default"
+msgstr "Afgekolfde melk standaard in de voorraad bewaren"
+
+#: babybuddy/site_settings.py:68
+msgid ""
+"Pre-selects \"Store in stash\" on new pumping entries; also applies to "
+"pumping created through the API without a stash amount."
+msgstr ""
+"Zet \"In voorraad bewaren\" standaard aan bij nieuwe kolfregistraties; geldt "
+"ook voor kolfregistraties die zonder voorraadhoeveelheid via de API worden "
+"aangemaakt."
+
+#: babybuddy/site_settings.py:76
+msgid "Take breast milk bottles from the stash by default"
+msgstr "Flesvoeding met moedermelk standaard uit de voorraad halen"
+
+#: babybuddy/site_settings.py:78
+msgid ""
+"Pre-selects \"Taken from stash\" on new breast milk bottles once the stash "
+"has been used; API-created bottles without a stash amount follow the same "
+"rule."
+msgstr ""
+"Zet \"Uit voorraad\" standaard aan bij nieuwe flessen moedermelk zodra de "
+"voorraad in gebruik is; flessen die zonder voorraadhoeveelheid via de API "
+"worden aangemaakt volgen dezelfde regel."
+
+#: babybuddy/site_settings.py:85
+msgid "Warn about stashed milk after (hours)"
+msgstr "Waarschuwen voor melk in voorraad na (uren)"
+
+#: babybuddy/site_settings.py:86
+msgid "Milk older than this is marked to use first."
+msgstr "Melk die ouder is dan dit wordt gemarkeerd om eerst te gebruiken."
+
+#: babybuddy/site_settings.py:90
+msgid "Throw stashed milk away after (hours)"
+msgstr "Melk in voorraad weggooien na (uren)"
+
+#: babybuddy/site_settings.py:91
+msgid "Milk older than this is marked expired."
+msgstr "Melk die ouder is dan dit wordt als vervallen gemarkeerd."
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:146 core/models.py:317
+#: core/templates/core/parent_confirm_delete.html:8
+#: core/templates/core/parent_detail.html:8
+#: core/templates/core/parent_form.html:12
+#: core/templates/core/parent_list.html:4
+#: core/templates/core/parent_list.html:7
+#: core/templates/core/parent_list.html:11
+#: reports/templates/reports/parent_pumping_amounts.html:8
+msgid "Parents"
+msgstr "Ouders"
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:152 core/models.py:316
+#: core/models.py:414 core/models.py:672 core/models.py:771
+#: core/templates/core/pumping_list.html:30
+#: core/templates/core/stashadjustment_list.html:31
+msgid "Parent"
+msgstr "Ouder"
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:316
+#: babybuddy/templates/babybuddy/user_settings_form.html:78
+#: core/templates/core/stash.html:4 core/templates/core/stash.html:7
+#: core/templates/core/stash.html:11
+#: core/templates/core/stashadjustment_confirm_delete.html:8
+#: core/templates/core/stashadjustment_form.html:12
+#: core/templates/core/stashadjustment_list.html:8
+#: dashboard/templates/cards/stash.html:4
+#: reports/templates/reports/stash_balance.html:8
+#: reports/templates/reports/stash_flow.html:8
+#: reports/templates/reports/stash_use.html:8
+msgid "Milk stash"
+msgstr "Melkvoorraad"
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:323 core/models.py:790
+#: core/templates/core/parent_detail.html:106
+#: core/templates/core/stashadjustment_confirm_delete.html:11
+#: core/templates/core/stashadjustment_form.html:15
+#: core/templates/core/stashadjustment_list.html:4
+#: core/templates/core/stashadjustment_list.html:10
+#: core/templates/core/stashadjustment_list.html:14
+msgid "Stash adjustments"
+msgstr "Voorraadaanpassingen"
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:329 core/models.py:789
+msgid "Stash adjustment"
+msgstr "Voorraadaanpassing"
+
+#: core/forms.py:357
+msgid "Taken from stash"
+msgstr "Uit voorraad"
+
+#: core/forms.py:358
+msgid "Leave empty to use the amount fed."
+msgstr "Laat leeg om de gevoede hoeveelheid te gebruiken."
+
+#: core/forms.py:359
+msgid "Some milk was discarded"
+msgstr "Er is melk weggegooid"
+
+#: core/forms.py:361
+msgid "Amount discarded"
+msgstr "Hoeveelheid weggegooid"
+
+#: core/forms.py:366 core/models.py:763
+msgid "Reason"
+msgstr "Reden"
+
+#: core/forms.py:395
+msgid "Enter the amount taken from the stash."
+msgstr "Vul de hoeveelheid uit de voorraad in."
+
+#: core/forms.py:397
+msgid "Enter how much was discarded."
+msgstr "Vul in hoeveel er is weggegooid."
+
+#: core/forms.py:563
+msgid "Breastfed by"
+msgstr "Borstvoeding door"
+
+#: core/forms.py:672
+msgid "Store in stash"
+msgstr "In voorraad bewaren"
+
+#: core/forms.py:698
+msgid "Leave empty to store the whole amount."
+msgstr "Laat leeg om de volledige hoeveelheid te bewaren."
+
+#: core/models.py:108 core/models.py:809
+msgid "Must be more than zero."
+msgstr "Moet meer dan nul zijn."
+
+#: core/models.py:112
+msgid "Can not be more than the amount pumped."
+msgstr "Kan niet meer zijn dan de afgekolfde hoeveelheid."
+
+#: core/models.py:308
+msgid "The children this parent's milk is for."
+msgstr "De kinderen voor wie de melk van deze ouder is."
+
+#: core/models.py:415
+msgid "The parent who breastfed. Only for the breast methods."
+msgstr ""
+"De ouder die borstvoeding gaf. Alleen van toepassing bij de "
+"borstvoedingsmethodes."
+
+#: core/models.py:455
+msgid "Amount from stash"
+msgstr "Hoeveelheid uit voorraad"
+
+#: core/models.py:456
+msgid "How much of what was drunk came from the milk stash."
+msgstr "Hoeveel van de gedronken hoeveelheid uit de melkvoorraad kwam."
+
+#: core/models.py:485
+msgid "Only a breastfeeding method can have a parent."
+msgstr "Alleen een borstvoedingsmethode kan een ouder hebben."
+
+#: core/models.py:494
+msgid "Only a bottle of breast milk can come from the stash."
+msgstr "Alleen een fles moedermelk kan uit de voorraad komen."
+
+#: core/models.py:505
+msgid "Must be more than zero and at most the amount fed."
+msgstr "Moet meer dan nul zijn en niet meer dan de gevoede hoeveelheid."
+
+#: core/models.py:663
+msgid "Legacy: pumping belongs to a parent. Kept for older entries and apps."
+msgstr ""
+"Verouderd: kolven hoort bij een ouder. Behouden voor oudere gegevens en apps."
+
+#: core/models.py:695
+msgid "Amount stored"
+msgstr "Bewaarde hoeveelheid"
+
+#: core/models.py:696
+msgid "How much of this session went into the milk stash."
+msgstr "Hoeveel van deze sessie in de melkvoorraad ging."
+
+#: core/models.py:726
+msgid "Choose the parent who pumped."
+msgstr "Kies de ouder die heeft afgekolfd."
+
+#: core/models.py:743 reports/graphs/stash_flow.py:16
+msgid "Added"
+msgstr "Toegevoegd"
+
+#: core/models.py:744 reports/graphs/stash_flow.py:18
+msgid "Discarded"
+msgstr "Weggegooid"
+
+#: core/models.py:757 core/templates/core/stashadjustment_list.html:29
+msgid "Kind"
+msgstr "Soort"
+
+#: core/models.py:818
+msgid "Only a discarded entry can belong to a feeding."
+msgstr "Alleen een weggegooide aanpassing kan bij een voeding horen."
+
+#: core/models.py:823
+msgid "This feeding has nothing taken from the stash."
+msgstr "Bij deze voeding is niets uit de voorraad gehaald."
+
+#: core/models.py:835
+msgid "This feeding already has a discarded adjustment."
+msgstr "Deze voeding heeft al een weggegooide aanpassing."
+
+#: core/templates/core/feeding_list.html:84
+msgid "From stash"
+msgstr "Uit voorraad"
+
+#: core/templates/core/parent_confirm_delete.html:4
+msgid "Delete a Parent"
+msgstr "Ouder verwijderen"
+
+#: core/templates/core/parent_detail.html:19
+#: dashboard/templates/dashboard/child.html:16
+msgid "Add pumping"
+msgstr "Kolven toevoegen"
+
+#: core/templates/core/parent_detail.html:25 core/templates/core/stash.html:14
+msgid "Add to stash"
+msgstr "Aan voorraad toevoegen"
+
+#: core/templates/core/parent_detail.html:29 core/templates/core/stash.html:16
+msgid "Discard from stash"
+msgstr "Uit voorraad weggooien"
+
+#: core/templates/core/parent_detail.html:34
+msgid "Pumping report"
+msgstr "Kolfrapport"
+
+#: core/templates/core/parent_detail.html:55
+#, python-format
+msgid "%(counter)s session, %(minutes)s min today"
+msgid_plural "%(counter)s sessions, %(minutes)s min today"
+msgstr[0] "%(counter)s sessie, %(minutes)s min vandaag"
+msgstr[1] "%(counter)s sessies, %(minutes)s min vandaag"
+
+#: core/templates/core/parent_detail.html:63
+#, python-format
+msgid "%(counter)s session, %(minutes)s min in the last 7 days"
+msgid_plural "%(counter)s sessions, %(minutes)s min in the last 7 days"
+msgstr[0] "%(counter)s sessie, %(minutes)s min in de afgelopen 7 dagen"
+msgstr[1] "%(counter)s sessies, %(minutes)s min in de afgelopen 7 dagen"
+
+#: core/templates/core/parent_detail.html:70
+#, python-format
+msgid "Last: %(method)s"
+msgstr "Laatst: %(method)s"
+
+#: core/templates/core/parent_detail.html:93
+msgid "stored"
+msgstr "bewaard"
+
+#: core/templates/core/parent_detail.html:119
+#: core/templates/core/stashadjustment_list.html:85
+msgid "No stash adjustments found."
+msgstr "Geen voorraadaanpassingen gevonden."
+
+#: core/templates/core/parent_form.html:7
+#: core/templates/core/parent_form.html:20
+#: core/templates/core/parent_form.html:29
+msgid "Add a Parent"
+msgstr "Een ouder toevoegen"
+
+#: core/templates/core/parent_list.html:14
+msgid "Add Parent"
+msgstr "Ouder toevoegen"
+
+#: core/templates/core/parent_list.html:71
+msgid "No parents found."
+msgstr "Geen ouders gevonden."
+
+#: core/templates/core/pumping_list.html:20
+#, python-format
+msgid ""
+"%(counter)s older pumping entry is not linked to a parent yet. Edit the "
+"entry and choose a parent, or run the link_pumping_to_parents management "
+"command."
+msgid_plural ""
+"%(counter)s older pumping entries are not linked to a parent yet. Edit each "
+"entry and choose a parent, or run the link_pumping_to_parents management "
+"command."
+msgstr[0] ""
+"%(counter)s oudere kolfregistratie is nog niet aan een ouder gekoppeld. "
+"Bewerk de registratie en kies een ouder, of voer het beheercommando "
+"link_pumping_to_parents uit."
+msgstr[1] ""
+"%(counter)s oudere kolfregistraties zijn nog niet aan een ouder gekoppeld. "
+"Bewerk elke registratie en kies een ouder, of voer het beheercommando "
+"link_pumping_to_parents uit."
+
+#: core/templates/core/pumping_list.html:32
+msgid "Stored"
+msgstr "Bewaard"
+
+#: core/templates/core/stash.html:23
+msgid ""
+"More milk left the stash than was ever logged going in. This is usually a "
+"bottle that was given without being logged as taken from the stash. Fix it "
+"with an \"Added\" entry dated before the first bottle."
+msgstr ""
+"Er ging ooit meer melk uit de voorraad dan er is geregistreerd. Dit is "
+"meestal een flesje dat werd gegeven zonder als \"uit voorraad\" te worden "
+"genoteerd. Los dit op met een \"Toegevoegd\"-registratie van vóór het eerste "
+"flesje."
+
+#: core/templates/core/stash.html:31
+msgid "Dismiss"
+msgstr "Sluiten"
+
+#: core/templates/core/stash.html:36
+msgid "In the stash (oldest first)"
+msgstr "In de voorraad (oudste eerst)"
+
+#: core/templates/core/stash.html:39
+msgid "Throw away all expired milk"
+msgstr "Alle vervallen melk weggooien"
+
+#: core/templates/core/stash.html:46
+msgid "throw away"
+msgstr "weggooien"
+
+#: core/templates/core/stash.html:53 dashboard/templates/cards/stash.html:17
+msgid "Throw away"
+msgstr "Weggooien"
+
+#: core/stash.py:198
+msgid "Older than %(hours)s h"
+msgstr "Ouder dan %(hours)s u"
+
+#: core/templates/core/stash.html:51
+msgid "use first"
+msgstr "eerst gebruiken"
+
+#: core/templates/core/stash.html:53
+msgid "fresh"
+msgstr "vers"
+
+#: core/templates/core/stash.html:61
+msgid "Latest movements"
+msgstr "Recentste bewegingen"
+
+#: core/templates/core/stash.html:64
+msgid "Baby"
+msgstr "Baby"
+
+#: core/templates/core/stash.html:71
+msgid "All babies"
+msgstr "Alle baby's"
+
+#: core/templates/core/stash.html:109
+msgid "No stash movements yet."
+msgstr "Nog geen voorraadbewegingen."
+
+#: core/templates/core/stashadjustment_confirm_delete.html:4
+msgid "Delete a Stash Adjustment"
+msgstr "Voorraadaanpassing verwijderen"
+
+#: core/templates/core/stashadjustment_form.html:7
+#: core/templates/core/stashadjustment_form.html:20
+#: core/templates/core/stashadjustment_form.html:29
+#: core/templates/core/stashadjustment_list.html:18
+msgid "Add a Stash Adjustment"
+msgstr "Een voorraadaanpassing toevoegen"
+
+#: dashboard/templates/cards/stash.html:13
+msgid "Some milk is past its limit: throw it away."
+msgstr "Er is melk over de datum: gooi die weg."
+
+#: dashboard/templates/cards/stash.html:15
+msgid "Some milk is getting old: use it first."
+msgstr "Er is melk die oud begint te worden: gebruik die eerst."
+
+#: dashboard/templates/cards/stash.html:19
+#, python-format
+msgid "Oldest milk: %(age)s h"
+msgstr "Oudste melk: %(age)s u"
+
+#: dashboard/templates/cards/stash_use.html:4
+msgid "Milk from the stash"
+msgstr "Melk uit de voorraad"
+
+#: dashboard/templates/cards/stash_use.html:10
+#, python-format
+msgid "%(week)s in the last 7 days"
+msgstr "%(week)s in de afgelopen 7 dagen"
+
+#: reports/graphs/stash_balance.py:23
+msgid "Stash"
+msgstr "Voorraad"
+
+#: reports/graphs/stash_balance.py:31
+#: reports/templates/reports/report_list.html:59
+#: reports/templates/reports/stash_balance.html:4
+#: reports/templates/reports/stash_balance.html:10
+msgid "Milk Stash"
+msgstr "Melkvoorraad"
+
+#: reports/graphs/stash_balance.py:34
+msgid "Amount in stash"
+msgstr "Hoeveelheid in voorraad"
+
+#: reports/graphs/stash_flow.py:15
+msgid "Stored from pumping"
+msgstr "Bewaard uit kolven"
+
+#: reports/graphs/stash_flow.py:17
+msgid "Drunk"
+msgstr "Gedronken"
+
+#: reports/graphs/stash_flow.py:39
+#: reports/templates/reports/report_list.html:61
+#: reports/templates/reports/stash_flow.html:4
+#: reports/templates/reports/stash_flow.html:10
+msgid "Milk Stash In and Out"
+msgstr "Melkvoorraad in en uit"
+
+#: reports/graphs/stash_use.py:38 reports/templates/reports/report_list.html:63
+#: reports/templates/reports/stash_use.html:4
+#: reports/templates/reports/stash_use.html:10
+msgid "Milk From the Stash per Baby"
+msgstr "Melk uit de voorraad per baby"

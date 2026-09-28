@@ -15,7 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from taggit.managers import TaggableManager as TaggitTaggableManager
 from taggit.models import GenericTaggedItemBase, TagBase
 
-from babybuddy.site_settings import NapSettings, FeedingSettings
+from babybuddy.site_settings import NapSettings, FeedingSettings, StashSettings
 from core.utils import random_color, timezone_aware_duration
 
 
@@ -96,6 +96,21 @@ def validate_time(time, field_name):
     if time and time > timezone.localtime():
         raise ValidationError(
             {field_name: _("Date/time can not be in the future.")}, code="time_invalid"
+        )
+
+
+def validate_pumping_stash_amount(stash_amount, amount):
+    """Stored milk must be positive and can not exceed what was pumped."""
+    if stash_amount is None:
+        return
+    if stash_amount <= 0:
+        raise ValidationError(
+            {"stash_amount": _("Must be more than zero.")}, code="stash_amount_invalid"
+        )
+    if amount is not None and stash_amount > amount:
+        raise ValidationError(
+            {"stash_amount": _("Can not be more than the amount pumped.")},
+            code="stash_amount_too_high",
         )
 
 
@@ -266,6 +281,68 @@ class Child(models.Model):
         return cache.get_or_set(cls.cache_key_count, Child.objects.count, None)
 
 
+class Parent(models.Model):
+    """A person who pumps or supplies milk. Never shown as a child."""
+
+    model_name = "parent"
+    first_name = models.CharField(max_length=255, verbose_name=_("First name"))
+    last_name = models.CharField(
+        blank=True, max_length=255, verbose_name=_("Last name")
+    )
+    slug = models.SlugField(
+        allow_unicode=True,
+        blank=False,
+        editable=False,
+        max_length=100,
+        unique=True,
+        verbose_name=_("Slug"),
+    )
+    picture = models.ImageField(
+        blank=True, null=True, upload_to="parent/picture/", verbose_name=_("Picture")
+    )
+    children = models.ManyToManyField(
+        "Child",
+        blank=True,
+        related_name="parents",
+        verbose_name=_("Children"),
+        help_text=_("The children this parent's milk is for."),
+    )
+
+    objects = models.Manager()
+
+    class Meta:
+        default_permissions = ("view", "add", "change", "delete")
+        ordering = ["last_name", "first_name"]
+        verbose_name = _("Parent")
+        verbose_name_plural = _("Parents")
+
+    def __str__(self):
+        return self.name()
+
+    def save(self, *args, **kwargs):
+        self.slug = slugify(self, allow_unicode=True)
+        super().save(*args, **kwargs)
+
+    def name(self):
+        if not self.last_name:
+            return self.first_name
+        return "{} {}".format(self.first_name, self.last_name)
+
+
+def parent_for_child(child):
+    """The single parent linked to `child`, or None when there are none or several."""
+    if child is None:
+        return None
+    parents = list(child.parents.all()[:2])
+    return parents[0] if len(parents) == 1 else None
+
+
+def single_parent():
+    """The only Parent in the system, or None when there are none or several."""
+    parents = list(Parent.objects.all()[:2])
+    return parents[0] if len(parents) == 1 else None
+
+
 class DiaperChange(models.Model):
     model_name = "diaperchange"
     child = models.ForeignKey(
@@ -325,14 +402,25 @@ class DiaperChange(models.Model):
 
 class Feeding(models.Model):
     model_name = "feeding"
+    STASH_TYPES = ("breast milk", "fortified breast milk")
     BREAST_METHODS = ("left breast", "right breast", "both breasts")
     # Feeding types that never come from the breast.
     NOT_FROM_THE_BREAST = ("formula", "solid food")
+
     child = models.ForeignKey(
         "Child",
         on_delete=models.CASCADE,
         related_name="feeding",
         verbose_name=_("Child"),
+    )
+    parent = models.ForeignKey(
+        "Parent",
+        blank=True,
+        null=True,
+        on_delete=models.SET_NULL,
+        related_name="breastfeedings",
+        verbose_name=_("Parent"),
+        help_text=_("The parent who breastfed. Only for the breast methods."),
     )
     start = models.DateTimeField(
         blank=False,
@@ -369,6 +457,12 @@ class Feeding(models.Model):
         verbose_name=_("Method"),
     )
     amount = models.FloatField(blank=True, null=True, verbose_name=_("Amount"))
+    stash_amount = models.FloatField(
+        blank=True,
+        null=True,
+        verbose_name=_("Amount from stash"),
+        help_text=_("How much of what was drunk came from the milk stash."),
+    )
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     tags = TaggableManager(blank=True, through=Tagged)
 
@@ -399,6 +493,66 @@ class Feeding(models.Model):
                 {"method": _("Formula and solid food can't be given from the breast.")},
                 code="method_not_for_type",
             )
+        if self.parent_id and self.method not in self.BREAST_METHODS:
+            raise ValidationError(
+                {"parent": _("Only a breastfeeding method can have a parent.")},
+                code="parent_not_breastfeeding",
+            )
+        if self.stash_amount is None:
+            return
+        if self.type not in self.STASH_TYPES or self.method != "bottle":
+            raise ValidationError(
+                {
+                    "stash_amount": _(
+                        "Only a bottle of breast milk can come from the stash."
+                    )
+                },
+                code="stash_not_breast_milk_bottle",
+            )
+        if self.stash_amount <= 0 or (
+            self.amount is not None and self.stash_amount > self.amount
+        ):
+            raise ValidationError(
+                {
+                    "stash_amount": _(
+                        "Must be more than zero and at most the amount fed."
+                    )
+                },
+                code="stash_amount_invalid",
+            )
+
+    def linked_discard(self):
+        if not self.pk:
+            return None
+        # Iterate a plain .all() rather than .filter(kind=...) so a caller
+        # that prefetched stash_adjustments (e.g. the feeding list view) hits
+        # the cache instead of issuing one query per feeding.
+        for adjustment in self.stash_adjustments.all():
+            if adjustment.kind == StashAdjustment.DISCARDED:
+                return adjustment
+        return None
+
+    def set_linked_discard(self, amount, reason="", parent=None):
+        """Create, update or delete the milk discarded at this feeding."""
+        existing = self.stash_adjustments.filter(kind=StashAdjustment.DISCARDED).first()
+        if not amount:
+            if existing:
+                existing.delete()
+            return
+        adjustment = existing or StashAdjustment(
+            feeding=self, kind=StashAdjustment.DISCARDED
+        )
+        adjustment.time = self.start
+        adjustment.amount = amount
+        adjustment.reason = reason or ""
+        adjustment.parent = (
+            parent
+            or adjustment.parent
+            or parent_for_child(self.child)
+            or single_parent()
+        )
+        adjustment.full_clean()
+        adjustment.save()
 
 
 class HeadCircumference(models.Model):
@@ -518,9 +672,22 @@ class Pumping(models.Model):
     model_name = "pumping"
     child = models.ForeignKey(
         "Child",
+        blank=True,
+        null=True,
         on_delete=models.CASCADE,
         related_name="pumping",
         verbose_name=_("Child"),
+        help_text=_(
+            "Legacy: pumping belongs to a parent. Kept for older entries and apps."
+        ),
+    )
+    parent = models.ForeignKey(
+        "Parent",
+        blank=True,
+        null=True,
+        on_delete=models.PROTECT,
+        related_name="pumping",
+        verbose_name=_("Parent"),
     )
     start = models.DateTimeField(
         blank=False,
@@ -540,8 +707,16 @@ class Pumping(models.Model):
         verbose_name=_("Duration"),
     )
     amount = models.FloatField(blank=False, null=False, verbose_name=_("Amount"))
+    stash_amount = models.FloatField(
+        blank=True,
+        null=True,
+        verbose_name=_("Amount stored"),
+        help_text=_("How much of this session went into the milk stash."),
+    )
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     tags = TaggableManager(blank=True, through=Tagged)
+
+    stash_settings = StashSettings()
 
     objects = models.Manager()
 
@@ -562,7 +737,103 @@ class Pumping(models.Model):
     def clean(self):
         validate_time(self.start, "start")
         validate_duration(self)
-        validate_unique_period(Pumping.objects.filter(child_id=self.child_id), self)
+        # Required for new entries; an existing child-based (legacy) row keeps
+        # working without one, so it isn't force-migrated by an unrelated edit.
+        if not self.parent_id and not (self.pk and self.child_id):
+            raise ValidationError(
+                {"parent": _("Choose the parent who pumped.")},
+                code="pumping_no_parent",
+            )
+        validate_pumping_stash_amount(self.stash_amount, self.amount)
+        if self.parent_id:
+            others = Pumping.objects.filter(parent_id=self.parent_id)
+        else:
+            others = Pumping.objects.filter(parent__isnull=True, child_id=self.child_id)
+        validate_unique_period(others, self)
+
+
+class StashAdjustment(models.Model):
+    """Every stash movement that is not pumping or drinking."""
+
+    model_name = "stashadjustment"
+    ADDED, DISCARDED = "added", "discarded"
+    KINDS = [
+        (ADDED, _("Added")),
+        (DISCARDED, _("Discarded")),
+    ]
+    SIGN = {ADDED: 1, DISCARDED: -1}
+
+    time = models.DateTimeField(default=timezone.localtime, verbose_name=_("Time"))
+    amount = models.FloatField(verbose_name=_("Amount"))
+    kind = models.CharField(choices=KINDS, max_length=20, verbose_name=_("Kind"))
+    reason = models.CharField(
+        max_length=255, blank=True, default="", verbose_name=_("Reason")
+    )
+    parent = models.ForeignKey(
+        "Parent",
+        blank=True,
+        null=True,
+        on_delete=models.PROTECT,
+        related_name="stash_adjustments",
+        verbose_name=_("Parent"),
+    )
+    feeding = models.ForeignKey(
+        "Feeding",
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+        related_name="stash_adjustments",
+        verbose_name=_("Feeding"),
+    )
+    notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
+    tags = TaggableManager(blank=True, through=Tagged)
+
+    objects = models.Manager()
+
+    class Meta:
+        default_permissions = ("view", "add", "change", "delete")
+        ordering = ["-time"]
+        verbose_name = _("Stash adjustment")
+        verbose_name_plural = _("Stash adjustments")
+
+    def __str__(self):
+        text = "{}: {}".format(self.get_kind_display(), float(self.amount))
+        if self.reason:
+            text += " ({})".format(self.reason)
+        return text
+
+    @property
+    def signed_amount(self):
+        return self.SIGN[self.kind] * self.amount
+
+    def clean(self):
+        validate_time(self.time, "time")
+        if self.amount is not None and self.amount <= 0:
+            raise ValidationError(
+                {"amount": _("Must be more than zero.")}, code="amount_invalid"
+            )
+        if self.feeding_id and self.kind != self.DISCARDED:
+            raise ValidationError(
+                {"feeding": _("Only a discarded entry can belong to a feeding.")},
+                code="kind_not_linkable",
+            )
+        if self.feeding_id and self.feeding.stash_amount is None:
+            raise ValidationError(
+                {"feeding": _("This feeding has nothing taken from the stash.")},
+                code="feeding_no_stash_amount",
+            )
+        if (
+            self.feeding_id
+            and StashAdjustment.objects.filter(
+                feeding_id=self.feeding_id, kind=self.DISCARDED
+            )
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            raise ValidationError(
+                {"feeding": _("This feeding already has a discarded adjustment.")},
+                code="duplicate_feeding_adjustment",
+            )
 
 
 class Sleep(models.Model):

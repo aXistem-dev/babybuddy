@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+from django.shortcuts import get_object_or_404
+from django.urls import reverse
+from django.views.generic.base import RedirectView, TemplateView
 from django.views.generic.detail import DetailView
 
 from babybuddy.mixins import PermissionRequiredMixin
-from core import models
+from core import models, stash
 
 from . import graphs
 
@@ -296,25 +299,88 @@ class HeightChangeChildGirlReport(HeightChangeChildReport):
         )
 
 
-class PumpingAmounts(PermissionRequiredMixin, DetailView):
+class StashBalanceReport(PermissionRequiredMixin, TemplateView):
     """
-    Graph of pumping milk amounts collected.
+    Graph of the shared milk stash balance over time.
     """
 
-    model = models.Child
+    permission_required = ("core.view_pumping",)
+    template_name = "reports/stash_balance.html"
+    graph = staticmethod(graphs.stash_balance)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        events = stash.stash_events()
+        if events:
+            context["html"], context["js"] = self.graph(events)
+        return context
+
+
+class StashFlowReport(StashBalanceReport):
+    """
+    Graph of milk moving in and out of the shared stash, by day.
+    """
+
+    template_name = "reports/stash_flow.html"
+    graph = staticmethod(graphs.stash_flow)
+
+
+class StashUseReport(PermissionRequiredMixin, TemplateView):
+    """
+    Graph of milk taken from the stash per day, one series per baby.
+    """
+
+    permission_required = ("core.view_pumping",)
+    template_name = "reports/stash_use.html"
+    graph = staticmethod(graphs.stash_use)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        feedings = models.Feeding.objects.filter(
+            stash_amount__isnull=False
+        ).select_related("child")
+        if feedings:
+            context["html"], context["js"] = self.graph(feedings)
+        return context
+
+
+class ParentPumpingAmounts(PermissionRequiredMixin, DetailView):
+    """
+    Graph of pumping milk amounts collected by a parent.
+    """
+
+    model = models.Parent
+    permission_required = (
+        "core.view_parent",
+        "core.view_pumping",
+    )
+    template_name = "reports/parent_pumping_amounts.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        pumping = models.Pumping.objects.filter(parent=self.object)
+        if pumping.exists():
+            context["html"], context["js"] = graphs.pumping_amounts(pumping)
+        return context
+
+
+class PumpingAmounts(PermissionRequiredMixin, RedirectView):
+    """
+    Pumping moved to the parent; old child report links land on the
+    child's parent's report instead.
+    """
+
     permission_required = (
         "core.view_child",
         "core.view_pumping",
     )
-    template_name = "reports/pumping_amounts.html"
 
-    def get_context_data(self, **kwargs):
-        context = super(PumpingAmounts, self).get_context_data(**kwargs)
-        child = context["object"]
-        changes = models.Pumping.objects.filter(child=child)
-        if changes and changes.count() > 0:
-            context["html"], context["js"] = graphs.pumping_amounts(changes)
-        return context
+    def get_redirect_url(self, *args, **kwargs):
+        child = get_object_or_404(models.Child, slug=kwargs["slug"])
+        parent = models.parent_for_child(child)
+        if parent:
+            return reverse("reports:report-pumping-amounts-parent", args=[parent.slug])
+        return reverse("core:parent-list")
 
 
 class SleepPatternChildReport(PermissionRequiredMixin, DetailView):

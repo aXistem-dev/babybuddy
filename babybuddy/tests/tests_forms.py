@@ -473,6 +473,30 @@ class FormsTestCase(TestCase):
             self.user.settings.dashboard_hide_age, datetime.timedelta(days=1)
         )
 
+    def test_settings_checkbox_reenables(self):
+        self.c.login(**self.credentials)
+        self.user.settings.stash_negative_warning = False
+        self.user.settings.save()
+
+        params = self.settings_template.copy()
+        params["stash_negative_warning"] = "on"
+
+        page = self.c.post("/user/settings/", data=params, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.settings.stash_negative_warning)
+
+    def test_settings_checkbox_off_disables(self):
+        self.c.login(**self.credentials)
+        self.assertTrue(self.user.settings.stash_negative_warning)
+
+        params = self.settings_template.copy()  # box not ticked
+
+        page = self.c.post("/user/settings/", data=params, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.settings.stash_negative_warning)
+
     def test_csrf_error_handling(self):
         c = HttpClient(enforce_csrf_checks=True)
         c.login(**self.credentials)

@@ -1,0 +1,30 @@
+{% extends "cards/base.html" %}
+{% load i18n %}
+{% block header %}
+    <a href="{% url "core:stash" %}">{% trans "Milk stash" %}</a>
+{% endblock %}
+{% block title %}
+    <div class="{% if summary.balance < 0 or summary.status == 'expired' %}text-danger{% elif summary.status == 'warn' %}text-warning{% endif %}">
+        {{ summary.balance }}
+    </div>
+{% endblock %}
+{% block content %}
+    {% if summary.status == "expired" %}
+        <strong class="text-danger">{% trans "Some milk is past its limit: throw it away." %}</strong>
+        {% if can_add %}
+            <div>
+                <a href="{% url "core:stashadjustment-add" %}?kind=discarded&amount={{ expired_amount|stringformat:".10g" }}&reason={{ throw_away_reason|urlencode }}"
+                   class="btn btn-sm btn-outline-danger my-1">{% trans "Throw away" %}</a>
+            </div>
+        {% endif %}
+    {% elif summary.status == "warn" %}
+        <strong class="text-warning">{% trans "Some milk is getting old: use it first." %}</strong>
+    {% endif %}
+    {% if summary.oldest %}
+        <div>
+            {% blocktrans trimmed with age=summary.oldest_age_hours %}
+                Oldest milk: {{ age }} h
+            {% endblocktrans %}
+        </div>
+    {% endif %}
+{% endblock %}

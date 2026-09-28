@@ -1,0 +1,10 @@
+{% load imagekit static %}
+{% if parent.picture %}
+    {% thumbnail '40x40' parent.picture as thumb %}
+        <img src="{{ thumb.url }}" class="img-fluid rounded-circle" />
+    {% else %}
+        <img src="{% static 'babybuddy/img/core/child-placeholder.png' %}"
+             width="40"
+             height="40"
+             class="img-fluid rounded-circle" />
+    {% endif %}

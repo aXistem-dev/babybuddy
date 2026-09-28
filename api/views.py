@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
+from django.utils.translation import gettext as _
 
 from rest_framework import mixins, status, viewsets, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.schemas.openapi import AutoSchema
 
-from core import models
+from core import models, stash
 from babybuddy import models as babybuddy_models
 from webhooks import models as webhooks_models
 
@@ -57,7 +59,9 @@ class DiaperChangeViewSet(viewsets.ModelViewSet):
 
 
 class FeedingViewSet(viewsets.ModelViewSet):
-    queryset = models.Feeding.objects.all()
+    # stash_discarded/stash_discard_reason read the linked stash_adjustments;
+    # prefetch them so the list/retrieve views don't issue one query per row.
+    queryset = models.Feeding.objects.prefetch_related("stash_adjustments")
     serializer_class = serializers.FeedingSerializer
     filterset_class = filters.FeedingFilter
     ordering_fields = ("amount", "duration", "end", "start")
@@ -110,6 +114,57 @@ class PumpingViewSet(viewsets.ModelViewSet):
     filterset_class = filters.PumpingFilter
     ordering_fields = ("amount", "duration", "end", "start")
     ordering = "-end"
+
+
+class ParentViewSet(viewsets.ModelViewSet):
+    queryset = models.Parent.objects.all()
+    serializer_class = serializers.ParentSerializer
+    lookup_field = "slug"
+    filterset_fields = ("first_name", "last_name", "slug")
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        try:
+            self.perform_destroy(instance)
+        except ProtectedError:
+            return Response(
+                {
+                    "detail": _(
+                        "%(name)s still has pumping or stash entries; "
+                        "move or delete them first."
+                    )
+                    % {"name": instance}
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StashAdjustmentViewSet(viewsets.ModelViewSet):
+    queryset = models.StashAdjustment.objects.all()
+    serializer_class = serializers.StashAdjustmentSerializer
+    filterset_fields = ("kind", "parent", "feeding")
+
+    def get_view_name(self):
+        # Match the model's verbose_name casing ("Stash adjustment") rather
+        # than the class-name-derived default ("Stash Adjustment").
+        name = self.queryset.model._meta.verbose_name
+        suffix = getattr(self, "suffix", None)
+        if suffix:
+            name = f"{name} {suffix}"
+        return name
+
+
+class StashView(views.APIView):
+    """Read-only milk stash summary (balance, FIFO lots, age status)."""
+
+    schema = AutoSchema(operation_id_base="MilkStash")
+    action = "get"
+    basename = "stash"
+    queryset = models.Pumping.objects.all()  # permission class -> core.view_pumping
+
+    def get(self, request):
+        return Response(stash.stash_summary())
 
 
 class SleepViewSet(viewsets.ModelViewSet):

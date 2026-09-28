@@ -5,7 +5,7 @@ from django.test import Client as HttpClient, TestCase
 
 from faker import Faker
 
-from core.models import Sleep
+from core.models import Pumping, Sleep
 
 
 class SiteSettingsTestCase(TestCase):
@@ -42,9 +42,16 @@ class SiteSettingsTestCase(TestCase):
 
     def test_settings_nap_start(self):
         self.c.login(**self.credentials)
+        # The rendered settings page is a single form covering every settings
+        # group, so a real submission always includes every field's current
+        # value, not just the ones being changed.
         params = {
             "core.models__Sleep__nap_start_max": "20:00:00",
             "core.models__Sleep__nap_start_min": "09:00:00",
+            "core.models__Pumping__pumping_to_stash_default": "on",
+            "core.models__Pumping__bottle_from_stash_default": "on",
+            "core.models__Pumping__stash_warn_age_hours": "48",
+            "core.models__Pumping__stash_max_age_hours": "72",
         }
         page = self.c.post("/settings/", params, follow=True)
         self.assertEqual(page.status_code, 200)
@@ -56,3 +63,5 @@ class SiteSettingsTestCase(TestCase):
             Sleep.settings.nap_start_min.strftime("%H:%M:%S"),
             params["core.models__Sleep__nap_start_min"],
         )
+        self.assertEqual(Pumping.stash_settings.stash_warn_age_hours, 48)
+        self.assertEqual(Pumping.stash_settings.stash_max_age_hours, 72)

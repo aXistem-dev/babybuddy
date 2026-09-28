@@ -55,8 +55,12 @@
                    class="list-group-item list-group-item-action">{% trans "Medication Intervals" %}</a>
             {% endif %}
             {% if perms.core.view_pumping %}
-                <a href="{% url 'reports:report-pumping-amounts-child' object.slug %}"
-                   class="list-group-item list-group-item-action">{% trans "Pumping Amounts" %}</a>
+                <a href="{% url 'reports:report-stash-balance' %}"
+                   class="list-group-item list-group-item-action">{% trans "Milk Stash" %}</a>
+                <a href="{% url 'reports:report-stash-flow' %}"
+                   class="list-group-item list-group-item-action">{% trans "Milk Stash In and Out" %}</a>
+                <a href="{% url 'reports:report-stash-use' %}"
+                   class="list-group-item list-group-item-action">{% trans "Milk From the Stash per Baby" %}</a>
             {% endif %}
             {% if perms.core.view_sleep %}
                 <a href="{% url 'reports:report-sleep-pattern-child' object.slug %}"

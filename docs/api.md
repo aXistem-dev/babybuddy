@@ -18,13 +18,19 @@ Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 - `/api/head-circumference/`
 - `/api/height/`
 - `/api/notes/`
+- `/api/parents/`
 - `/api/pumping/`
 - `/api/sleep/`
+- `/api/stash-adjustments/`
 - `/api/tags/`
 - `/api/temperature/`
 - `/api/timers/`
 - `/api/tummy-times/`
 - `/api/weight/`
+
+Additionally, `/api/stash` (note: no trailing slash) returns a read-only milk
+stash summary; see [Parents and the milk stash](#parents-and-the-milk-stash)
+below.
 
 ## Authentication
 
@@ -302,3 +308,186 @@ curl -X DELETE https://[...]/api/changes/947/ -H 'Authorization: Token [...]'
 Returns an empty response with HTTP status code `204` on success, or a JSON
 encoded error detail if an error occurred (e.g. `{"detail":"Not found."}` if
 the requested ID does not exist).
+
+## Parents and the Milk Stash
+
+A **Parent** is who pumps or supplies milk; pumping belongs to a parent, not
+a child. `/api/parents/` supports the usual `GET`/`POST`/`PATCH`/`DELETE`
+methods and is looked up by `slug` (like `/api/children/`). Its fields are
+`id`, `first_name`, `last_name`, `slug`, `picture` and `children` (a list of
+child IDs).
+
+### `/api/pumping/`
+
+New fields: `parent` and `stash_amount` (ml of this session that went into
+the stash). `child` is now optional and kept only for backwards
+compatibility (see [Parent resolution](#parent-resolution) below). Filters:
+`parent` finds pumping sessions by parent; `stash_amount__isnull` finds
+sessions that did (or didn't) put milk in the stash.
+
+### `/api/feedings/`
+
+New fields: `stash_amount` (ml taken from the stash that the baby drank),
+`stash_discarded` and `stash_discard_reason` (free text, described in
+[Discarded milk](#discarded-milk)), and `parent` (described in
+[Breastfeeding parent](#breastfeeding-parent)). `stash_amount` is only
+meaningful for a breast milk or fortified breast milk feeding given by
+bottle. Filters: `stash_amount__isnull` finds feedings that did (or didn't)
+draw from the stash; `parent` finds feedings (breastfeeding sessions) by
+parent.
+
+### `/api/stash-adjustments/`
+
+New endpoint for every stash movement that isn't pumping or a feeding:
+starting stock, donor milk, corrections, and milk discarded (spilled, left
+over, too old, given away, or any other reason) outside of a feeding.
+Fields: `id`, `time`, `amount`, `kind` (`added` or `discarded`), `reason`
+(free text, up to 255 characters; optional for either kind), `signed_amount`
+(read-only: `amount` with the sign of `kind` applied), `parent`, `feeding`,
+`notes` and `tags`. `parent` and `feeding` are both optional; at most one
+`discarded` adjustment can be linked to a given `feeding`. Filters: `kind`,
+`parent`, `feeding`.
+
+A `POST` that creates an adjustment and omits `parent` entirely resolves it
+the same way the web form does: if there is exactly one `Parent`, the new
+entry is stored against that parent; with zero or several parents it's left
+`null`. Send `parent: null` explicitly to opt out. An adjustment is never
+stored against a child.
+
+### `/api/stash`
+
+A read-only summary of the milk stash (note: no trailing slash, and no
+`POST`/`PATCH`/`DELETE`). This is the authoritative source for milk age,
+since a client that only syncs a recent window of entries can't reliably
+compute the oldest remaining milk (the stash is FIFO: the oldest milk is
+used, spilled or thrown away first) on its own.
+
+```shell
+curl -X GET https://[...]/api/stash -H 'Authorization: Token [...]'
+```
+
+```json
+{
+  "balance": 340.0,
+  "status": "warn",
+  "warn_age_hours": 48,
+  "max_age_hours": 72,
+  "oldest": "2026-09-25T08:12:00-07:00",
+  "oldest_age_hours": 50.1,
+  "lots": [
+    {
+      "time": "2026-09-25T08:12:00-07:00",
+      "amount": 120.0,
+      "age_hours": 50.1,
+      "warn_at": "2026-09-27T08:12:00-07:00",
+      "expires_at": "2026-09-28T08:12:00-07:00",
+      "status": "warn"
+    }
+  ],
+  "defaults": {
+    "pumping_to_stash": true,
+    "bottle_from_stash": true
+  }
+}
+```
+
+`status` (and each lot's own `status`) is one of `ok`, `warn` or `expired`,
+based on the `stash_warn_age_hours` / `stash_max_age_hours` site settings.
+`balance` can be negative if entries were logged with milk already on hand
+before tracking started.
+
+### Parent resolution
+
+A `POST` to `/api/pumping/` that sends `child` but no `parent` resolves the
+parent from that child's linked parents: if the child has exactly one, the
+entry is stored against that parent with `child` left `null`; if the child
+has zero or several, the request is rejected with a 400 response asking for
+`parent` explicitly. A `timer` field that carries a child follows the same
+rule. This keeps older clients — including ones that only know about
+child-based pumping — working unmodified, as long as each child has a single
+linked parent.
+
+### Breastfeeding parent
+
+`parent` on `/api/feedings/` only applies to the breast methods (`left
+breast`, `right breast`, `both breasts`); sent with any other method it is
+ignored (stored as `null`). On a `POST` that creates a breastfeeding entry, omitting `parent`
+resolves it from the child's linked parents, the same way pumping does,
+except that a child with zero or several linked parents simply gets no
+`parent` filled in (no error) rather than an ambiguity error. Send
+`parent: null` explicitly to opt out. Changing `method` away from a breast
+method (on create or update) clears any `parent`.
+
+### Stash defaults: omitted key vs. `null`
+
+For `stash_amount` on both `/api/pumping/` and `/api/feedings/`, a `POST`
+distinguishes an **omitted** key from an explicit `null`:
+
+- **Omit the key entirely** and the server applies the site's default: for
+  pumping, the full `amount` if "store pumped milk in the stash by default"
+  is on; for a breast milk/fortified breast milk bottle, the full `amount`
+  if "take breast milk bottles from the stash by default" is on **and** the
+  stash already has some activity (so a client that has never shown a stash
+  switch can't push a family that doesn't use the stash below zero).
+- **Send `stash_amount: null` explicitly** to opt out of the stash for that
+  entry regardless of the site defaults.
+
+The same distinction applies on `PATCH`: omitting `stash_amount` while
+changing `amount` keeps a fully-stashed entry fully stashed (or shrinks it if
+it would otherwise exceed the new `amount`), while sending `stash_amount`
+explicitly (including `null`) always wins.
+
+### Discarded milk
+
+A `POST`/`PATCH` to `/api/feedings/` accepts `stash_discarded` (an amount in
+ml, or `null` to clear) and an optional free-text `stash_discard_reason` (up
+to 255 characters, e.g. `"Spilled"`). Setting `stash_discarded` creates or
+updates a single linked stash adjustment (`kind=discarded`) in the same
+request; it's only valid when the feeding has a `stash_amount`, and a
+feeding has at most one such linked adjustment. Both fields are also
+returned when reading a feeding (`stash_discarded: null` and
+`stash_discard_reason: ""` when there is none). Deleting the feeding deletes
+its linked adjustment too.
+
+```shell
+curl -X PATCH \
+    -H 'Authorization: Token [...]' \
+    -H "Content-Type: application/json" \
+    -d '{"stash_discarded": 10, "stash_discard_reason": "Spilled"}' \
+    https://[...]/api/feedings/512/
+```
+
+### Capability detection
+
+A client can tell whether a server supports parents and the milk stash by
+requesting the API root (authenticated like any other request):
+
+```shell
+curl -X GET https://[...]/api/ -H 'Authorization: Token [...]'
+```
+
+A server with this feature lists `parents`, `stash-adjustments` and `stash`
+alongside the other endpoints. A client that doesn't find them should fall
+back to child-based pumping and skip the stash UI entirely.
+
+### Home Assistant example
+
+A [RESTful sensor](https://www.home-assistant.io/integrations/sensor.rest/)
+can expose the stash status, for use in an automation (e.g. a notification
+when milk needs using or throwing away):
+
+```yaml
+sensor:
+  - platform: rest
+    name: Milk Stash
+    resource: https://[...]/api/stash
+    method: GET
+    headers:
+      Authorization: !secret babybuddy_api_token
+    value_template: "{{ value_json.status }}"
+    json_attributes:
+      - balance
+      - oldest_age_hours
+      - warn_age_hours
+      - max_age_hours
+```

@@ -18,12 +18,49 @@ urlpatterns = [
         views.PumpingDelete.as_view(),
         name="pumping-delete",
     ),
+    path("stash/", views.StashView.as_view(), name="stash"),
+    path(
+        "stash/warning/dismiss/",
+        views.StashWarningDismiss.as_view(),
+        name="stash-warning-dismiss",
+    ),
+    path(
+        "stash/adjustments/",
+        views.StashAdjustmentList.as_view(),
+        name="stashadjustment-list",
+    ),
+    path(
+        "stash/adjustments/add/",
+        views.StashAdjustmentAdd.as_view(),
+        name="stashadjustment-add",
+    ),
+    path(
+        "stash/adjustments/<int:pk>/",
+        views.StashAdjustmentUpdate.as_view(),
+        name="stashadjustment-update",
+    ),
+    path(
+        "stash/adjustments/<int:pk>/delete/",
+        views.StashAdjustmentDelete.as_view(),
+        name="stashadjustment-delete",
+    ),
     path("children/", views.ChildList.as_view(), name="child-list"),
     path("children/add/", views.ChildAdd.as_view(), name="child-add"),
     path("children/<str:slug>/", views.ChildDetail.as_view(), name="child"),
     path("children/<str:slug>/edit/", views.ChildUpdate.as_view(), name="child-update"),
     path(
         "children/<str:slug>/delete/", views.ChildDelete.as_view(), name="child-delete"
+    ),
+    path("parents/", views.ParentList.as_view(), name="parent-list"),
+    path("parents/add/", views.ParentAdd.as_view(), name="parent-add"),
+    path("parents/<str:slug>/", views.ParentDetail.as_view(), name="parent"),
+    path(
+        "parents/<str:slug>/edit/", views.ParentUpdate.as_view(), name="parent-update"
+    ),
+    path(
+        "parents/<str:slug>/delete/",
+        views.ParentDelete.as_view(),
+        name="parent-delete",
     ),
     path("timeline/", views.Timeline.as_view(), name="timeline"),
     path("changes/", views.DiaperChangeList.as_view(), name="diaperchange-list"),

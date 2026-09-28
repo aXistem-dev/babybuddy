@@ -20,10 +20,18 @@ class Command(BaseCommand):
         super(Command, self).__init__(*args, **kwargs)
         self.faker = Faker()
         self.child = None
+        self.parent = None
         self.weight = None
         self.tags = []
         self.time = None
         self.time_now = timezone.localtime()
+        # Every feeding that came out of the stash, and whether any of them
+        # ended up with a random discard: used to guarantee at least one
+        # discarded-and-linked-to-a-feeding stash adjustment when any stash
+        # bottle exists at all, rather than leaving that to a ~1-in-10 roll
+        # per bottle that could otherwise miss entirely on a short run.
+        self._stash_feedings = []
+        self._has_discarded_feeding = False
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -53,6 +61,10 @@ class Command(BaseCommand):
             except IntegrityError:
                 pass
 
+        # get_or_create so running the command again (e.g. to add more fake
+        # children) reuses the same fake parent instead of colliding on name.
+        self.parent, _ = models.Parent.objects.get_or_create(first_name="Robin")
+
         birth_date = timezone.localtime() - timedelta(days=days)
         for i in range(0, children):
             self.child = models.Child.objects.create(
@@ -61,7 +73,13 @@ class Command(BaseCommand):
                 birth_date=birth_date,
             )
             self.child.save()
+            self.parent.children.add(self.child)
             self._add_child_data()
+
+        if self._stash_feedings and not self._has_discarded_feeding:
+            self._stash_feedings[-1].set_linked_discard(
+                10, "Spilled", parent=self.parent
+            )
 
         if verbosity > 0:
             self.stdout.write(self.style.SUCCESS("Successfully added fake data."))
@@ -142,7 +160,8 @@ class Command(BaseCommand):
     @transaction.atomic
     def _add_pumping_entry(self):
         """
-        Add a Pumping entry. This assumes a weekly interval.
+        Add a Pumping entry, owned by the fake parent (not the child). This
+        assumes a weekly interval.
         :returns:
         """
         self.amount = round(uniform(95.0, 102.0), 2)
@@ -154,9 +173,19 @@ class Command(BaseCommand):
         start = self.time + timedelta(minutes=randint(1, 60))
         end = start + timedelta(minutes=randint(5, 20))
 
+        # About 70% of pumping sessions go into the stash.
+        stash_amount = (
+            self.amount if choices([True, False], weights=[7, 3])[0] else None
+        )
+
         if end < self.time_now:
             models.Pumping.objects.create(
-                child=self.child, amount=self.amount, start=start, end=end, notes=notes
+                parent=self.parent,
+                amount=self.amount,
+                stash_amount=stash_amount,
+                start=start,
+                end=end,
+                notes=notes,
             ).save()
 
     @transaction.atomic
@@ -201,6 +230,7 @@ class Command(BaseCommand):
         types = [t for t, label in models.Feeding._meta.get_field("type").choices]
         if method in models.Feeding.BREAST_METHODS:
             types = [t for t in types if t not in models.Feeding.NOT_FROM_THE_BREAST]
+        feeding_type = choice(types)
         amount = None
         if method == "bottle":
             amount = Decimal("%d.%d" % (randint(0, 6), randint(0, 9)))
@@ -212,15 +242,32 @@ class Command(BaseCommand):
             notes = " ".join(self.faker.sentences(randint(1, 5)))
 
         if end < self.time_now:
+            is_stash_bottle = (
+                method == "bottle"
+                and feeding_type in models.Feeding.STASH_TYPES
+                and amount
+            )
+            # About half of the breast-milk bottles come out of the stash.
+            stash_amount = amount if is_stash_bottle and choice([True, False]) else None
             instance = models.Feeding.objects.create(
                 child=self.child,
                 start=start,
                 end=end,
-                type=choice(types),
+                type=feeding_type,
                 method=method,
+                parent=(
+                    self.parent if method in models.Feeding.BREAST_METHODS else None
+                ),
                 amount=amount,
+                stash_amount=stash_amount,
                 notes=notes,
             )
+            if stash_amount:
+                self._stash_feedings.append(instance)
+                # About 1 in 10 of those also have some discarded on the way.
+                if choice([True] + [False] * 9):
+                    instance.set_linked_discard(10, "Spilled", parent=self.parent)
+                    self._has_discarded_feeding = True
             instance.save()
             self._add_tags(instance)
         self.time = end

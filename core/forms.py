@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import math
+
 from django import forms
 from django.forms import widgets
 from django.conf import settings
@@ -10,7 +12,7 @@ from django.utils.translation import gettext_lazy as _
 from taggit.forms import TagField, TagWidgetMixin
 
 from babybuddy.widgets import DateInput, DateTimeInput, TimeInput
-from core import models
+from core import models, stash
 from core.models import Timer
 from core.widgets import TagsEditor, ChildRadioSelect, PillRadioSelect
 
@@ -28,6 +30,10 @@ def set_initial_values(kwargs, form_type):
     if kwargs.get("instance", None):
         kwargs.pop("child", None)
         kwargs.pop("timer", None)
+        kwargs.pop("parent", None)
+        kwargs.pop("kind", None)
+        kwargs.pop("amount", None)
+        kwargs.pop("reason", None)
         return kwargs
 
     # Add the "initial" kwarg if it does not already exist.
@@ -53,6 +59,8 @@ def set_initial_values(kwargs, form_type):
             kwargs["initial"].update(
                 {"timer": timer, "start": timer.start, "end": timezone.now()}
             )
+            if form_type is PumpingForm:
+                kwargs["initial"]["parent"] = models.parent_for_child(timer.child)
         except (Timer.DoesNotExist, ValueError, TypeError, OverflowError):
             pass
 
@@ -83,6 +91,44 @@ def set_initial_values(kwargs, form_type):
         )
         kwargs["initial"].update({"nap": nap})
 
+    # Set Parent based on `parent` kwarg, the linked child (PumpingForm only), or a
+    # single Parent; set Kind, Amount and Reason based on the `kind`, `amount`
+    # and `reason` kwargs (StashAdjustmentForm only).
+    # FeedingForm gets its initial parent from whichever child was just
+    # resolved above (explicit `child` kwarg or the single-child fallback).
+    parent_slug = kwargs.pop("parent", None)
+    kind = kwargs.pop("kind", None)
+    amount = kwargs.pop("amount", None)
+    reason = kwargs.pop("reason", None)
+    if form_type in (PumpingForm, StashAdjustmentForm):
+        parent = None
+        if parent_slug:
+            parent = models.Parent.objects.filter(slug=parent_slug).first()
+        elif form_type is PumpingForm and child_slug:
+            parent = models.parent_for_child(
+                models.Child.objects.filter(slug=child_slug).first()
+            )
+        elif models.Parent.objects.count() == 1:
+            parent = models.Parent.objects.first()
+        if parent:
+            kwargs["initial"]["parent"] = parent
+        kwargs["initial"].pop("child", None)
+        if form_type is StashAdjustmentForm and kind in dict(
+            models.StashAdjustment.KINDS
+        ):
+            kwargs["initial"]["kind"] = kind
+        if form_type is StashAdjustmentForm:
+            amount = positive_number(amount)
+            if amount is not None:
+                kwargs["initial"]["amount"] = amount
+            if reason:
+                reason_field = models.StashAdjustment._meta.get_field("reason")
+                kwargs["initial"]["reason"] = reason[: reason_field.max_length]
+    elif form_type is FeedingForm:
+        parent = models.parent_for_child(kwargs["initial"].get("child"))
+        if parent:
+            kwargs["initial"]["parent"] = parent
+
     # Remove custom kwargs, so they do not interfere with `super` calls.
     for key in ["child", "timer"]:
         try:
@@ -91,6 +137,15 @@ def set_initial_values(kwargs, form_type):
             pass
 
     return kwargs
+
+
+def positive_number(value):
+    """Return `value` as a positive, finite float, or None."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
 
 
 class CoreModelForm(forms.ModelForm):
@@ -128,16 +183,36 @@ class CoreModelForm(forms.ModelForm):
             disabled=True,
         )
         self.initial["timer"] = timer.title_with_child
-        self.fields = self.move_after(self.fields, "timer", "child")
+        self.fields = self.move_after(
+            self.fields, "timer", self.timer_anchor(self.fields)
+        )
 
         if hasattr(self, "fieldsets"):
             self.fieldsets = [
                 {
                     **fieldset,
-                    "fields": self.move_after(fieldset["fields"], "timer", "child"),
+                    "fields": self.move_after(
+                        fieldset["fields"],
+                        "timer",
+                        self.timer_anchor(fieldset["fields"]),
+                    ),
                 }
                 for fieldset in self.fieldsets
             ]
+
+    @staticmethod
+    def timer_anchor(fields):
+        """
+        The field the read-only Timer field should be placed after.
+
+        Most forms key off "child"; PumpingForm has no "child" field and uses
+        "parent" instead. Falling back to "child" when neither is present
+        keeps `move_after` a no-op, exactly as before.
+        """
+        for candidate in ("child", "parent"):
+            if candidate in fields:
+                return candidate
+        return "child"
 
     @staticmethod
     def move_after(fields, item, anchor):
@@ -276,17 +351,112 @@ class BMIForm(CoreModelForm, TaggableModelForm):
         }
 
 
-class BottleFeedingForm(CoreModelForm, TaggableModelForm):
+def keep_stash_amount_in_step(form, data):
+    """On an edit that changes the amount but leaves the stash amount as it
+    was, keep the stash amount in step with the amount (see
+    core.stash.follow_or_clamp_stash_amount)."""
+    if form.instance.pk and "stash_amount" not in form.changed_data:
+        data["stash_amount"] = stash.follow_or_clamp_stash_amount(
+            form.initial.get("stash_amount"),
+            form.initial.get("amount"),
+            data.get("amount"),
+        )
+
+
+def _switch(label):
+    return forms.BooleanField(
+        required=False,
+        label=label,
+        widget=forms.CheckboxInput(
+            attrs={"class": "form-check-input", "role": "switch"}
+        ),
+    )
+
+
+class StashFeedingMixin:
+    """ "Taken from stash" plus the milk discarded at the same feeding."""
+
+    def add_stash_fields(self):
+        self.fields["from_stash"] = _switch(_("Taken from stash"))
+        self.fields["stash_amount"].help_text = _("Leave empty to use the amount fed.")
+        self.fields["discarded"] = _switch(_("Some milk was discarded"))
+        self.fields["discarded_amount"] = forms.FloatField(
+            required=False, min_value=0.1, label=_("Amount discarded")
+        )
+        self.fields["discard_reason"] = forms.CharField(
+            required=False,
+            max_length=models.StashAdjustment._meta.get_field("reason").max_length,
+            label=_("Reason"),
+        )
+        if self.instance.pk:
+            self.initial["from_stash"] = self.instance.stash_amount is not None
+            discard = self.instance.linked_discard()
+            self.initial["discarded"] = discard is not None
+            self.initial["discarded_amount"] = discard.amount if discard else None
+            self.initial["discard_reason"] = discard.reason if discard else ""
+        else:
+            self.initial.setdefault(
+                "from_stash",
+                stash.settings().bottle_from_stash_default
+                and stash.stash_has_activity(),
+            )
+
+    def clean_stash(self, data, method):
+        uses_stash = (
+            data.get("from_stash")
+            and method == "bottle"
+            and data.get("type") in models.Feeding.STASH_TYPES
+        )
+        if not uses_stash:
+            data["stash_amount"] = None
+            data["discarded"] = False
+            return data
+        keep_stash_amount_in_step(self, data)
+        if data.get("stash_amount") is None:
+            data["stash_amount"] = data.get("amount")
+        if data["stash_amount"] is None and "amount" not in self.errors:
+            self.add_error("amount", _("Enter the amount taken from the stash."))
+        if data.get("discarded") and not data.get("discarded_amount"):
+            self.add_error("discarded_amount", _("Enter how much was discarded."))
+        return data
+
+    @transaction.atomic
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        if commit:
+            on = self.cleaned_data.get("discarded")
+            instance.set_linked_discard(
+                self.cleaned_data.get("discarded_amount") if on else None,
+                self.cleaned_data.get("discard_reason") if on else "",
+            )
+        return instance
+
+
+class BottleFeedingForm(StashFeedingMixin, CoreModelForm, TaggableModelForm):
     fieldsets = [
         {"fields": ["child", "type", "start", "amount"], "layout": "required"},
+        {
+            "fields": [
+                "from_stash",
+                "stash_amount",
+                "discarded",
+                "discarded_amount",
+                "discard_reason",
+            ]
+        },
         {"fields": ["notes", "tags"], "layout": "advanced"},
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_stash_fields()
+
     def clean(self):
+        self.instance.method = "bottle"
         cleaned_data = super().clean()
         if "start" in cleaned_data:
             self.instance.end = cleaned_data["start"]
-        return cleaned_data
+        return self.clean_stash(cleaned_data, "bottle")
 
     def save(self, commit=True):
         self.instance.method = "bottle"
@@ -295,7 +465,7 @@ class BottleFeedingForm(CoreModelForm, TaggableModelForm):
 
     class Meta:
         model = models.Feeding
-        fields = ["child", "start", "type", "amount", "notes", "tags"]
+        fields = ["child", "start", "type", "amount", "stash_amount", "notes", "tags"]
         widgets = {
             "child": ChildRadioSelect,
             "start": DateTimeInput(),
@@ -361,24 +531,63 @@ class DiaperChangeForm(CoreModelForm, TaggableModelForm):
         }
 
 
-class FeedingForm(CoreModelForm, TaggableModelForm):
+class FeedingForm(StashFeedingMixin, CoreModelForm, TaggableModelForm):
     fieldsets = [
-        {"fields": ["child", "start", "end", "type", "method"], "layout": "required"},
+        {
+            "fields": ["child", "start", "end", "type", "method", "parent"],
+            "layout": "required",
+        },
         {"fields": ["amount"]},
+        {
+            "fields": [
+                "from_stash",
+                "stash_amount",
+                "discarded",
+                "discarded_amount",
+                "discard_reason",
+            ]
+        },
         {"fields": ["notes", "tags"], "layout": "advanced"},
     ]
 
     class Meta:
         model = models.Feeding
-        fields = ["child", "start", "end", "type", "method", "amount", "notes", "tags"]
+        fields = [
+            "child",
+            "start",
+            "end",
+            "type",
+            "method",
+            "parent",
+            "amount",
+            "stash_amount",
+            "notes",
+            "tags",
+        ]
         widgets = {
             "child": ChildRadioSelect,
             "start": DateTimeInput(),
             "end": DateTimeInput(),
             "type": PillRadioSelect(),
             "method": PillRadioSelect(),
+            "parent": ChildRadioSelect,  # renders any model with a picture
             "notes": forms.Textarea(attrs={"rows": 5}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["parent"].label = _("Breastfed by")
+        self.add_stash_fields()
+
+    def clean(self):
+        data = super().clean()
+        if data.get("method") not in models.Feeding.BREAST_METHODS:
+            data["parent"] = None
+        elif not self.instance.pk and not data.get("parent"):
+            # The initial value only covers a child known up front; fill in
+            # the parent of the child picked in the form, as the API does.
+            data["parent"] = models.parent_for_child(data.get("child"))
+        return self.clean_stash(data, data.get("method"))
 
 
 class HeadCircumferenceForm(CoreModelForm, TaggableModelForm):
@@ -476,22 +685,110 @@ class MedicationForm(CoreModelForm, TaggableModelForm):
         return None
 
 
+class ParentForm(forms.ModelForm):
+    class Meta:
+        model = models.Parent
+        fields = ["first_name", "last_name", "children"]
+        if settings.BABY_BUDDY["ALLOW_UPLOADS"]:
+            fields.append("picture")
+        widgets = {"children": forms.CheckboxSelectMultiple}
+
+
 class PumpingForm(CoreModelForm, TaggableModelForm):
+    to_stash = forms.BooleanField(
+        required=False,
+        label=_("Store in stash"),
+        widget=forms.CheckboxInput(
+            attrs={"class": "form-check-input", "role": "switch"}
+        ),
+    )
     fieldsets = [
-        {"fields": ["child", "start", "end"], "layout": "required"},
-        {"fields": ["amount"]},
-        {"fields": ["notes", "tags"], "layout": "advanced"},
+        {"fields": ["parent", "start", "end"], "layout": "required"},
+        {"fields": ["amount", "to_stash"]},
+        {"fields": ["stash_amount", "notes", "tags"], "layout": "advanced"},
     ]
 
     class Meta:
         model = models.Pumping
-        fields = ["child", "start", "end", "amount", "notes", "tags"]
+        fields = ["parent", "start", "end", "amount", "stash_amount", "notes", "tags"]
         widgets = {
-            "child": ChildRadioSelect,
+            "parent": ChildRadioSelect,  # renders any model with a picture
             "start": DateTimeInput(),
             "end": DateTimeInput(),
             "notes": forms.Textarea(attrs={"rows": 5}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["parent"].required = True
+        self.fields["parent"].empty_label = None
+        self.fields["stash_amount"].help_text = _(
+            "Leave empty to store the whole amount."
+        )
+        if self.instance.pk:
+            self.initial["to_stash"] = self.instance.stash_amount is not None
+        else:
+            self.initial.setdefault(
+                "to_stash", stash.settings().pumping_to_stash_default
+            )
+
+    def clean(self):
+        data = super().clean()
+        if data.get("parent"):
+            # Pumping belongs to a parent; a legacy entry's child is dropped.
+            self.instance.child = None
+        if not data.get("to_stash"):
+            data["stash_amount"] = None
+            return data
+        keep_stash_amount_in_step(self, data)
+        if data.get("stash_amount") is None:
+            data["stash_amount"] = data.get("amount")
+        return data
+
+
+class StashAdjustmentForm(CoreModelForm, TaggableModelForm):
+    fieldsets = [
+        {
+            "fields": ["kind", "time", "amount", "reason", "parent"],
+            "layout": "required",
+        },
+        {"fields": ["notes", "tags"], "layout": "advanced"},
+    ]
+
+    class Meta:
+        model = models.StashAdjustment
+        fields = ["kind", "time", "amount", "reason", "parent", "notes", "tags"]
+        widgets = {
+            "time": DateTimeInput(),
+            "kind": PillRadioSelect(),
+            "parent": ChildRadioSelect,
+            "notes": forms.Textarea(attrs={"rows": 5}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # `?kind=`, `?amount=`, `?reason=` and `?parent=` arrive as initial
+        # values via set_initial_values.
+        parents = list(models.Parent.objects.all()[:2])
+        self.single_parent = parents[0] if len(parents) == 1 else None
+        if self.single_parent or not parents:
+            # Nothing to choose: the entry goes to the only parent, or
+            # there is no parent to pick from at all.
+            self.fields["parent"].widget = forms.HiddenInput()
+            self.fieldsets = [
+                {**fieldset, "fields": [f for f in fieldset["fields"] if f != "parent"]}
+                for fieldset in self.fieldsets
+            ] + [{"fields": ["parent"], "layout": "hidden"}]
+        if self.instance.feeding_id:
+            # A discard logged at a feeding stays a discard; its amount can
+            # still be edited here.
+            self.fields["kind"].disabled = True
+
+    def clean(self):
+        data = super().clean()
+        if not data.get("parent") and self.single_parent:
+            data["parent"] = self.single_parent
+        return data
 
 
 class NoteForm(CoreModelForm, TaggableModelForm):

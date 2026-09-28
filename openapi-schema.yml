@@ -1431,6 +1431,12 @@ paths:
               - both breasts
               - parent fed
               - self fed
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -1447,6 +1453,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: type
@@ -1574,6 +1586,12 @@ paths:
               - both breasts
               - parent fed
               - self fed
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -1590,6 +1608,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: type
@@ -1671,6 +1695,12 @@ paths:
               - both breasts
               - parent fed
               - self fed
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -1687,6 +1717,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: type
@@ -1779,6 +1815,12 @@ paths:
               - both breasts
               - parent fed
               - self fed
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -1795,6 +1837,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: type
@@ -1887,6 +1935,12 @@ paths:
               - both breasts
               - parent fed
               - self fed
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -1903,6 +1957,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: type
@@ -3222,6 +3282,292 @@ paths:
           description: ""
       tags:
         - api
+  /api/parents/:
+    get:
+      operationId: listParents
+      description: ""
+      parameters:
+        - name: limit
+          required: false
+          in: query
+          description: Number of results to return per page.
+          schema:
+            type: integer
+        - name: offset
+          required: false
+          in: query
+          description: The initial index from which to return the results.
+          schema:
+            type: integer
+        - name: first_name
+          required: false
+          in: query
+          description: first_name
+          schema:
+            type: string
+        - name: last_name
+          required: false
+          in: query
+          description: last_name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - count
+                  - results
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=400&limit=100
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=200&limit=100
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Parent"
+          description: ""
+      tags:
+        - api
+    post:
+      operationId: createParent
+      description: ""
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Parent"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/Parent"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Parent"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Parent"
+          description: ""
+      tags:
+        - api
+  /api/parents/{slug}/:
+    get:
+      operationId: retrieveParent
+      description: ""
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: ""
+          schema:
+            type: string
+        - name: first_name
+          required: false
+          in: query
+          description: first_name
+          schema:
+            type: string
+        - name: last_name
+          required: false
+          in: query
+          description: last_name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Parent"
+          description: ""
+      tags:
+        - api
+    put:
+      operationId: updateParent
+      description: ""
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: ""
+          schema:
+            type: string
+        - name: first_name
+          required: false
+          in: query
+          description: first_name
+          schema:
+            type: string
+        - name: last_name
+          required: false
+          in: query
+          description: last_name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Parent"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/Parent"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Parent"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Parent"
+          description: ""
+      tags:
+        - api
+    patch:
+      operationId: partialUpdateParent
+      description: ""
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: ""
+          schema:
+            type: string
+        - name: first_name
+          required: false
+          in: query
+          description: first_name
+          schema:
+            type: string
+        - name: last_name
+          required: false
+          in: query
+          description: last_name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Parent"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/Parent"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Parent"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Parent"
+          description: ""
+      tags:
+        - api
+    delete:
+      operationId: destroyParent
+      description: ""
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: ""
+          schema:
+            type: string
+        - name: first_name
+          required: false
+          in: query
+          description: first_name
+          schema:
+            type: string
+        - name: last_name
+          required: false
+          in: query
+          description: last_name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: ""
+      tags:
+        - api
   /api/pumping/:
     get:
       operationId: listPumpings
@@ -3263,6 +3609,12 @@ paths:
           description: Min. End DateTime
           schema:
             type: string
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -3279,6 +3631,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: ordering
@@ -3376,6 +3734,12 @@ paths:
           description: Min. End DateTime
           schema:
             type: string
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -3392,6 +3756,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: ordering
@@ -3443,6 +3813,12 @@ paths:
           description: Min. End DateTime
           schema:
             type: string
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -3459,6 +3835,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: ordering
@@ -3521,6 +3903,12 @@ paths:
           description: Min. End DateTime
           schema:
             type: string
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -3537,6 +3925,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: ordering
@@ -3599,6 +3993,12 @@ paths:
           description: Min. End DateTime
           schema:
             type: string
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
         - name: start
           required: false
           in: query
@@ -3615,6 +4015,12 @@ paths:
           required: false
           in: query
           description: Min. Start DateTime
+          schema:
+            type: string
+        - name: stash_amount__isnull
+          required: false
+          in: query
+          description: stash_amount__isnull
           schema:
             type: string
         - name: ordering
@@ -4051,6 +4457,307 @@ paths:
           required: false
           in: query
           description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: ""
+      tags:
+        - api
+  /api/stash-adjustments/:
+    get:
+      operationId: listStashAdjustments
+      description: ""
+      parameters:
+        - name: limit
+          required: false
+          in: query
+          description: Number of results to return per page.
+          schema:
+            type: integer
+        - name: offset
+          required: false
+          in: query
+          description: The initial index from which to return the results.
+          schema:
+            type: integer
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
+        - name: feeding
+          required: false
+          in: query
+          description: feeding
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - count
+                  - results
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=400&limit=100
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=200&limit=100
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+    post:
+      operationId: createStashAdjustment
+      description: ""
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+  /api/stash-adjustments/{id}/:
+    get:
+      operationId: retrieveStashAdjustment
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Stash adjustment.
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
+        - name: feeding
+          required: false
+          in: query
+          description: feeding
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+    put:
+      operationId: updateStashAdjustment
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Stash adjustment.
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
+        - name: feeding
+          required: false
+          in: query
+          description: feeding
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+    patch:
+      operationId: partialUpdateStashAdjustment
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Stash adjustment.
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
+        - name: feeding
+          required: false
+          in: query
+          description: feeding
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+    delete:
+      operationId: destroyStashAdjustment
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Stash adjustment.
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: parent
+          required: false
+          in: query
+          description: parent
+          schema:
+            type: string
+        - name: feeding
+          required: false
+          in: query
+          description: feeding
           schema:
             type: string
         - name: ordering
@@ -6067,6 +6774,19 @@ paths:
           description: ""
       tags:
         - api
+  /api/stash:
+    get:
+      operationId: retrieveMilkStash
+      description: Read-only milk stash summary (balance, FIFO lots, age status).
+      parameters: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ""
+      tags:
+        - api
   /api/timers/{id}/restart/:
     patch:
       operationId: restartTimer
@@ -6244,6 +6964,9 @@ components:
           type: integer
           nullable: true
           description: Required unless a Timer value is provided.
+        parent:
+          type: integer
+          nullable: true
         start:
           type: string
           format: date-time
@@ -6280,6 +7003,17 @@ components:
         amount:
           type: number
           nullable: true
+        stash_amount:
+          type: number
+          nullable: true
+          description: How much of what was drunk came from the milk stash.
+        stash_discarded:
+          type: number
+          minimum: 0.1
+          nullable: true
+        stash_discard_reason:
+          type: string
+          maxLength: 255
         notes:
           type: string
           nullable: true
@@ -6400,6 +7134,32 @@ components:
       required:
         - child
         - note
+    Parent:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        first_name:
+          type: string
+          maxLength: 255
+        last_name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          readOnly: true
+          pattern: ^[-\w]+\z
+        picture:
+          type: string
+          format: binary
+          nullable: true
+        children:
+          type: array
+          items:
+            type: integer
+      required:
+        - first_name
     Pumping:
       type: object
       properties:
@@ -6410,8 +7170,15 @@ components:
           type: integer
           nullable: true
           description: Required unless a Timer value is provided.
+        parent:
+          type: integer
+          nullable: true
         amount:
           type: number
+        stash_amount:
+          type: number
+          nullable: true
+          description: How much of this session went into the milk stash.
         start:
           type: string
           format: date-time
@@ -6475,6 +7242,44 @@ components:
           type: array
           items:
             type: string
+    StashAdjustment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        time:
+          type: string
+          format: date-time
+        amount:
+          type: number
+        kind:
+          enum:
+            - added
+            - discarded
+          type: string
+        reason:
+          type: string
+          maxLength: 255
+        signed_amount:
+          type: number
+          readOnly: true
+        parent:
+          type: integer
+          nullable: true
+        feeding:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - amount
+        - kind
     Tag:
       type: object
       properties:

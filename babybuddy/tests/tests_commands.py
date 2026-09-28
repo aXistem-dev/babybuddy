@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
 
-from core.models import Child
+from core.models import Child, Feeding, Parent, Pumping, StashAdjustment
 
 
 class CommandsTestCase(TransactionTestCase):
@@ -20,6 +20,28 @@ class CommandsTestCase(TransactionTestCase):
         self.assertEqual(Child.objects.count(), 1)
         call_command("fake", children=2, days=7, verbosity=0)
         self.assertEqual(Child.objects.count(), 3)
+
+    def test_fake_pumping_and_stash(self):
+        # Enough children and days that the (weighted) random choices below are
+        # certain, in practice, to include a stashed pumping session and a
+        # discarded bottle.
+        call_command("migrate", verbosity=0)
+        call_command("fake", children=2, days=45, verbosity=0)
+        self.assertEqual(Parent.objects.count(), 1)
+        parent = Parent.objects.get()
+        self.assertEqual(set(parent.children.all()), set(Child.objects.all()))
+        self.assertFalse(Pumping.objects.filter(child__isnull=False).exists())
+        self.assertTrue(Pumping.objects.filter(stash_amount__isnull=False).exists())
+        breastfeeds = Feeding.objects.filter(method__in=Feeding.BREAST_METHODS)
+        self.assertTrue(breastfeeds.exists())
+        self.assertFalse(breastfeeds.exclude(parent=parent).exists())
+        self.assertTrue(
+            StashAdjustment.objects.filter(
+                kind=StashAdjustment.DISCARDED,
+                reason="Spilled",
+                feeding__isnull=False,
+            ).exists()
+        )
 
     def test_reset(self):
         call_command("reset", verbosity=0, interactive=False)

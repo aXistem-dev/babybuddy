@@ -10,10 +10,11 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 from taggit.serializers import TagListSerializerField, TaggitSerializer
 
-from core import models
+from core import models, stash
 from babybuddy import models as babybuddy_models
 from webhooks import models as webhooks_models
 
@@ -59,6 +60,8 @@ class CoreModelWithDurationSerializer(CoreModelSerializer):
         write_only=True,
     )
 
+    required_fields = ("child", "start", "end")
+
     class Meta:
         abstract = True
         extra_kwargs = {
@@ -98,7 +101,7 @@ class CoreModelWithDurationSerializer(CoreModelSerializer):
         # required fields at the model level.
         if not self.partial:
             errors = {}
-            for field in ["child", "start", "end"]:
+            for field in self.required_fields:
                 if field not in attrs or not attrs[field]:
                     errors[field] = "This field is required."
             if len(errors) > 0:
@@ -146,13 +149,51 @@ class BMISerializer(CoreModelSerializer, TaggableSerializer):
         }
 
 
-class PumpingSerializer(CoreModelWithDurationSerializer, TaggableSerializer):
+class StashDefaultsMixin:
+    """Fill in a stash_amount the client did not send at all: a default on
+    create, or a value that keeps following/fitting the entry on update."""
+
+    def apply_stash_default(self, attrs):
+        return attrs
+
+    def reconcile_stash_amount(self, attrs):
+        return attrs
+
+    def _follow_or_clamp_stash_amount(self, attrs):
+        """A stash-unaware update that changes `amount`: see
+        core.stash.follow_or_clamp_stash_amount."""
+        if "amount" in attrs:
+            attrs["stash_amount"] = stash.follow_or_clamp_stash_amount(
+                self.instance.stash_amount, self.instance.amount, attrs["amount"]
+            )
+        return attrs
+
+    def validate(self, attrs):
+        if self.instance is not None and "stash_amount" not in self.initial_data:
+            attrs = self.reconcile_stash_amount(attrs)
+        attrs = super().validate(attrs)
+        if self.instance is None and "stash_amount" not in self.initial_data:
+            attrs = self.apply_stash_default(attrs)
+            self.Meta.model(**{k: v for k, v in attrs.items() if k != "tags"}).clean()
+        return attrs
+
+
+class PumpingSerializer(
+    StashDefaultsMixin, CoreModelWithDurationSerializer, TaggableSerializer
+):
+    required_fields = ("start", "end")
+    parent = serializers.PrimaryKeyRelatedField(
+        allow_null=True, queryset=models.Parent.objects.all(), required=False
+    )
+
     class Meta(CoreModelWithDurationSerializer.Meta):
         model = models.Pumping
         fields = (
             "id",
             "child",
+            "parent",
             "amount",
+            "stash_amount",
             "start",
             "end",
             "duration",
@@ -160,6 +201,40 @@ class PumpingSerializer(CoreModelWithDurationSerializer, TaggableSerializer):
             "tags",
             "timer",
         )
+
+    def validate(self, attrs):
+        if self.instance is None and not attrs.get("parent"):
+            child = attrs.get("child") or getattr(attrs.get("timer"), "child", None)
+            parent = models.parent_for_child(child)
+            if child is not None and parent is None:
+                raise ValidationError(
+                    {
+                        "parent": _(
+                            "This child has no single linked parent; send `parent`."
+                        )
+                    }
+                )
+            if parent is not None:
+                attrs["parent"] = parent
+        # super().validate() (CoreModelWithDurationSerializer) may itself set
+        # attrs["child"] from a supplied timer's child, so the parent-owned
+        # invariant below has to be enforced after it runs, not before.
+        attrs = super().validate(attrs)
+        if self.instance is None or self.instance.parent_id or attrs.get("parent"):
+            # A brand new row, or an update on a row that has (or is gaining)
+            # a parent, never keeps a child: whether it arrived directly in
+            # the request or was resolved from a timer just above, pumping
+            # belongs to the parent and the legacy field stays NULL.
+            attrs["child"] = None
+        return attrs
+
+    def apply_stash_default(self, attrs):
+        if stash.settings().pumping_to_stash_default and attrs.get("amount"):
+            attrs["stash_amount"] = attrs.get("amount")
+        return attrs
+
+    def reconcile_stash_amount(self, attrs):
+        return self._follow_or_clamp_stash_amount(attrs)
 
 
 class ChildSerializer(serializers.HyperlinkedModelSerializer):
@@ -194,12 +269,27 @@ class DiaperChangeSerializer(CoreModelSerializer, TaggableSerializer):
         )
 
 
-class FeedingSerializer(CoreModelWithDurationSerializer, TaggableSerializer):
+class FeedingSerializer(
+    StashDefaultsMixin, CoreModelWithDurationSerializer, TaggableSerializer
+):
+    parent = serializers.PrimaryKeyRelatedField(
+        allow_null=True, queryset=models.Parent.objects.all(), required=False
+    )
+    stash_discarded = serializers.FloatField(
+        allow_null=True, required=False, min_value=0.1
+    )
+    stash_discard_reason = serializers.CharField(
+        allow_blank=True,
+        max_length=models.StashAdjustment._meta.get_field("reason").max_length,
+        required=False,
+    )
+
     class Meta(CoreModelWithDurationSerializer.Meta):
         model = models.Feeding
         fields = (
             "id",
             "child",
+            "parent",
             "start",
             "end",
             "timer",
@@ -207,9 +297,196 @@ class FeedingSerializer(CoreModelWithDurationSerializer, TaggableSerializer):
             "type",
             "method",
             "amount",
+            "stash_amount",
+            "stash_discarded",
+            "stash_discard_reason",
             "notes",
             "tags",
         )
+
+    def validate(self, attrs):
+        self._discarded = attrs.pop("stash_discarded", serializers.empty)
+        self._discard_reason = attrs.pop("stash_discard_reason", serializers.empty)
+        method = attrs.get("method", getattr(self.instance, "method", None))
+        if method not in models.Feeding.BREAST_METHODS:
+            # A parent only belongs on a breastfeed: drop one sent (or kept)
+            # on any other method rather than letting model clean() reject
+            # it, mirroring how a bottle silently drops a stray `child` on
+            # pumping.
+            attrs["parent"] = None
+        attrs = super().validate(attrs)
+        if (
+            self.instance is None
+            and method in models.Feeding.BREAST_METHODS
+            and "parent" not in self.initial_data
+        ):
+            # Create only, and only when `parent` was not sent at all (an
+            # explicit `"parent": null` opts out, same as `stash_amount` in
+            # StashDefaultsMixin): resolve from the child (direct or
+            # timer-supplied), same as pumping, but without pumping's
+            # "ambiguous parent" error -- a child with several linked
+            # parents just gets no auto-fill.
+            parent = models.parent_for_child(attrs.get("child"))
+            if parent is not None:
+                attrs["parent"] = parent
+        stash_amount = attrs.get(
+            "stash_amount", getattr(self.instance, "stash_amount", None)
+        )
+        if stash_amount is None and self._discarded not in (serializers.empty, None):
+            raise ValidationError(
+                {
+                    "stash_discarded": _(
+                        "Discarding milk needs milk taken from the stash."
+                    )
+                }
+            )
+        if stash_amount is None:
+            # Nothing taken from the stash any more: any linked discard goes
+            # with it (see save()), so a reason sent alongside has nothing to
+            # attach to.
+            self._discard_reason = serializers.empty
+        if (
+            self._discard_reason is not serializers.empty
+            and self._discarded is serializers.empty
+            and not (self.instance and self.instance.linked_discard())
+        ):
+            raise ValidationError(
+                {
+                    "stash_discard_reason": _(
+                        "Send stash_discarded with the amount discarded."
+                    )
+                }
+            )
+        return attrs
+
+    def apply_stash_default(self, attrs):
+        if (
+            attrs.get("type") in models.Feeding.STASH_TYPES
+            and attrs.get("method") == "bottle"
+            and attrs.get("amount")
+            and stash.settings().bottle_from_stash_default
+            and stash.stash_has_activity()
+        ):
+            attrs["stash_amount"] = attrs["amount"]
+        return attrs
+
+    def reconcile_stash_amount(self, attrs):
+        type_ = attrs.get("type", self.instance.type)
+        method = attrs.get("method", self.instance.method)
+        if type_ not in models.Feeding.STASH_TYPES or method != "bottle":
+            attrs["stash_amount"] = None
+            return attrs
+        return self._follow_or_clamp_stash_amount(attrs)
+
+    def save(self, **kwargs):
+        stash_amount_was_set = (
+            self.instance is not None and self.instance.stash_amount is not None
+        )
+        start_changed = self.instance is not None and "start" in self.validated_data
+        with transaction.atomic():
+            instance = super().save(**kwargs)
+            touched = False
+            discarded_given = (
+                getattr(self, "_discarded", serializers.empty) is not serializers.empty
+            )
+            reason_given = (
+                getattr(self, "_discard_reason", serializers.empty)
+                is not serializers.empty
+            )
+            if instance.stash_amount is not None and (
+                discarded_given or reason_given or start_changed
+            ):
+                # A changed start also moves the linked discard, whose time
+                # always follows the feeding's.
+                existing = instance.linked_discard()
+                amount = (
+                    self._discarded
+                    if discarded_given
+                    else (existing.amount if existing else None)
+                )
+                reason = (
+                    self._discard_reason
+                    if reason_given
+                    else (existing.reason if existing else "")
+                )
+                instance.set_linked_discard(amount, reason or "")
+                touched = True
+            if instance.stash_amount is None and stash_amount_was_set:
+                instance.stash_adjustments.all().delete()
+                touched = True
+            if touched:
+                # `instance` may carry a prefetched (now stale) cache of
+                # stash_adjustments from the queryset that fetched it for this
+                # update; drop it so to_representation() re-reads what was
+                # just written instead of the pre-mutation snapshot.
+                cache = getattr(instance, "_prefetched_objects_cache", None)
+                if cache is not None:
+                    cache.pop("stash_adjustments", None)
+        return instance
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        discard = None if instance.stash_amount is None else instance.linked_discard()
+        data["stash_discarded"] = discard.amount if discard else None
+        data["stash_discard_reason"] = discard.reason if discard else ""
+        return data
+
+
+class ParentSerializer(serializers.HyperlinkedModelSerializer):
+    children = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=models.Child.objects.all(), required=False
+    )
+
+    class Meta:
+        model = models.Parent
+        fields = ("id", "first_name", "last_name", "slug", "picture", "children")
+        lookup_field = "slug"
+
+
+class StashAdjustmentSerializer(CoreModelSerializer, TaggableSerializer):
+    parent = serializers.PrimaryKeyRelatedField(
+        allow_null=True, queryset=models.Parent.objects.all(), required=False
+    )
+    feeding = serializers.PrimaryKeyRelatedField(
+        allow_null=True, queryset=models.Feeding.objects.all(), required=False
+    )
+    signed_amount = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = models.StashAdjustment
+        fields = (
+            "id",
+            "time",
+            "amount",
+            "kind",
+            "reason",
+            "signed_amount",
+            "parent",
+            "feeding",
+            "notes",
+            "tags",
+        )
+
+    def validate(self, attrs):
+        if self.instance is None and "parent" not in self.initial_data:
+            # Create only, and only when `parent` was not sent at all (an
+            # explicit `"parent": null` opts out): with a single parent there
+            # is nobody else the milk can belong to.
+            parents = list(models.Parent.objects.all()[:2])
+            if len(parents) == 1:
+                attrs["parent"] = parents[0]
+        return super().validate(attrs)
+
+    def get_fields(self):
+        # CoreModelSerializer declares a required "child" field; adjustments
+        # have none. Popping it here (rather than shadowing it with a class
+        # attribute) keeps this a normal Serializer field from the outside,
+        # since a plain `child = None` also satisfies `hasattr(self, "child")`
+        # and DRF's OPTIONS metadata treats that as "this is a ListSerializer,
+        # recurse into `.child`" and crashes on the None.
+        fields = super().get_fields()
+        fields.pop("child", None)
+        return fields
 
 
 class HeadCircumferenceSerializer(CoreModelSerializer, TaggableSerializer):

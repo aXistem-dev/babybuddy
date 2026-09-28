@@ -55,3 +55,43 @@
     })();
     </script>
 {% endblock %}
+{% block javascript %}
+    <script type="application/javascript">
+    (function () {
+        const row = (id) => document.getElementById(id)?.closest(".row, .mb-3, .form-group");
+        const hide = (id, h) => { const r = row(id); if (r) r.hidden = h; };
+        const breastMethods = ["left breast", "right breast", "both breasts"];
+        function syncParent() {
+            const methodEl = document.querySelector("input[name=method]:checked");
+            const breastfeeding = methodEl ? breastMethods.includes(methodEl.value) : false;
+            hide("id_parent", !breastfeeding);
+        }
+        if (document.getElementById("id_parent")) {
+            document.querySelectorAll("input[name=method]")
+                .forEach((el) => el.addEventListener("change", syncParent));
+            syncParent();
+        }
+        const all = ["id_from_stash", "id_stash_amount", "id_discarded", "id_discarded_amount",
+                     "id_discard_reason"];
+        if (!document.getElementById("id_from_stash")) return;
+        const types = ["breast milk", "fortified breast milk"];
+        const checked = (id) => document.getElementById(id)?.checked;
+        function sync() {
+            const type = document.querySelector("input[name=type]:checked")?.value;
+            const methodEl = document.querySelector("input[name=method]:checked");
+            const bottle = methodEl ? methodEl.value === "bottle" : true;
+            const show = types.includes(type) && bottle;
+            all.forEach((id) => hide(id, !show));
+            if (!show) return;
+            const fromStash = checked("id_from_stash");
+            ["id_stash_amount", "id_discarded"].forEach((id) => hide(id, !fromStash));
+            const discarded = fromStash && checked("id_discarded");
+            hide("id_discarded_amount", !discarded);
+            hide("id_discard_reason", !discarded);
+        }
+        document.querySelectorAll("input[name=type], input[name=method], #id_from_stash, #id_discarded")
+            .forEach((el) => el.addEventListener("change", sync));
+        sync();
+    })();
+    </script>
+{% endblock %}

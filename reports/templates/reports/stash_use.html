@@ -1,0 +1,11 @@
+{% extends "reports/report_base.html" %}
+{% load i18n %}
+{% block title %}
+    {% trans "Milk From the Stash per Baby" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url "core:stash" %}">{% trans "Milk stash" %}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Milk From the Stash per Baby" %}</li>
+{% endblock %}

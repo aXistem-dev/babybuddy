@@ -28,6 +28,7 @@ nav:
       - "user-guide/managing-users.md"
       - "user-guide/adding-entries.md"
       - "user-guide/using-timers.md"
+      - "user-guide/milk-stash.md"
   - "Contributing":
       - "contributing/development-environment.md"
       - "contributing/translation.md"

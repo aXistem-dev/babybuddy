@@ -72,6 +72,26 @@ urlpatterns = [
         name="report-pumping-amounts-child",
     ),
     path(
+        "parents/<str:slug>/reports/pumping/amounts/",
+        views.ParentPumpingAmounts.as_view(),
+        name="report-pumping-amounts-parent",
+    ),
+    path(
+        "reports/stash/balance/",
+        views.StashBalanceReport.as_view(),
+        name="report-stash-balance",
+    ),
+    path(
+        "reports/stash/flow/",
+        views.StashFlowReport.as_view(),
+        name="report-stash-flow",
+    ),
+    path(
+        "reports/stash/use/",
+        views.StashUseReport.as_view(),
+        name="report-stash-use",
+    ),
+    path(
         "children/<str:slug>/reports/feeding/intervals/",
         views.FeedingIntervalsChildReport.as_view(),
         name="report-feeding-intervals-child",

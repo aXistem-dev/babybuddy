@@ -17,11 +17,15 @@ class ImportTestCase(TestCase):
 
     def setUp(self):
         call_command("migrate", verbosity=0)
-        # The data to be imported uses 2020-02-10 as a basis and Child ID 1.
+        # The data to be imported uses 2020-02-10 as a basis, Child ID 1 and
+        # Parent ID 1.
         birth_date = datetime.date(year=2020, month=2, day=10)
-        models.Child.objects.create(
+        child = models.Child.objects.create(
             first_name="Child", last_name="One", birth_date=birth_date
-        ).save()
+        )
+        child.save()
+        parent = models.Parent.objects.create(first_name="Robin")
+        parent.children.add(child)
 
     def get_dataset(self, model_name):
         with open(self.base_path + model_name + ".csv", "r") as f:
@@ -68,6 +72,64 @@ class ImportTestCase(TestCase):
 
     def test_pumping(self):
         self.import_data(models.Pumping, 23)
+
+    def test_pumping_export_includes_parent_and_stash_amount(self):
+        parent = models.Parent.objects.get()
+        pumping = models.Pumping.objects.create(
+            parent=parent, amount=100.0, stash_amount=80.0
+        )
+        resource = admin.PumpingImportExportResource()
+        dataset = resource.export(models.Pumping.objects.filter(pk=pumping.pk))
+        self.assertIn("parent_id", dataset.headers)
+        self.assertIn("stash_amount", dataset.headers)
+        row = dataset.dict[0]
+        self.assertEqual(row["parent_id"], str(parent.pk))
+        self.assertEqual(row["stash_amount"], "80.0")
+
+    def test_feeding_export_includes_stash_amount(self):
+        child = models.Child.objects.get()
+        feeding = models.Feeding.objects.create(
+            child=child,
+            type="breast milk",
+            method="bottle",
+            amount=90.0,
+            stash_amount=60.0,
+        )
+        resource = admin.FeedingImportExportResource()
+        dataset = resource.export(models.Feeding.objects.filter(pk=feeding.pk))
+        self.assertIn("stash_amount", dataset.headers)
+        self.assertEqual(dataset.dict[0]["stash_amount"], "60.0")
+
+    def test_stash_adjustment_export_includes_kind_reason_parent_and_feeding(self):
+        parent = models.Parent.objects.get()
+        child = models.Child.objects.get()
+        feeding = models.Feeding.objects.create(
+            child=child,
+            type="breast milk",
+            method="bottle",
+            amount=90.0,
+            stash_amount=60.0,
+        )
+        adjustment = models.StashAdjustment.objects.create(
+            amount=10.0,
+            kind=models.StashAdjustment.DISCARDED,
+            reason="Spilled",
+            parent=parent,
+            feeding=feeding,
+        )
+        resource = admin.StashAdjustmentImportExportResource()
+        dataset = resource.export(
+            models.StashAdjustment.objects.filter(pk=adjustment.pk)
+        )
+        self.assertIn("kind", dataset.headers)
+        self.assertIn("reason", dataset.headers)
+        self.assertIn("parent_id", dataset.headers)
+        self.assertIn("feeding_id", dataset.headers)
+        row = dataset.dict[0]
+        self.assertEqual(row["kind"], models.StashAdjustment.DISCARDED)
+        self.assertEqual(row["reason"], "Spilled")
+        self.assertEqual(row["parent_id"], str(parent.pk))
+        self.assertEqual(row["feeding_id"], str(feeding.pk))
 
     def test_sleep(self):
         self.import_data(models.Sleep, 39)

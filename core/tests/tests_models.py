@@ -3,7 +3,9 @@ import datetime
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.db.models import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -208,6 +210,30 @@ class FeedingTestCase(TestCase):
         self.assertEqual(feeding, models.Feeding.objects.first())
         self.assertEqual(str(feeding), "Feeding")
         self.assertEqual(feeding.method, "both breasts")
+
+
+class FeedingParentTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+        self.child = models.Child.objects.create(
+            first_name="Alex", birth_date=timezone.localdate()
+        )
+        self.robin = models.Parent.objects.create(first_name="Robin")
+        self.t = timezone.localtime() - timezone.timedelta(hours=1)
+
+    def test_parent_only_for_breast_methods(self):
+        f = models.Feeding(
+            child=self.child,
+            start=self.t,
+            end=self.t + timezone.timedelta(minutes=10),
+            type="breast milk",
+            method="left breast",
+            parent=self.robin,
+        )
+        f.full_clean()
+        f.method = "bottle"
+        with self.assertRaises(ValidationError):
+            f.full_clean()
 
 
 class HeadCircumferenceTestCase(TestCase):
@@ -521,3 +547,290 @@ class MedicationTestCase(TestCase):
         )
         with self.assertRaises(ValidationError):
             medication.full_clean()
+
+
+class ParentTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+        self.alex = models.Child.objects.create(
+            first_name="Alex", birth_date=timezone.localdate()
+        )
+        self.sam = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+
+    def test_parent_create_and_slug(self):
+        parent = models.Parent.objects.create(first_name="Jamie", last_name="Doe")
+        self.assertEqual(str(parent), "Jamie Doe")
+        self.assertEqual(parent.slug, "jamie-doe")
+
+    def test_children_link_both_ways(self):
+        robin = models.Parent.objects.create(first_name="Robin")
+        robin.children.add(self.alex, self.sam)
+        self.assertEqual(set(self.alex.parents.all()), {robin})
+
+    def test_parent_for_child(self):
+        self.assertIsNone(models.parent_for_child(self.alex))
+        robin = models.Parent.objects.create(first_name="Robin")
+        robin.children.add(self.alex)
+        self.assertEqual(models.parent_for_child(self.alex), robin)
+        casey = models.Parent.objects.create(first_name="Casey")
+        casey.children.add(self.alex)
+        self.assertIsNone(models.parent_for_child(self.alex))  # ambiguous
+        self.assertIsNone(models.parent_for_child(None))
+
+
+class ParentPumpingTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+        self.robin = models.Parent.objects.create(first_name="Robin")
+        self.start = timezone.localtime() - timezone.timedelta(hours=3)
+        self.end = self.start + timezone.timedelta(minutes=20)
+
+    def make(self, **kwargs):
+        data = {"start": self.start, "end": self.end, "amount": 120.0}
+        data.update(kwargs)
+        return models.Pumping(**data)
+
+    def test_parent_pumping_is_valid(self):
+        p = self.make(parent=self.robin)
+        p.full_clean()
+        p.save()
+        self.assertIsNone(p.child)
+        self.assertEqual(list(self.robin.pumping.all()), [p])
+
+    def test_parent_is_required(self):
+        child = models.Child.objects.create(
+            first_name="Alex", birth_date=timezone.localdate()
+        )
+        with self.assertRaises(ValidationError):
+            self.make(child=child).full_clean()
+
+    def test_legacy_child_only_pumping_stays_valid_once_saved(self):
+        # A pre-existing (already saved) child-only row keeps passing
+        # full_clean() without a parent, so an unrelated edit to it doesn't
+        # force a migration to the parent model.
+        child = models.Child.objects.create(
+            first_name="Alex", birth_date=timezone.localdate()
+        )
+        legacy = self.make(child=child)
+        legacy.save()  # bypasses clean(), as a pre-parent-model row would
+        legacy.full_clean()
+
+    def test_stash_amount_bounds(self):
+        self.make(parent=self.robin, stash_amount=120.0).full_clean()
+        self.make(parent=self.robin, stash_amount=60.0).full_clean()
+        for bad in (0.0, -5.0, 120.5):
+            with self.assertRaises(ValidationError):
+                self.make(parent=self.robin, stash_amount=bad).full_clean()
+
+    def test_parent_sessions_may_not_overlap(self):
+        self.make(parent=self.robin).save()
+        clash = self.make(
+            parent=self.robin,
+            start=self.start + timezone.timedelta(minutes=5),
+            end=self.end + timezone.timedelta(minutes=5),
+        )
+        with self.assertRaises(ValidationError):
+            clash.full_clean()
+
+    def test_legacy_rows_only_overlap_within_their_child(self):
+        alex, sam = (
+            models.Child.objects.create(
+                first_name=name, birth_date=timezone.localdate()
+            )
+            for name in ("Alex", "Sam")
+        )
+        self.make(child=alex).save()
+        legacy = self.make(child=sam)
+        legacy.save()
+        legacy.full_clean()
+        clash = self.make(child=sam)
+        clash.save()
+        with self.assertRaises(ValidationError):
+            clash.full_clean()
+
+    def test_delete_parent_with_pumping_is_protected(self):
+        self.make(parent=self.robin).save()
+        with self.assertRaises(ProtectedError):
+            self.robin.delete()
+
+
+class FeedingStashTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+        self.child = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+        self.t = timezone.localtime() - timezone.timedelta(hours=1)
+
+    def feeding(self, **kwargs):
+        data = dict(
+            child=self.child,
+            start=self.t,
+            end=self.t,
+            type="breast milk",
+            method="bottle",
+            amount=60.0,
+        )
+        data.update(kwargs)
+        return models.Feeding(**data)
+
+    def test_breast_milk_bottle_may_use_stash(self):
+        self.feeding(stash_amount=60.0).full_clean()
+        self.feeding(type="fortified breast milk", stash_amount=40.0).full_clean()
+
+    def test_stash_amount_rejected_for_formula(self):
+        with self.assertRaises(ValidationError):
+            self.feeding(type="formula", stash_amount=60.0).full_clean()
+
+    def test_stash_amount_rejected_for_breastfeeding(self):
+        with self.assertRaises(ValidationError):
+            self.feeding(method="both breasts", stash_amount=60.0).full_clean()
+
+    def test_stash_amount_bounds(self):
+        for bad in (0.0, 61.0):
+            with self.assertRaises(ValidationError):
+                self.feeding(stash_amount=bad).full_clean()
+
+    def test_linked_discard_roundtrip(self):
+        f = self.feeding(stash_amount=60.0)
+        f.save()
+        f.set_linked_discard(15.0, "Spilled")
+        self.assertEqual(f.linked_discard().amount, 15.0)
+        adj = f.stash_adjustments.get()
+        self.assertEqual(
+            (adj.time, adj.signed_amount, adj.reason),
+            (f.start, -15.0, "Spilled"),
+        )
+        f.set_linked_discard(20.0, "Left over")
+        updated = f.stash_adjustments.get()
+        self.assertEqual(updated.amount, 20.0)  # updated, not duplicated
+        self.assertEqual(updated.reason, "Left over")
+        f.set_linked_discard(None)
+        self.assertFalse(f.stash_adjustments.exists())
+
+    def test_feeding_delete_cascades_adjustments(self):
+        f = self.feeding(stash_amount=60.0)
+        f.save()
+        f.set_linked_discard(10.0, "Left over")
+        f.delete()
+        self.assertFalse(models.StashAdjustment.objects.exists())
+
+    def test_linked_discard_falls_back_to_single_parent(self):
+        # self.child has no linked parent, so parent_for_child() can't
+        # resolve one; with exactly one Parent in the system, the discard
+        # still goes to them, same as a manual entry would.
+        robin = models.Parent.objects.create(first_name="Robin")
+        f = self.feeding(stash_amount=60.0)
+        f.save()
+        f.set_linked_discard(15.0, "Spilled")
+        self.assertEqual(f.linked_discard().parent, robin)
+
+
+class StashAdjustmentKindsTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+        self.child = models.Child.objects.create(
+            first_name="Alex", birth_date=timezone.localdate()
+        )
+        self.t = timezone.localtime() - timezone.timedelta(hours=1)
+
+    def test_signed_amounts_and_str(self):
+        added = models.StashAdjustment.objects.create(
+            time=self.t, amount=250, kind="added"
+        )
+        gone = models.StashAdjustment.objects.create(
+            time=self.t, amount=20, kind="discarded", reason="Spilled"
+        )
+        plain = models.StashAdjustment.objects.create(
+            time=self.t, amount=20, kind="discarded"
+        )
+        self.assertEqual((added.signed_amount, gone.signed_amount), (250, -20))
+        self.assertEqual(str(gone), "Discarded: 20.0 (Spilled)")
+        self.assertEqual(str(plain), "Discarded: 20.0")
+        self.assertEqual(str(added), "Added: 250.0")
+
+    def test_amount_must_be_positive(self):
+        a = models.StashAdjustment(time=self.t, amount=-10, kind="discarded")
+        with self.assertRaises(ValidationError):
+            a.full_clean()
+
+    def test_reason_free_text_both_kinds(self):
+        models.StashAdjustment(
+            time=self.t, amount=10, kind="added", reason="Donor milk"
+        ).full_clean()
+        models.StashAdjustment(
+            time=self.t, amount=10, kind="discarded", reason="Spilled"
+        ).full_clean()
+        models.StashAdjustment(
+            time=self.t, amount=10, kind="discarded"
+        ).full_clean()  # reason optional
+        with self.assertRaises(ValidationError) as error:
+            models.StashAdjustment(
+                time=self.t, amount=10, kind="discarded", reason="x" * 256
+            ).full_clean()
+        self.assertIn("reason", error.exception.message_dict)
+
+    def make_feeding(self, **kwargs):
+        data = dict(
+            child=self.child,
+            start=self.t,
+            end=self.t,
+            type="breast milk",
+            method="bottle",
+            amount=60.0,
+        )
+        data.update(kwargs)
+        feeding = models.Feeding(**data)
+        feeding.save()
+        return feeding
+
+    def test_linked_feeding_without_stash_amount_is_invalid(self):
+        feeding = self.make_feeding(stash_amount=None)
+        a = models.StashAdjustment(
+            time=feeding.start, amount=10, kind="discarded", feeding=feeding
+        )
+        with self.assertRaises(ValidationError):
+            a.full_clean()
+
+    def test_one_discard_per_feeding(self):
+        f = self.make_feeding(stash_amount=60)
+        f.set_linked_discard(15, "Left over")
+        self.assertEqual(
+            (f.linked_discard().amount, f.linked_discard().reason),
+            (15, "Left over"),
+        )
+        f.set_linked_discard(20, "Spilled")
+        self.assertEqual(f.stash_adjustments.count(), 1)
+        dup = models.StashAdjustment(time=self.t, amount=5, kind="discarded", feeding=f)
+        with self.assertRaises(ValidationError):
+            dup.full_clean()
+        f.set_linked_discard(None)
+        self.assertFalse(f.stash_adjustments.exists())
+
+    def test_added_cannot_link_a_feeding(self):
+        f = self.make_feeding(stash_amount=60)
+        with self.assertRaises(ValidationError):
+            models.StashAdjustment(
+                time=self.t, amount=5, kind="added", feeding=f
+            ).full_clean()
+
+    def test_updating_existing_linked_adjustment_is_valid(self):
+        feeding = self.make_feeding(stash_amount=60.0)
+        adjustment = models.StashAdjustment.objects.create(
+            time=feeding.start, amount=10, kind="discarded", feeding=feeding
+        )
+        adjustment.amount = 20
+        adjustment.full_clean()  # excludes itself from the duplicate check
+
+
+class StashSettingsTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+
+    def test_defaults(self):
+        s = models.Pumping.stash_settings
+        self.assertTrue(s.pumping_to_stash_default)
+        self.assertTrue(s.bottle_from_stash_default)
+        self.assertEqual((s.stash_warn_age_hours, s.stash_max_age_hours), (48, 72))

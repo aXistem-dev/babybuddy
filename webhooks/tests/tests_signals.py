@@ -60,6 +60,23 @@ class WebhookSignalTestCase(TestCase):
         self.assertEqual(event.type, "feeding.deleted")
         self.assertEqual(event.object_id, primary_key)
 
+    def test_a_parent_create_is_announced(self):
+        models.Parent.objects.create(first_name="Robin")
+        event = WebhookEvent.objects.latest("id")
+        self.assertEqual(event.type, "parent.created")
+        self.assertEqual(event.object_id, str(models.Parent.objects.latest("id").pk))
+
+    def test_a_stash_adjustment_create_is_announced(self):
+        parent = models.Parent.objects.create(first_name="Robin")
+        models.StashAdjustment.objects.create(
+            amount=50.0, kind=models.StashAdjustment.ADDED, parent=parent
+        )
+        event = WebhookEvent.objects.latest("id")
+        self.assertEqual(event.type, "stashadjustment.created")
+        self.assertEqual(
+            event.object_id, str(models.StashAdjustment.objects.latest("id").pk)
+        )
+
     def test_every_record_model_is_watched(self):
         # A new kind of record is a new kind of change to announce. This fails
         # until it is added on purpose, rather than quietly announcing nothing

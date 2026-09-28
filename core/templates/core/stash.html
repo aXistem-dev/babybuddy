@@ -1,0 +1,119 @@
+{% extends "babybuddy/page.html" %}
+{% load i18n %}
+{% block title %}
+    {% trans "Milk stash" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Milk stash" %}</li>
+{% endblock %}
+{% block content %}
+    <h1>
+        {% trans "Milk stash" %}
+        {% if perms.core.add_stashadjustment %}
+            <a href="{% url 'core:stashadjustment-add' %}?kind=added"
+               class="btn btn-sm btn-success">{% trans "Add to stash" %}</a>
+            <a href="{% url 'core:stashadjustment-add' %}?kind=discarded"
+               class="btn btn-sm btn-outline-danger">{% trans "Discard from stash" %}</a>
+        {% endif %}
+    </h1>
+    <div class="display-6 mb-2 {% if summary.balance < 0 %}text-danger{% endif %}">{{ summary.balance }}</div>
+    {% if summary.balance < 0 and request.user.settings.stash_negative_warning %}
+        <div class="alert alert-warning d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                {% blocktrans trimmed %}
+                    More milk left the stash than was ever logged going in. This is usually a
+                    bottle that was given without being logged as taken from the stash. Fix it
+                    with an "Added" entry dated before the first bottle.
+                {% endblocktrans %}
+            </div>
+            <form method="post" action="{% url "core:stash-warning-dismiss" %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-secondary">{% trans "Dismiss" %}</button>
+            </form>
+        </div>
+    {% endif %}
+    {% if summary.lots %}
+        <h2 class="h5">{% trans "In the stash (oldest first)" %}</h2>
+        {% if expired_amount and perms.core.add_stashadjustment %}
+            <a href="{% url 'core:stashadjustment-add' %}?kind=discarded&amount={{ expired_amount|stringformat:".10g" }}&reason={{ throw_away_reason|urlencode }}"
+               class="btn btn-sm btn-outline-danger mb-2">{% trans "Throw away all expired milk" %}</a>
+        {% endif %}
+        <table class="table table-borderless align-middle">
+            <tbody>
+                {% for lot in summary.lots %}
+                    <tr>
+                        <td>{{ lot.time|date:"SHORT_DATETIME_FORMAT" }}</td>
+                        <td>{{ lot.amount }}</td>
+                        <td>{{ lot.age_hours }} h</td>
+                        <td>
+                            {% if lot.status == "expired" %}
+                                <span class="badge bg-danger">{% trans "throw away" %}</span>
+                                {% if lot.is_oldest_expired and perms.core.add_stashadjustment %}
+                                    <a href="{% url 'core:stashadjustment-add' %}?kind=discarded&amount={{ lot.throw_away_amount|stringformat:".10g" }}&reason={{ throw_away_reason|urlencode }}"
+                                       class="btn btn-sm btn-outline-danger">{% trans "Throw away" %}</a>
+                                {% endif %}
+                            {% elif lot.status == "warn" %}
+                                <span class="badge bg-warning text-dark">{% trans "use first" %}</span>
+                            {% else %}
+                                <span class="badge bg-success">{% trans "fresh" %}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+    <h2 class="h5">{% trans "Latest movements" %}</h2>
+    <form method="get" class="row row-cols-auto g-2 align-items-center mb-2">
+        <div class="col">
+            <label for="stash-child-filter" class="col-form-label">{% trans "Baby" %}</label>
+        </div>
+        <div class="col">
+            <select id="stash-child-filter"
+                    name="child"
+                    class="form-select form-select-sm"
+                    onchange="this.form.submit()">
+                <option value="">{% trans "All babies" %}</option>
+                {% for c in children %}
+                    <option value="{{ c.slug }}" {% if selected_child == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">{% trans "Filter" %}</button>
+        </div>
+    </form>
+    <table class="table table-borderless table-striped align-middle">
+        <tbody>
+            {% for e in events %}
+                <tr>
+                    <td>{{ e.time|date:"SHORT_DATETIME_FORMAT" }}</td>
+                    <td class="{% if e.amount < 0 %}text-danger{% else %}text-success{% endif %}">{{ e.amount }}</td>
+                    <td>
+                        {% if e.kind == "pumping" %}
+                            {% if perms.core.change_pumping %}
+                                <a href="{% url 'core:pumping-update' e.obj.id %}">{% trans "Pumping" %} · {{ e.obj.parent|default_if_none:"–" }}</a>
+                            {% else %}
+                                {% trans "Pumping" %} · {{ e.obj.parent|default_if_none:"–" }}
+                            {% endif %}
+                        {% elif e.kind == "feeding" %}
+                            {% if perms.core.change_feeding %}
+                                <a href="{% url 'core:feeding-update' e.obj.id %}">{% trans "Bottle" %} · {{ e.obj.child }}</a>
+                            {% else %}
+                                {% trans "Bottle" %} · {{ e.obj.child }}
+                            {% endif %}
+                        {% elif perms.core.change_stashadjustment %}
+                            <a href="{% url 'core:stashadjustment-update' e.obj.id %}">{{ e.obj.get_kind_display }}{% if e.obj.reason %} ({{ e.obj.reason }}){% endif %}</a>
+                        {% else %}
+                            {{ e.obj.get_kind_display }}{% if e.obj.reason %} ({{ e.obj.reason }}){% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td>{% trans "No stash movements yet." %}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}

@@ -59,6 +59,8 @@ class ChildAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
 
 
 class PumpingImportExportResource(ImportExportResourceBase):
+    parent = fields.Field(attribute="parent_id", column_name="parent_id")
+
     class Meta:
         model = models.Pumping
 
@@ -71,6 +73,7 @@ class PumpingAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
         "duration",
         "child",
         "amount",
+        "stash_amount",
     )
     list_filter = ("child",)
     search_fields = (
@@ -79,6 +82,48 @@ class PumpingAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
         "amount",
     )
     resource_class = PumpingImportExportResource
+
+
+class ParentImportExportResource(resources.ModelResource):
+    class Meta:
+        model = models.Parent
+        exclude = ("picture", "slug")
+
+
+@admin.register(models.Parent)
+class ParentAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
+    list_display = ("first_name", "last_name", "slug")
+    search_fields = ("first_name", "last_name")
+    resource_class = ParentImportExportResource
+
+
+class StashAdjustmentImportExportResource(resources.ModelResource):
+    # Not based on ImportExportResourceBase, which assumes a child: a stash
+    # adjustment belongs to a parent and, optionally, a feeding instead.
+    id = fields.Field(attribute="id")
+    parent = fields.Field(attribute="parent_id", column_name="parent_id")
+    feeding = fields.Field(attribute="feeding_id", column_name="feeding_id")
+
+    class Meta:
+        model = models.StashAdjustment
+        clean_model_instances = True
+        export_order = (
+            "id",
+            "time",
+            "amount",
+            "kind",
+            "reason",
+            "parent",
+            "feeding",
+        )
+
+
+@admin.register(models.StashAdjustment)
+class StashAdjustmentAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
+    list_display = ("time", "kind", "reason", "amount", "parent", "feeding")
+    list_filter = ("kind", "parent", "tags")
+    search_fields = ("kind", "reason", "notes")
+    resource_class = StashAdjustmentImportExportResource
 
 
 class DiaperChangeImportExportResource(ImportExportResourceBase):
@@ -111,12 +156,15 @@ class FeedingAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
         "child",
         "type",
         "method",
+        "parent",
         "amount",
+        "stash_amount",
     )
     list_filter = (
         "child",
         "type",
         "method",
+        "parent",
         "tags",
     )
     search_fields = (

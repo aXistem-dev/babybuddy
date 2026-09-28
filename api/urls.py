@@ -55,8 +55,10 @@ router.register(r"head-circumference", views.HeadCircumferenceViewSet)
 router.register(r"height", views.HeightViewSet)
 router.register(r"medication", views.MedicationViewSet, basename="medication")
 router.register(r"notes", views.NoteViewSet)
+router.register(r"parents", views.ParentViewSet)
 router.register(r"pumping", views.PumpingViewSet)
 router.register(r"sleep", views.SleepViewSet)
+router.register(r"stash-adjustments", views.StashAdjustmentViewSet)
 router.register(r"tags", views.TagViewSet)
 router.register(r"temperature", views.TemperatureViewSet)
 router.register(r"timers", views.TimerViewSet)
@@ -65,6 +67,7 @@ router.register(r"webhook-endpoints", views.WebhookEndpointViewSet)
 router.register(r"weight", views.WeightViewSet)
 
 router.add_detail_path("profile", "profile", views.ProfileView.as_view())
+router.add_detail_path("stash", "stash", views.StashView.as_view())
 router.add_detail_path(
     "schema",
     "openapi-schema",

@@ -129,6 +129,14 @@ class Settings(models.Model):
         default=25,
         verbose_name=_("Items Per Page"),
     )
+    stash_negative_warning = models.BooleanField(
+        default=True,
+        verbose_name=_("Show the negative milk stash warning"),
+        help_text=_(
+            "Shown on the milk stash page while more milk has left the stash "
+            "than was logged going in."
+        ),
+    )
     access_expires = models.DateTimeField(
         blank=True,
         null=True,

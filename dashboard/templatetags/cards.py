@@ -9,7 +9,7 @@ from django.utils.translation import gettext as _
 
 import collections
 
-from core import models
+from core import models, stash
 from core.templatetags.misc import feeding_time_diff_base
 
 register = template.Library()
@@ -143,7 +143,7 @@ def card_breastfeeding(context, child, date=None):
         models.Feeding.objects.filter(child=child)
         .filter(start__gt=min_date)
         .filter(start__lt=max_date)
-        .filter(method__in=("left breast", "right breast", "both breasts"))
+        .filter(method__in=models.Feeding.BREAST_METHODS)
         .order_by("-start")
     )
 
@@ -289,14 +289,14 @@ def card_feeding_last_method(context, child):
 
 
 @register.inclusion_tag("cards/pumping_last.html", takes_context=True)
-def card_pumping_last(context, child):
+def card_pumping_last(context, parent):
     """
     Information about the most recent pumping.
-    :param child: an instance of the Child model.
+    :param parent: an instance of the Parent model.
     :returns: a dictionary with the most recent Pumping instance.
     """
     instance = (
-        models.Pumping.objects.filter(child=child)
+        models.Pumping.objects.filter(parent=parent)
         .filter(**_filter_data_age(context))
         .order_by("-end")
         .first()
@@ -312,10 +312,10 @@ def card_pumping_last(context, child):
 
 
 @register.inclusion_tag("cards/pumping_recent.html", takes_context=True)
-def card_pumping_recent(context, child, end_date=None):
+def card_pumping_recent(context, parent, end_date=None):
     """
     Filters Pumping instances to get total amount for a specific date and for 7 days before.
-    :param child: an instance of the Child model.
+    :param parent: an instance of the Parent model.
     :param end_date: a Date object for the day to filter.
     :returns: a dict with count and total amount for the Pumping instances.
     """
@@ -325,7 +325,7 @@ def card_pumping_recent(context, child, end_date=None):
     end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=9999)
     start_date = end_date - timezone.timedelta(days=8)
 
-    instances = models.Pumping.objects.filter(child=child).filter(
+    instances = models.Pumping.objects.filter(parent=parent).filter(
         start__range=[start_date, end_date]
     )
 
@@ -345,6 +345,52 @@ def card_pumping_recent(context, child, end_date=None):
         "pumpings": results,
         "type": "pumping",
         "empty": len(instances) == 0,
+        "hide_empty": _hide_empty(context),
+    }
+
+
+@register.inclusion_tag("cards/stash.html", takes_context=True)
+def card_stash(context):
+    """
+    The shared milk stash: balance, oldest milk and its age status.
+    :returns: a dictionary with the stash summary and, for the "Throw away"
+              link, the expired amount and whether the user can add a stash
+              adjustment.
+    """
+    summary = stash.stash_summary()
+    return {
+        # "pumping" reuses that card's colour and icon; fontello has no
+        # "stash" icon.
+        "type": "pumping",
+        "summary": summary,
+        "expired_amount": stash.expired_amount(summary),
+        "throw_away_reason": stash.throw_away_reason(summary),
+        "can_add": context["request"].user.has_perm("core.add_stashadjustment"),
+        "empty": not stash.stash_has_activity(),
+        "hide_empty": _hide_empty(context),
+    }
+
+
+@register.inclusion_tag("cards/stash_use.html", takes_context=True)
+def card_stash_use(context, child):
+    """
+    Milk taken from the stash for one baby, today and over the last 7 days.
+    :param child: an instance of the Child model.
+    :returns: a dictionary with today's and the last 7 days' totals.
+    """
+    today_start = timezone.localtime().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    week_start = today_start - timezone.timedelta(days=7)
+
+    today = stash.stash_use_by_child(start=today_start).get(child.id, 0.0)
+    week = stash.stash_use_by_child(start=week_start).get(child.id, 0.0)
+
+    return {
+        "type": "pumping",
+        "today": today,
+        "week": week,
+        "empty": not week,
         "hide_empty": _hide_empty(context),
     }
 

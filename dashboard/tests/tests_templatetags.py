@@ -199,7 +199,9 @@ class TemplateTagsTestCase(TestCase):
         )
 
     def test_card_pumping_last(self):
-        data = cards.card_pumping_last(self.context, self.child)
+        parent = models.Parent.objects.create(first_name="Alex")
+        models.Pumping.objects.update(parent=parent)
+        data = cards.card_pumping_last(self.context, parent)
         self.assertEqual(data["type"], "pumping")
         self.assertFalse(data["empty"])
         self.assertFalse(data["hide_empty"])
@@ -207,7 +209,9 @@ class TemplateTagsTestCase(TestCase):
         self.assertEqual(data["pumping"], models.Pumping.objects.first())
 
     def test_card_pumping_recent(self):
-        data = cards.card_pumping_recent(self.context, self.child, self.date)
+        parent = models.Parent.objects.create(first_name="Alex")
+        models.Pumping.objects.update(parent=parent)
+        data = cards.card_pumping_recent(self.context, parent, self.date)
         self.assertEqual(data["type"], "pumping")
         self.assertFalse(data["empty"])
         self.assertFalse(data["hide_empty"])
@@ -225,8 +229,9 @@ class TemplateTagsTestCase(TestCase):
         self.assertEqual(data["pumpings"][0]["count"], 0)
 
     def test_card_pumping_recent_empty(self):
+        parent = models.Parent.objects.create(first_name="Alex")
         models.Pumping.objects.all().delete()
-        data = cards.card_pumping_recent(self.context, self.child, self.date)
+        data = cards.card_pumping_recent(self.context, parent, self.date)
         self.assertEqual(data["type"], "pumping")
         self.assertTrue(data["empty"])
         self.assertFalse(data["hide_empty"])
@@ -426,6 +431,68 @@ class TemplateTagsTestCase(TestCase):
         self.assertFalse(data["hide_empty"])
         self.assertIsInstance(data["tummytime"], models.TummyTime)
         self.assertEqual(data["tummytime"], models.TummyTime.objects.first())
+
+    def test_card_stash(self):
+        data = cards.card_stash(self.context)
+        self.assertTrue(data["empty"])
+        models.StashAdjustment.objects.create(
+            time=timezone.now() - timezone.timedelta(hours=50),
+            amount=100,
+            kind="added",
+        )
+        data = cards.card_stash(self.context)
+        self.assertFalse(data["empty"])
+        self.assertEqual(
+            (data["summary"]["balance"], data["summary"]["status"]), (100, "warn")
+        )
+        self.assertEqual(data["expired_amount"], 0)
+
+    def test_card_stash_throw_away(self):
+        user = get_user_model().objects.create_user(username="stash-viewer")
+        viewer = {"request": MockUserRequest(user)}
+        for hours, amount in ((100, 60), (90, 25), (1, 40)):
+            models.StashAdjustment.objects.create(
+                time=timezone.now() - timezone.timedelta(hours=hours),
+                amount=amount,
+                kind="added",
+            )
+        data = cards.card_stash(self.context)
+        self.assertEqual(data["summary"]["status"], "expired")
+        self.assertEqual(data["expired_amount"], 85)
+        self.assertEqual(data["throw_away_reason"], "Older than 72 h")
+        self.assertTrue(data["can_add"])
+        self.assertFalse(cards.card_stash(viewer)["can_add"])
+
+    def test_card_stash_use(self):
+        data = cards.card_stash_use(self.context, self.child)
+        self.assertEqual(data["type"], "pumping")
+        self.assertTrue(data["empty"])
+        self.assertEqual(data["today"], 0)
+        self.assertEqual(data["week"], 0)
+
+        models.Feeding.objects.create(
+            child=self.child,
+            start=timezone.localtime(),
+            end=timezone.localtime(),
+            type="breast milk",
+            method="bottle",
+            amount=50,
+            stash_amount=50,
+        )
+        models.Feeding.objects.create(
+            child=self.child,
+            start=timezone.localtime() - timezone.timedelta(days=3),
+            end=timezone.localtime() - timezone.timedelta(days=3),
+            type="breast milk",
+            method="bottle",
+            amount=20,
+            stash_amount=20,
+        )
+
+        data = cards.card_stash_use(self.context, self.child)
+        self.assertFalse(data["empty"])
+        self.assertEqual(data["today"], 50)
+        self.assertEqual(data["week"], 70)
 
     def test_card_tummytime_day(self):
         data = cards.card_tummytime_day(self.context, self.child, self.date)
