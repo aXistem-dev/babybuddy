@@ -3441,6 +3441,10 @@ msgstr "Recentste bewegingen"
 msgid "All stash adjustments"
 msgstr "Alle voorraadaanpassingen"
 
+#: babybuddy/templates/babybuddy/nav-dropdown.html:126
+msgid "Family"
+msgstr "Gezin"
+
 #: core/models.py:520
 msgid "Formula and solid food can't be given from the breast."
 msgstr "Kunstvoeding en vast voedsel kunnen niet via de borst gegeven worden."

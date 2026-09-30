@@ -12,7 +12,7 @@ are separate from Children: they don't have a birth date, growth charts or
 percentiles, but they do get their own page with pumping stats, breastfeeding
 stats and stash activity.
 
-To add a parent, go to **Children > Parents** and enter a first and (optional)
+To add a parent, go to **Family > Parents** and enter a first and (optional)
 last name. Link the parent to one or more children on the same form (or later,
 on the parent's edit page). A parent's page shows their linked children, a
 breastfeeding summary, recent pumping, the milk stash summary, and buttons to

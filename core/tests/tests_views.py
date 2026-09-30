@@ -868,6 +868,10 @@ class StashPagesTestCase(TestCase):
         self.assertEqual(content.count('href="/stash/"'), 1)
         self.assertIn('href="/stash/adjustments/"', content)
         self.assertIn('href="/stash/adjustments/add/"', content)
+        # Children, parents and notes sit together under "Family".
+        self.assertRegex(
+            content, r'id="nav-children-menu-link"[^>]*>\s*<i[^>]*></i>\s*Family'
+        )
 
     def test_dismiss_requires_post(self):
         self._login("viewer", ["view_pumping"])
