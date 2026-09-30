@@ -468,7 +468,43 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
         self.assertEqual(page.status_code, 200)
         event_type.refresh_from_db()
         self.assertEqual(event_type.name, "Pajama change")
-        self.assertEqual(event_type.slug, "pajama-change")
+        # The slug is fixed when the type is created.
+        self.assertEqual(event_type.slug, "pajama")
+
+    def test_edit_keeps_the_slug_for_new_events(self):
+        event_type = models.EventType.objects.create(name="Bath")
+        page = self.c.post(
+            "/event-types/{}/".format(event_type.slug),
+            {"name": "Bath time"},
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.slug, "bath")
+
+        page = self.c.get("/events/add/", {"type": "bath"})
+        self.assertEqual(page.context["form"].initial["type"], event_type)
+        page = self.c.post(
+            "/events/add/",
+            {
+                "child": self.child.id,
+                "type": event_type.id,
+                "time": self.localtime_string(),
+            },
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(models.Event.objects.get().type, event_type)
+
+    def test_add_rejects_a_long_name(self):
+        page = self.c.post("/event-types/add/", {"name": "x" * 101})
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("name", page.context["form"].errors)
+        self.assertFalse(models.EventType.objects.exists())
+
+        page = self.c.post("/event-types/add/", {"name": "x" * 100}, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(models.EventType.objects.get().slug, "x" * 100)
 
     def test_delete(self):
         event_type = models.EventType.objects.create(name="Nail trim")

@@ -214,11 +214,37 @@ class EventTypeTestCase(TestCase):
         self.assertEqual(str(event_type), "Pajama change")
         self.assertEqual(event_type.slug, "pajama-change")
 
-    def test_event_type_slug_follows_name(self):
+    def test_event_type_slug_is_kept_on_rename(self):
         event_type = models.EventType.objects.create(name="Nail trim")
         event_type.name = "Nail trim (hands)"
+        event_type.full_clean()
         event_type.save()
-        self.assertEqual(event_type.slug, "nail-trim-hands")
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.name, "Nail trim (hands)")
+        self.assertEqual(event_type.slug, "nail-trim")
+
+    def test_event_type_slug_is_kept_on_rename_to_a_taken_slug(self):
+        models.EventType.objects.create(name="Bath")
+        event_type = models.EventType.objects.create(name="Shower")
+        # "Bath!" would slugify to the slug of "Bath", but the slug does not
+        # change on a rename, so there is no conflict.
+        event_type.name = "Bath!"
+        event_type.full_clean()
+        event_type.save()
+        self.assertEqual(event_type.slug, "shower")
+
+    def test_event_type_name_max_length(self):
+        event_type = models.EventType(name="x" * 101)
+        with self.assertRaises(ValidationError) as context:
+            event_type.full_clean()
+        self.assertIn("name", context.exception.message_dict)
+
+    def test_event_type_slug_fits_its_field(self):
+        # NFKC normalization can make a slug longer than the name.
+        event_type = models.EventType(name="\ufb00" * 100)
+        event_type.full_clean()
+        event_type.save()
+        self.assertEqual(event_type.slug, "ff" * 50)
 
     def test_event_type_ordering(self):
         models.EventType.objects.create(name="Nail trim")
@@ -242,7 +268,12 @@ class EventTypeTestCase(TestCase):
     def test_event_type_clean_accepts_its_own_slug(self):
         event_type = models.EventType.objects.create(name="Bath")
         event_type.name = "BATH"
-        event_type.clean()
+        try:
+            event_type.full_clean()
+        except ValidationError as error:
+            self.fail("clean() rejected an unchanged slug: {}".format(error))
+        event_type.save()
+        self.assertEqual(event_type.slug, "bath")
 
 
 class FeedingTestCase(TestCase):

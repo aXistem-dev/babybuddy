@@ -462,11 +462,48 @@ class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertIn("name", response.data)
 
+    def test_post_long_name(self):
+        response = self.client.post(self.endpoint, {"name": "x" * 101}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("name", response.data)
+        response = self.client.post(self.endpoint, {"name": "x" * 100}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["slug"], "x" * 100)
+
     def test_patch(self):
         endpoint = "{}nail-trim/".format(self.endpoint)
         response = self.client.patch(endpoint, {"name": "Nail trim (hands)"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["slug"], "nail-trim-hands")
+        self.assertEqual(response.data["name"], "Nail trim (hands)")
+        self.assertEqual(response.data["slug"], "nail-trim")
+
+    def test_patch_keeps_the_slug_for_new_events(self):
+        response = self.client.patch(
+            "{}bath/".format(self.endpoint), {"name": "Bath time"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["slug"], "bath")
+
+        response = self.client.get("{}bath/".format(self.endpoint))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Bath time")
+
+        response = self.client.post(
+            reverse("api:event-list"), {"child": 1, "type": "bath"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["type"], "bath")
+        event = models.Event.objects.get(pk=response.data["id"])
+        self.assertEqual(event.type.name, "Bath time")
+
+    def test_patch_name_with_a_taken_slug(self):
+        # The slug does not change, so a name that would slugify to another
+        # type's slug is fine on a rename.
+        response = self.client.patch(
+            "{}nail-trim/".format(self.endpoint), {"name": "bath!"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["slug"], "nail-trim")
 
     def test_delete(self):
         endpoint = "{}{}/".format(self.endpoint, "nail-trim")

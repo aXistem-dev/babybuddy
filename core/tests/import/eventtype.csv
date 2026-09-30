@@ -1,4 +1,4 @@
-id,name
-1,Bath
-2,Nail trim
-3,Pajama change
+id,name,slug
+1,Bath time,bath
+2,Nail trim,nail-trim
+3,Pajama change,

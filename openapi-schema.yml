@@ -6901,7 +6901,7 @@ components:
           readOnly: true
         name:
           type: string
-          maxLength: 255
+          maxLength: 100
         slug:
           type: string
           readOnly: true

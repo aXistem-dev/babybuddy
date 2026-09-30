@@ -125,7 +125,6 @@ class EventTypeImportExportResource(resources.ModelResource):
 
     class Meta:
         model = models.EventType
-        exclude = ("slug",)
 
 
 @admin.register(models.EventType)

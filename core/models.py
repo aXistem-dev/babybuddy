@@ -360,7 +360,7 @@ class Event(models.Model):
 
 class EventType(models.Model):
     model_name = "eventtype"
-    name = models.CharField(max_length=255, unique=True, verbose_name=_("Name"))
+    name = models.CharField(max_length=100, unique=True, verbose_name=_("Name"))
     slug = models.SlugField(
         allow_unicode=True,
         blank=False,
@@ -382,13 +382,18 @@ class EventType(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.name, allow_unicode=True)
+        # The slug is how integrations refer to a type, so it is generated
+        # once and kept when the type is renamed.
+        if not self.slug:
+            self.slug = self.slug_from_name()
         super(EventType, self).save(*args, **kwargs)
 
     def clean(self):
+        if self.slug:
+            return
         # The slug is derived from the name, so two different names can still
         # end up with the same slug (e.g. "Bath" and "bath!").
-        slug = slugify(self.name or "", allow_unicode=True)
+        slug = self.slug_from_name()
         if not slug:
             raise ValidationError(
                 {"name": _("Name must contain at least one letter or number.")},
@@ -400,6 +405,11 @@ class EventType(models.Model):
                 {"name": _("An event type with a similar name already exists.")},
                 code="slug_conflict",
             )
+
+    def slug_from_name(self):
+        max_length = self._meta.get_field("slug").max_length
+        slug = slugify(self.name or "", allow_unicode=True)
+        return slug[:max_length].strip("-_")
 
 
 class Feeding(models.Model):

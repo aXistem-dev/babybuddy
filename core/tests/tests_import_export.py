@@ -68,9 +68,25 @@ class ImportTestCase(TestCase):
 
     def test_eventtype(self):
         self.import_data(models.EventType, 3)
+        # A slug in the file is kept, even when it no longer matches the name;
+        # a missing one is generated from the name.
         self.assertEqual(
-            list(models.EventType.objects.values_list("slug", flat=True)),
-            ["bath", "nail-trim", "pajama-change"],
+            list(models.EventType.objects.values_list("name", "slug")),
+            [
+                ("Bath time", "bath"),
+                ("Nail trim", "nail-trim"),
+                ("Pajama change", "pajama-change"),
+            ],
+        )
+
+    def test_eventtype_export_includes_the_slug(self):
+        event_type = models.EventType.objects.create(name="Bath")
+        event_type.name = "Bath time"
+        event_type.save()
+        dataset = admin.EventTypeImportExportResource().export()
+        self.assertEqual(
+            dataset.dict,
+            [{"id": str(event_type.pk), "name": "Bath time", "slug": "bath"}],
         )
 
     def test_feeding(self):
