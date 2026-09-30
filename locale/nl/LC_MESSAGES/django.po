@@ -3441,6 +3441,10 @@ msgstr "Recentste bewegingen"
 msgid "All stash adjustments"
 msgstr "Alle voorraadaanpassingen"
 
+#: core/models.py:520
+msgid "Formula and solid food can't be given from the breast."
+msgstr "Kunstvoeding en vast voedsel kunnen niet via de borst gegeven worden."
+
 #: api/serializers.py:560
 msgid "Must be less than the throw-away age."
 msgstr "Moet kleiner zijn dan de leeftijd om weg te gooien."
