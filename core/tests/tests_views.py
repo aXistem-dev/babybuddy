@@ -106,14 +106,18 @@ class ViewsTestCase(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertEqual([e.type for e in page.context["object_list"]], [bath])
 
-        date = time.date().isoformat()
-        page = self.c.get(
-            "/events/", {"date_min": date, "date_max": date, "filtered": 1}
-        )
+        bath_event = models.Event.objects.filter(type=bath).get()
+        bath_event.tags.add("filter-tag")
+        tag = models.Tag.objects.get(name="filter-tag")
+        page = self.c.get("/events/", {"tag": tag.pk, "filtered": 1})
         self.assertEqual(page.status_code, 200)
-        types = {e.type for e in page.context["object_list"]}
-        self.assertIn(bath, types)
-        self.assertNotIn(nail_trim, types)
+        self.assertEqual(list(page.context["object_list"]), [bath_event])
+
+        # The web list filters on child, type and tags only; dates are an API
+        # filter.
+        self.assertEqual(
+            sorted(page.context["filter"].form.fields), ["child", "tag", "type"]
+        )
 
     def test_eventtype_views(self):
         page = self.c.get("/event-types/")
