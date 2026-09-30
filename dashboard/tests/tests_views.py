@@ -124,7 +124,12 @@ class DashboardCardPermissionsTestCase(TestCase):
         content = page.content.decode()
 
         self.assertNotIn("Dashboard Test Medication", content)
-        for heading in ["Last Medication", "Last Pumping", "Today's Tummy Time"]:
+        for heading in [
+            "Last Medication",
+            "Last Pumping",
+            "Today's Tummy Time",
+            "Last Events",
+        ]:
             self.assertNotIn(heading, content)
 
         # The permitted cards are still there.
@@ -150,3 +155,4 @@ class DashboardCardPermissionsTestCase(TestCase):
         content = page.content.decode()
         self.assertIn("Dashboard Test Medication", content)
         self.assertIn("Last Feeding", content)
+        self.assertIn("Last Events", content)

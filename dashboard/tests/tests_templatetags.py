@@ -86,6 +86,54 @@ class TemplateTagsTestCase(TestCase):
         data = cards.card_diaperchange_last(context, self.child)
         self.assertTrue(data["empty"])
 
+    def test_card_event_last(self):
+        data = cards.card_event_last(self.context, self.child)
+        self.assertEqual(data["type"], "event")
+        self.assertFalse(data["empty"])
+        self.assertFalse(data["hide_empty"])
+        self.assertEqual(data["event"], models.Event.objects.get(pk=1))
+        self.assertEqual(
+            [(item["type"].slug, item["last"]) for item in data["event_types"]],
+            [
+                ("bath", models.Event.objects.get(pk=1).time),
+                ("nail-trim", models.Event.objects.get(pk=2).time),
+            ],
+        )
+
+    def test_card_event_last_type_without_events(self):
+        models.EventType.objects.create(name="Pajama change")
+        other_child = models.Child.objects.create(
+            first_name="Robin", birth_date=timezone.localdate()
+        )
+        models.Event.objects.create(
+            child=other_child, type=models.EventType.objects.get(slug="pajama-change")
+        )
+        data = cards.card_event_last(self.context, self.child)
+        last = {item["type"].slug: item["last"] for item in data["event_types"]}
+        self.assertIsNone(last["pajama-change"])
+        self.assertIsNotNone(last["bath"])
+
+    def test_card_event_last_hidden_without_event_types(self):
+        models.Event.objects.all().delete()
+        models.EventType.objects.all().delete()
+        data = cards.card_event_last(self.context, self.child)
+        self.assertTrue(data["empty"])
+        self.assertTrue(data["hide_empty"])
+        self.assertEqual(data["event_types"], [])
+
+    @mock.patch("dashboard.templatetags.cards.timezone")
+    def test_card_event_last_filter_age(self, mocked_timezone):
+        request = MockUserRequest(get_user_model().objects.first())
+        request.user.settings.dashboard_hide_age = timezone.timedelta(days=1)
+        context = {"request": request}
+        time = timezone.localtime().strptime("2017-11-10", "%Y-%m-%d")
+        mocked_timezone.localtime.return_value = timezone.make_aware(time)
+
+        data = cards.card_event_last(context, self.child)
+        self.assertTrue(data["empty"])
+        self.assertFalse(data["hide_empty"])
+        self.assertEqual([item["last"] for item in data["event_types"]], [None, None])
+
     def test_card_diaperchange_types(self):
         data = cards.card_diaperchange_types(self.context, self.child, self.date)
         self.assertEqual(data["type"], "diaperchange")

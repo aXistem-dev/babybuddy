@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import timedelta
 from django import template
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import Avg, Count, Max, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -192,6 +192,41 @@ def card_breastfeeding(context, child, date=None):
         "total": len(instances),
         "empty": len(instances) == 0,
         "hide_empty": _hide_empty(context),
+    }
+
+
+@register.inclusion_tag("cards/event_last.html", takes_context=True)
+def card_event_last(context, child):
+    """
+    Time since the most recent event of each event type. The card is hidden
+    when no event types exist.
+    :param child: an instance of the Child model.
+    :returns: a dictionary with a list of event types, each with the time of
+        the child's most recent event of that type (or None), and the most
+        recent Event instance.
+    """
+    instances = models.Event.objects.filter(child=child).filter(
+        **_filter_data_age(context, "time")
+    )
+    last_times = dict(
+        instances.order_by()
+        .values("type")
+        .annotate(last=Max("time"))
+        .values_list("type", "last")
+    )
+    event_types = [
+        {"type": event_type, "last": last_times.get(event_type.pk)}
+        for event_type in models.EventType.objects.all()
+    ]
+    instance = instances.select_related("type").order_by("-time").first()
+
+    return {
+        "type": "event",
+        "icon": "tag",
+        "event": instance,
+        "event_types": event_types,
+        "empty": not instance,
+        "hide_empty": _hide_empty(context) or not event_types,
     }
 
 
