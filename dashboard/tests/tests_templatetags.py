@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from django.contrib.auth import get_user_model
+from django.template.loader import render_to_string
 from django.test import TestCase
 from django.utils import timezone
 
@@ -133,6 +134,22 @@ class TemplateTagsTestCase(TestCase):
         self.assertTrue(data["empty"])
         self.assertFalse(data["hide_empty"])
         self.assertEqual([item["last"] for item in data["event_types"]], [None, None])
+        # Both types have events, they are only too old to show.
+        self.assertEqual(
+            [item["only_older"] for item in data["event_types"]], [True, True]
+        )
+
+    def test_card_event_last_older_events_are_not_never(self):
+        models.EventType.objects.create(name="Pajama change")
+        request = MockUserRequest(get_user_model().objects.first())
+        request.user.settings.dashboard_hide_age = timezone.timedelta(days=1)
+        # The fixture's events are years old, so they are all hidden.
+        html = render_to_string(
+            "cards/event_last.html",
+            cards.card_event_last({"request": request}, self.child),
+        )
+        self.assertEqual(html.count("No recent events"), 2)
+        self.assertEqual(html.count("Never"), 2)
 
     def test_card_diaperchange_types(self):
         data = cards.card_diaperchange_types(self.context, self.child, self.date)

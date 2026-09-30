@@ -202,20 +202,26 @@ def card_event_last(context, child):
     when no event types exist.
     :param child: an instance of the Child model.
     :returns: a dictionary with a list of event types, each with the time of
-        the child's most recent event of that type (or None), and the most
-        recent Event instance.
+        the child's most recent event of that type (or None) and whether the
+        child only has events of that type that are too old to show, and the
+        most recent Event instance.
     """
-    instances = models.Event.objects.filter(child=child).filter(
-        **_filter_data_age(context, "time")
-    )
+    all_instances = models.Event.objects.filter(child=child)
+    instances = all_instances.filter(**_filter_data_age(context, "time"))
     last_times = dict(
         instances.order_by()
         .values("type")
         .annotate(last=Max("time"))
         .values_list("type", "last")
     )
+    used_types = set(all_instances.order_by().values_list("type", flat=True))
     event_types = [
-        {"type": event_type, "last": last_times.get(event_type.pk)}
+        {
+            "type": event_type,
+            "last": last_times.get(event_type.pk),
+            "only_older": event_type.pk in used_types
+            and event_type.pk not in last_times,
+        }
         for event_type in models.EventType.objects.all()
     ]
     instance = instances.select_related("type").order_by("-time").first()

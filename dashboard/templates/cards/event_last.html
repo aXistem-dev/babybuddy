@@ -25,6 +25,8 @@
                     {% blocktrans trimmed with time_ago=item.last|timesince %}
                         {{ time_ago }} ago
                     {% endblocktrans %}
+                {% elif item.only_older %}
+                    {% trans "No recent events" %}
                 {% else %}
                     {% trans "Never" %}
                 {% endif %}
