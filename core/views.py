@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from django.contrib import messages
 from django.contrib.messages.views import SuccessMessageMixin
-from django.db.models import Count
+from django.db.models import Count, ProtectedError
 from django.db.models.functions import Lower
 from django.forms import Form, ValidationError
 from django.http import HttpResponseRedirect
@@ -11,6 +11,7 @@ from django.utils.translation import gettext as _
 from django.views.generic.base import RedirectView, TemplateView
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, UpdateView, DeleteView, FormView
+from django.views.generic.list import ListView
 
 from babybuddy.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from babybuddy.views import BabyBuddyFilterView, BabyBuddyPaginatedView
@@ -195,6 +196,95 @@ class DiaperChangeDelete(CoreDeleteView):
     model = models.DiaperChange
     permission_required = ("core.delete_diaperchange",)
     success_url = reverse_lazy("core:diaperchange-list")
+
+
+class EventList(PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView):
+    model = models.Event
+    template_name = "core/event_list.html"
+    permission_required = ("core.view_event",)
+    filterset_class = filters.EventFilter
+
+    def get_queryset(self):
+        return super().get_queryset().select_related("child", "type")
+
+
+class EventAdd(CoreAddView):
+    model = models.Event
+    permission_required = ("core.add_event",)
+    form_class = forms.EventForm
+    success_url = reverse_lazy("core:event-list")
+
+    def get_initial(self):
+        """
+        Pre-select the event type from a "type" query parameter holding the
+        slug of an EventType instance, like "child" does for the child.
+        """
+        initial = super().get_initial()
+        slug = self.request.GET.get("type")
+        if slug:
+            event_type = models.EventType.objects.filter(slug=slug).first()
+            if event_type:
+                initial["type"] = event_type
+        return initial
+
+
+class EventUpdate(CoreUpdateView):
+    model = models.Event
+    permission_required = ("core.change_event",)
+    form_class = forms.EventForm
+    success_url = reverse_lazy("core:event-list")
+
+
+class EventDelete(CoreDeleteView):
+    model = models.Event
+    permission_required = ("core.delete_event",)
+    success_url = reverse_lazy("core:event-list")
+
+
+class EventTypeList(PermissionRequiredMixin, BabyBuddyPaginatedView, ListView):
+    model = models.EventType
+    template_name = "core/eventtype_list.html"
+    permission_required = ("core.view_eventtype",)
+
+    def get_queryset(self):
+        return super().get_queryset().annotate(Count("events"))
+
+
+class EventTypeAdd(CoreAddView):
+    model = models.EventType
+    permission_required = ("core.add_eventtype",)
+    form_class = forms.EventTypeForm
+    success_url = reverse_lazy("core:eventtype-list")
+
+
+class EventTypeUpdate(CoreUpdateView):
+    model = models.EventType
+    permission_required = ("core.change_eventtype",)
+    form_class = forms.EventTypeForm
+    success_url = reverse_lazy("core:eventtype-list")
+
+
+class EventTypeDelete(CoreDeleteView):
+    model = models.EventType
+    permission_required = ("core.delete_eventtype",)
+    success_url = reverse_lazy("core:eventtype-list")
+
+    def get_queryset(self):
+        return super().get_queryset().annotate(Count("events"))
+
+    def form_valid(self, form):
+        # An event type still in use is protected from deletion; the template
+        # explains this instead of offering the button, and this covers events
+        # that were added after the page was opened.
+        try:
+            return super().form_valid(form)
+        except ProtectedError:
+            messages.error(
+                self.request,
+                _("%(name)s is still in use and can not be deleted.")
+                % {"name": self.object},
+            )
+            return HttpResponseRedirect(self.request.path)
 
 
 class FeedingList(PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView):

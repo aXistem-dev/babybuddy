@@ -1,0 +1,40 @@
+{% extends "babybuddy/page.html" %}
+{% load babybuddy i18n %}
+{% block title %}
+    {% trans "Delete an Event Type" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'core:event-list' %}">{% trans "Events" %}</a>
+    </li>
+    <li class="breadcrumb-item">
+        <a href="{% url 'core:eventtype-list' %}">{% trans "Event Types" %}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Delete" %}</li>
+{% endblock %}
+{% block content %}
+    <form role="form" method="post">
+        {% csrf_token %}
+        {% if object.events__count > 0 %}
+            <h1>{{ object }}</h1>
+            <div class="alert alert-warning" role="alert">
+                <h4 class="alert-heading">
+                    {% blocktrans trimmed with count=object.events__count count counter=object.events__count %}
+                        There is 1 event of this type.
+                    {% plural %}
+                        There are {{ count }} events of this type.
+                    {% endblocktrans %}
+                </h4>
+                <p class="mb-0">
+                    {% blocktrans trimmed %}
+                        An event type can only be deleted when no events use it. Delete or change those events first.
+                    {% endblocktrans %}
+                </p>
+            </div>
+        {% else %}
+            <h1>{% confirm_delete_text object %}</h1>
+            <button type="submit" class="btn btn-danger">{% trans "Delete" %}</button>
+        {% endif %}
+        <a href="{% url 'core:eventtype-list' %}" class="btn btn-default">{% trans "Cancel" %}</a>
+    </form>
+{% endblock %}

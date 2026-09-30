@@ -76,6 +76,54 @@ class ViewsTestCase(TestCase):
         page = self.c.get("/changes/{}/delete/".format(entry.id))
         self.assertEqual(page.status_code, 200)
 
+    def test_event_views(self):
+        page = self.c.get("/events/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "/event-types/")
+        page = self.c.get("/events/add/")
+        self.assertEqual(page.status_code, 200)
+
+        entry = models.Event.objects.first()
+        page = self.c.get("/events/{}/".format(entry.id))
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/events/{}/delete/".format(entry.id))
+        self.assertEqual(page.status_code, 200)
+
+    def test_event_list_filters(self):
+        child = models.Child.objects.first()
+        bath = models.EventType.objects.create(name="Filter bath")
+        nail_trim = models.EventType.objects.create(name="Filter nail trim")
+        time = timezone.localtime() - timezone.timedelta(days=3)
+        models.Event.objects.create(child=child, type=bath, time=time)
+        models.Event.objects.create(
+            child=child, type=nail_trim, time=time - timezone.timedelta(days=3)
+        )
+
+        page = self.c.get("/events/", {"type": bath.id, "filtered": 1})
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual([e.type for e in page.context["object_list"]], [bath])
+
+        date = time.date().isoformat()
+        page = self.c.get(
+            "/events/", {"date_min": date, "date_max": date, "filtered": 1}
+        )
+        self.assertEqual(page.status_code, 200)
+        types = {e.type for e in page.context["object_list"]}
+        self.assertIn(bath, types)
+        self.assertNotIn(nail_trim, types)
+
+    def test_eventtype_views(self):
+        page = self.c.get("/event-types/")
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/event-types/add/")
+        self.assertEqual(page.status_code, 200)
+
+        entry = models.EventType.objects.first()
+        page = self.c.get("/event-types/{}/".format(entry.slug))
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/event-types/{}/delete/".format(entry.slug))
+        self.assertEqual(page.status_code, 200)
+
     def test_feeding_views(self):
         page = self.c.get("/feedings/")
         self.assertEqual(page.status_code, 200)

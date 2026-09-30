@@ -27,6 +27,18 @@ class DiaperChangeFilter(TagFilter):
         fields = ["child", "wet", "solid", "color"]
 
 
+class EventFilter(TagFilter):
+    date = django_filters.DateFromToRangeFilter(
+        label=_("Date"),
+        field_name="time",
+        widget=django_filters.widgets.RangeWidget(attrs={"type": "date"}),
+    )
+
+    class Meta:
+        model = models.Event
+        fields = ["child", "type"]
+
+
 class FeedingFilter(TagFilter):
     class Meta:
         model = models.Feeding

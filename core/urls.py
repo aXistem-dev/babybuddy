@@ -38,6 +38,22 @@ urlpatterns = [
         views.DiaperChangeDelete.as_view(),
         name="diaperchange-delete",
     ),
+    path("events/", views.EventList.as_view(), name="event-list"),
+    path("events/add/", views.EventAdd.as_view(), name="event-add"),
+    path("events/<int:pk>/", views.EventUpdate.as_view(), name="event-update"),
+    path("events/<int:pk>/delete/", views.EventDelete.as_view(), name="event-delete"),
+    path("event-types/", views.EventTypeList.as_view(), name="eventtype-list"),
+    path("event-types/add/", views.EventTypeAdd.as_view(), name="eventtype-add"),
+    path(
+        "event-types/<str:slug>/",
+        views.EventTypeUpdate.as_view(),
+        name="eventtype-update",
+    ),
+    path(
+        "event-types/<str:slug>/delete/",
+        views.EventTypeDelete.as_view(),
+        name="eventtype-delete",
+    ),
     path(
         "feedings/bottle/add/",
         views.BottleFeedingAdd.as_view(),

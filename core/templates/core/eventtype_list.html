@@ -1,0 +1,69 @@
+{% extends "babybuddy/page.html" %}
+{% load i18n %}
+{% block title %}
+    {% trans "Event Types" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'core:event-list' %}">{% trans "Events" %}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Event Types" %}</li>
+{% endblock %}
+{% block content %}
+    <h1>
+        {% trans "Event Types" %}
+        {% if perms.core.add_eventtype %}
+            <a href="{% url 'core:eventtype-add' %}" class="btn btn-sm btn-success">
+                <i class="icon-tag" aria-hidden="true"></i> {% trans "Add Event Type" %}
+            </a>
+        {% endif %}
+    </h1>
+    <div class="table-responsive">
+        <table class="table table-instances table-borderless table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>{% trans "Actions" %}</th>
+                    <th>{% trans "Name" %}</th>
+                    <th>{% trans "Slug" %}</th>
+                    <th class="text-center">{% trans "Events" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for eventtype in object_list %}
+                    <tr>
+                        <td>
+                            <div class="btn-group btn-group-sm"
+                                 role="group"
+                                 aria-label="{% trans "Actions" %}">
+                                {% if perms.core.change_eventtype %}
+                                    <a href="{% url 'core:eventtype-update' eventtype.slug %}"
+                                       class="btn btn-primary">
+                                        <i class="icon-update" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                                {% if perms.core.delete_eventtype %}
+                                    <a href="{% url 'core:eventtype-delete' eventtype.slug %}"
+                                       class="btn btn-danger">
+                                        <i class="icon-delete" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <th scope="row">
+                            <a href="{% url 'core:event-list' %}?type={{ eventtype.id }}&filtered=1">{{ eventtype.name }}</a>
+                        </th>
+                        <td>
+                            <span class="font-monospace">{{ eventtype.slug }}</span>
+                        </td>
+                        <td class="text-center">{{ eventtype.events__count }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <th colspan="4">{% trans "No event types found." %}</th>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "babybuddy/paginator.html" %}
+{% endblock %}

@@ -355,6 +355,146 @@ class DiaperChangeFormsTestCase(FormsTestCaseBase):
         self.assertContains(page, "Diaper Change entry deleted")
 
 
+class EventFormsTestCase(FormsTestCaseBase):
+    @classmethod
+    def setUpClass(cls):
+        super(EventFormsTestCase, cls).setUpClass()
+        cls.bath = models.EventType.objects.create(name="Bath")
+        cls.nail_trim = models.EventType.objects.create(name="Nail trim")
+        cls.event = models.Event.objects.create(
+            child=cls.child,
+            type=cls.bath,
+            time=timezone.localtime() - timezone.timedelta(hours=3),
+        )
+
+    def test_add(self):
+        params = {
+            "child": self.child.id,
+            "type": self.nail_trim.id,
+            "time": self.localtime_string(),
+        }
+        page = self.c.post("/events/add/", params, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event entry for {} added".format(str(self.child)))
+        self.assertTrue(
+            models.Event.objects.filter(child=self.child, type=self.nail_trim).exists()
+        )
+
+    def test_add_requires_a_type(self):
+        params = {"child": self.child.id, "time": self.localtime_string()}
+        page = self.c.post("/events/add/", params)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("type", page.context["form"].errors)
+
+    def test_add_rejects_a_future_time(self):
+        params = {
+            "child": self.child.id,
+            "type": self.bath.id,
+            "time": self.localtime_string(
+                timezone.localtime() + timezone.timedelta(days=1)
+            ),
+        }
+        page = self.c.post("/events/add/", params)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("time", page.context["form"].errors)
+
+    def test_type_pills(self):
+        page = self.c.get("/events/add/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "pill-container")
+        self.assertContains(page, "Bath")
+        self.assertContains(page, "Nail trim")
+
+    def test_type_from_parameter(self):
+        page = self.c.get("/events/add/?type={}".format(self.nail_trim.slug))
+        self.assertEqual(page.context["form"].initial["type"], self.nail_trim)
+
+        page = self.c.get("/events/add/?type=unknown")
+        self.assertNotIn("type", page.context["form"].initial)
+
+        page = self.c.get(
+            "/events/add/?child={}&type={}".format(self.child.slug, self.bath.slug)
+        )
+        self.assertEqual(page.context["form"].initial["child"], self.child)
+        self.assertEqual(page.context["form"].initial["type"], self.bath)
+
+    def test_edit(self):
+        params = {
+            "child": self.event.child.id,
+            "type": self.nail_trim.id,
+            "time": self.localtime_string(self.event.time),
+            "notes": "Both hands.",
+        }
+        page = self.c.post("/events/{}/".format(self.event.id), params, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.type, self.nail_trim)
+        self.assertEqual(self.event.notes, params["notes"])
+        self.assertContains(
+            page, "Event entry for {} updated".format(str(self.event.child))
+        )
+
+    def test_delete(self):
+        event = models.Event.objects.create(child=self.child, type=self.bath)
+        page = self.c.post("/events/{}/delete/".format(event.id), follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event entry deleted")
+        self.assertFalse(models.Event.objects.filter(pk=event.pk).exists())
+
+
+class EventTypeFormsTestCase(FormsTestCaseBase):
+    def test_add(self):
+        page = self.c.post("/event-types/add/", {"name": "Bath"}, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event Type entry added")
+        self.assertEqual(models.EventType.objects.get(name="Bath").slug, "bath")
+
+    def test_add_rejects_duplicates(self):
+        models.EventType.objects.create(name="Bath")
+        for name in ("Bath", "bath!"):
+            with self.subTest(name=name):
+                page = self.c.post("/event-types/add/", {"name": name})
+                self.assertEqual(page.status_code, 200)
+                self.assertIn("name", page.context["form"].errors)
+        self.assertEqual(models.EventType.objects.count(), 1)
+
+    def test_edit(self):
+        event_type = models.EventType.objects.create(name="Pajama")
+        page = self.c.post(
+            "/event-types/{}/".format(event_type.slug),
+            {"name": "Pajama change"},
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.name, "Pajama change")
+        self.assertEqual(event_type.slug, "pajama-change")
+
+    def test_delete(self):
+        event_type = models.EventType.objects.create(name="Nail trim")
+        page = self.c.post(
+            "/event-types/{}/delete/".format(event_type.slug), follow=True
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event Type entry deleted")
+        self.assertFalse(models.EventType.objects.filter(pk=event_type.pk).exists())
+
+    def test_delete_in_use(self):
+        event_type = models.EventType.objects.create(name="Bath")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+
+        page = self.c.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "There is 1 event of this type.")
+        self.assertNotContains(page, "Are you sure you want to delete")
+
+        page = self.c.post(url, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Bath is still in use and can not be deleted.")
+        self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
+
+
 class FeedingFormsTestCase(FormsTestCaseBase):
     @classmethod
     def setUpClass(cls):

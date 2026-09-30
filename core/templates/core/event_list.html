@@ -1,0 +1,82 @@
+{% extends "babybuddy/page.html" %}
+{% load datetime i18n widget_tweaks %}
+{% block title %}
+    {% trans "Events" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Events" %}</li>
+{% endblock %}
+{% block content %}
+    <h1>
+        {% trans "Events" %}
+        {% if perms.core.add_event %}
+            <a href="{% url 'core:event-add' %}" class="btn btn-sm btn-success">
+                <i class="icon-tag" aria-hidden="true"></i> {% trans "Add Event" %}
+            </a>
+        {% endif %}
+        {% if perms.core.view_eventtype %}
+            <a href="{% url 'core:eventtype-list' %}"
+               class="btn btn-sm btn-secondary">
+                <i class="icon-list" aria-hidden="true"></i> {% trans "Event Types" %}
+            </a>
+        {% endif %}
+    </h1>
+    {% include "babybuddy/filter.html" %}
+    <div class="table-responsive">
+        <table class="table table-instances table-borderless table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>{% trans "Actions" %}</th>
+                    <th>{% trans "Time" %}</th>
+                    {% if not unique_child %}
+                        <th>{% trans "Child" %}</th>
+                    {% endif %}
+                    <th>{% trans "Type" %}</th>
+                    <th>{% trans "Tags" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in object_list %}
+                    <tr>
+                        <td>
+                            <div class="btn-group btn-group-sm"
+                                 role="group"
+                                 aria-label="{% trans "Actions" %}">
+                                {% if perms.core.change_event %}
+                                    <a href="{% url 'core:event-update' event.id %}" class="btn btn-primary">
+                                        <i class="icon-update" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                                {% if perms.core.delete_event %}
+                                    <a href="{% url 'core:event-delete' event.id %}" class="btn btn-danger">
+                                        <i class="icon-delete" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <th scope="row">{{ event.time|datetime_short }}</th>
+                        {% if not unique_child %}
+                            <td>
+                                <a href="{% url 'core:child' event.child.slug %}">{{ event.child }}</a>
+                            </td>
+                        {% endif %}
+                        <td>{{ event.type }}</td>
+                        <td>{% include "core/render_tag_list.html" with tags=event.tags.all %}</td>
+                    </tr>
+                    {% if event.notes %}
+                        <tr class="row-details">
+                            <td colspan="{% if not unique_child %}5{% else %}4{% endif %}">
+                                <i class="icon-note me-2" aria-hidden="true"></i>{{ event.notes }}
+                            </td>
+                        </tr>
+                    {% endif %}
+                {% empty %}
+                    <tr>
+                        <th colspan="{% if not unique_child %}5{% else %}4{% endif %}">{% trans "No events found." %}</th>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "babybuddy/paginator.html" %}
+{% endblock %}
