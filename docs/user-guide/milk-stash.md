@@ -22,8 +22,11 @@ Each parent has a **Produces breast milk** checkbox (on by default). Only
 parents with it ticked are offered wherever a parent is picked: who pumped,
 who breastfed, and whose milk a stash entry is. When exactly one parent
 produces breast milk, those fields are hidden everywhere and that parent is
-filled in automatically; lists and the Milk stash page then leave out the
-parent's name too, since it can only be them.
+filled in automatically (except on a discard, see
+[below](#adding-to-and-removing-from-the-stash)); lists and the Milk stash page
+then leave out the parent's name too, since it can only be them. A parent's
+page only offers **Add pumping**, **Add to stash** and **Discard from stash**
+when that parent produces breast milk.
 
 ## Logging pumping
 
@@ -45,11 +48,14 @@ below).
 
 Breastfeeding is recorded as a feeding whose method is **Left breast**,
 **Right breast** or **Both breasts**. These methods show a **Breastfed by**
-field for the parent who fed the baby. On a new feeding, it's filled in
-automatically when the baby has exactly one linked parent (also when you leave
-it blank); with none or more than one, pick the parent yourself (or leave it
-blank). Changing the method
-away from a breast method clears the field, since it no longer applies.
+field for the parent who fed the baby; only parents who produce breast milk
+count. When exactly one parent produces breast milk, the field is hidden and
+that parent is filled in. Otherwise, on a new feeding, it's filled in
+automatically when the baby has exactly one linked parent who produces breast
+milk (also when you leave it blank); with none or more than one, pick the
+parent yourself (or leave it blank). Changing the method away from a breast
+method (to bottle, parent fed or self fed, the methods a stash feeding can
+use) hides and clears the field, since it no longer applies.
 
 A parent's page has a **Breastfeeding** card showing the session count and
 total minutes for today and for the last 7 days, and the side used last.
@@ -91,10 +97,14 @@ Not every stash change comes from pumping or a bottle. Use **Add to stash** or
   away, or any other correction downward (**Discarded**, with the same
   optional free-text reason as on a bottle)
 
-Both kinds of entry have a **Parent** field: whose milk it is. When there's
-exactly one parent, it's filled in automatically and the field is hidden on
-the form, since there's nobody else it could belong to; with more than one
-parent, pick one (or leave it blank). A stash entry is never logged against a
+Both kinds of entry have a **Parent** field: whose milk it is. When exactly
+one parent produces breast milk, the field is hidden on the form and a new
+**Added** entry is stored against that parent, since there's nobody else it
+could belong to. A new **Discarded** entry is not: without a parent it takes
+the oldest milk of anyone, which may be starting stock or milk of a parent who
+no longer produces it (a lot's **Throw away** button fills in that lot's
+parent instead). With more than one such parent, pick one (or leave it
+blank). A stash entry is never logged against a
 baby — a discard takes milk from the shared supply, so no baby drank it; the
 only link to a baby is indirect, through the bottle a discard was logged at.
 
@@ -114,7 +124,8 @@ first.
 
 One exception: a **Discarded** entry with a parent takes that parent's
 oldest milk first (and only then anyone's, if that parent's milk runs out).
-Without a parent, a discard takes the oldest milk of anyone, like a bottle.
+Without a parent, a discard takes the oldest milk of anyone, like a bottle;
+so does milk discarded at a bottle, which follows the bottle it came from.
 The Milk stash page shows whose milk each lot is, and its **Throw away**
 button fills in that lot's parent.
 
@@ -203,7 +214,8 @@ per child), so duplicates can be cleaned up.
 
 Older API clients that only know about child-based pumping keep working: a
 pumping entry created with a `child` but no `parent` resolves the parent
-automatically (as long as the child has exactly one linked parent) and is
+automatically (as long as the child has exactly one linked parent who produces
+breast milk, or only one parent produces breast milk at all) and is
 stored against that parent, with `child` left empty. This means such a
 pumping entry no longer shows up in that client's per-child pumping views,
 since the stored entry now belongs to the parent, not the child. A client

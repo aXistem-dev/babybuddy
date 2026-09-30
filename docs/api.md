@@ -332,7 +332,7 @@ New fields: `stash_amount` (ml taken from the stash that the baby drank),
 [Discarded milk](#discarded-milk)), and `parent` (described in
 [Breastfeeding parent](#breastfeeding-parent)). `stash_amount` is only
 meaningful for a breast milk or fortified breast milk feeding given by
-bottle. Filters: `stash_amount__isnull` finds feedings that did (or didn't)
+bottle, parent fed or self fed. Filters: `stash_amount__isnull` finds feedings that did (or didn't)
 draw from the stash; `parent` finds feedings (breastfeeding sessions) by
 parent.
 
@@ -348,11 +348,14 @@ Fields: `id`, `time`, `amount`, `kind` (`added` or `discarded`), `reason`
 `discarded` adjustment can be linked to a given `feeding`. Filters: `kind`,
 `parent`, `feeding`.
 
-A `POST` that creates an adjustment and omits `parent` entirely resolves it
-the same way the web form does: if there is exactly one `Parent`, the new
-entry is stored against that parent; with zero or several parents it's left
-`null`. Send `parent: null` explicitly to opt out. An adjustment is never
-stored against a child.
+A `POST` that creates an `added` adjustment and omits `parent` entirely
+resolves it the same way the web form does: if exactly one parent produces
+breast milk, the new entry is stored against that parent; with zero or several
+it's left `null`. Send `parent: null` explicitly to opt out. A `discarded`
+adjustment is never filled in: without a `parent` it takes the oldest milk of
+anyone, and with one it takes that parent's oldest milk first. A `parent` who
+doesn't produce breast milk is refused, unless it's the adjustment's existing
+parent. An adjustment is never stored against a child.
 
 ### `/api/stash`
 
@@ -402,13 +405,21 @@ before tracking started; `negative_since` is then when it last dropped below
 zero (otherwise `null`). Each lot's `parent` is whose milk it is, and
 `is_oldest_expired` marks the one lot a "throw away" shortcut should offer.
 
+`defaults` are what a new entry starts with, as the web forms apply them:
+`pumping_to_stash` means a new pumping session starts as stored in the stash,
+and `bottle_from_stash` means a new breast milk bottle starts as taken from the
+stash. `bottle_from_stash` is already `false` while the stash is not in use yet
+(nothing stored or adjusted), even when the site setting is on.
+
 ### `/api/stash/settings`
 
 The milk stash's site settings (**Site > Settings > Milk stash**). Anyone who
 can view pumping can `GET` them; `PATCH` needs the same rights as changing them
 on the settings page (staff with permission to edit the pumping settings).
-`can_edit` says whether the current user may change them, and
-`warn_age_hours` must stay below `max_age_hours`.
+It doesn't need permission to change pumping entries. `can_edit` says whether
+the current user may change them. A `PATCH` that sends `warn_age_hours` or
+`max_age_hours` must keep `warn_age_hours` below `max_age_hours`; one that only
+changes a default switch is never refused over the ages.
 
 ```shell
 curl -X PATCH https://[...]/api/stash/settings -H 'Authorization: Token [...]' \
@@ -427,23 +438,31 @@ curl -X PATCH https://[...]/api/stash/settings -H 'Authorization: Token [...]' \
 
 ### Parent resolution
 
-A `POST` to `/api/pumping/` that sends `child` but no `parent` resolves the
-parent from that child's linked parents: if the child has exactly one, the
-entry is stored against that parent with `child` left `null`; if the child
-has zero or several, the request is rejected with a 400 response asking for
-`parent` explicitly. A `timer` field that carries a child follows the same
-rule. This keeps older clients — including ones that only know about
-child-based pumping — working unmodified, as long as each child has a single
-linked parent.
+Only parents who produce breast milk (`produces_milk`) count. A `POST` to
+`/api/pumping/` that sends `child` but no `parent` resolves the parent from
+that child's linked milk-producing parents: if the child has exactly one, the
+entry is stored against that parent with `child` left `null`. If exactly one
+parent produces breast milk at all, that parent is filled in, even for a child
+with no linked parent (and for a request with no `child`). Otherwise the
+request is rejected with a 400 response asking for `parent` explicitly. A
+`timer` field that carries a child follows the same rule. This keeps older
+clients — including ones that only know about child-based pumping — working
+unmodified, as long as each child has a single linked milk-producing parent.
+
+A `parent` who doesn't produce breast milk is refused (400) on pumping,
+feedings and stash adjustments, unless it's the entry's existing parent (an
+update that leaves it unchanged). Discards are never filled in (see
+[`/api/stash-adjustments/`](#apistash-adjustments)).
 
 ### Breastfeeding parent
 
 `parent` on `/api/feedings/` only applies to the breast methods (`left
 breast`, `right breast`, `both breasts`); sent with any other method it is
 ignored (stored as `null`). On a `POST` that creates a breastfeeding entry, omitting `parent`
-resolves it from the child's linked parents, the same way pumping does,
-except that a child with zero or several linked parents simply gets no
-`parent` filled in (no error) rather than an ambiguity error. Send
+resolves it the same way pumping does: the child's single linked
+milk-producing parent, or else the only parent who produces breast milk. When
+neither applies, no `parent` is filled in (no error) rather than an ambiguity
+error. Send
 `parent: null` explicitly to opt out. Changing `method` away from a breast
 method (on create or update) clears any `parent`.
 
@@ -454,10 +473,12 @@ distinguishes an **omitted** key from an explicit `null`:
 
 - **Omit the key entirely** and the server applies the site's default: for
   pumping, the full `amount` if "store pumped milk in the stash by default"
-  is on; for a breast milk/fortified breast milk bottle, the full `amount`
-  if "take breast milk bottles from the stash by default" is on **and** the
-  stash already has some activity (so a client that has never shown a stash
-  switch can't push a family that doesn't use the stash below zero).
+  is on; for a breast milk/fortified breast milk feeding given by bottle,
+  parent fed or self fed (the stash feedings; never breastfeeding), the full
+  `amount` if "take breast milk bottles from the stash by default" is on
+  **and** the stash already has some activity (so a client that has never
+  shown a stash switch can't push a family that doesn't use the stash below
+  zero). This is what `defaults.bottle_from_stash` in `/api/stash` reports.
 - **Send `stash_amount: null` explicitly** to opt out of the stash for that
   entry regardless of the site defaults.
 
@@ -465,6 +486,10 @@ The same distinction applies on `PATCH`: omitting `stash_amount` while
 changing `amount` keeps a fully-stashed entry fully stashed (or shrinks it if
 it would otherwise exceed the new `amount`), while sending `stash_amount`
 explicitly (including `null`) always wins.
+
+When exactly one parent produces breast milk, the web forms hide the parent
+field (who pumped, breastfed by, whose milk) and the server fills it in, as
+described in [Parent resolution](#parent-resolution); a client can do the same.
 
 ### Discarded milk
 
