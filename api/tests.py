@@ -218,6 +218,37 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
             },
         )
 
+    def test_post_with_timer(self):
+        # Overridden: with a single milk-producing parent, a timer without a
+        # child still gets that parent; with two, the parent must be sent.
+        user = get_user_model().objects.first()
+        start = timezone.now() - timezone.timedelta(minutes=10)
+        timer = models.Timer.objects.create(user=user, start=start)
+        response = self.client.post(
+            self.endpoint, {"amount": 2, "timer": timer.id}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["parent"], self.parent.id)
+
+        models.Parent.objects.create(first_name="Casey")
+        timer = models.Timer.objects.create(user=user, start=start)
+        response = self.client.post(
+            self.endpoint, {"amount": 2, "timer": timer.id}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_parent_who_doesnt_produce_milk_is_refused(self):
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        data = {
+            "parent": sam.id,
+            "amount": "21.0",
+            "start": "2017-11-20T22:52:00-05:00",
+            "end": "2017-11-20T23:05:00-05:00",
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("parent", response.data)
+
     def test_post(self):
         data = {
             "child": 1,
@@ -974,6 +1005,7 @@ class ParentAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 "last_name": "Doe",
                 "slug": self.parent.slug,
                 "picture": None,
+                "produces_milk": True,
                 "children": [1],
             },
         )

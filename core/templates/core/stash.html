@@ -1,5 +1,5 @@
 {% extends "babybuddy/page.html" %}
-{% load i18n %}
+{% load i18n misc %}
 {% block title %}
     {% trans "Milk stash" %}
 {% endblock %}
@@ -7,6 +7,7 @@
     <li class="breadcrumb-item active" aria-current="page">{% trans "Milk stash" %}</li>
 {% endblock %}
 {% block content %}
+    {% show_milk_parent as show_parent %}
     <h1>
         {% trans "Milk stash" %}
         {% if perms.core.add_stashadjustment %}
@@ -43,7 +44,9 @@
                     <tr>
                         <td>{{ lot.time|date:"SHORT_DATETIME_FORMAT" }}</td>
                         <td>{{ lot.amount }}</td>
-                        <td>{{ lot.parent_name }}</td>
+                        {% if show_parent %}
+                            <td>{{ lot.parent_name }}</td>
+                        {% endif %}
                         <td>{{ lot.age_hours }} h</td>
                         <td>
                             {% if lot.status == "expired" %}
@@ -98,9 +101,9 @@
                     <td>
                         {% if e.kind == "pumping" %}
                             {% if perms.core.change_pumping %}
-                                <a href="{% url 'core:pumping-update' e.obj.id %}">{% trans "Pumping" %} · {{ e.obj.parent|default_if_none:"–" }}</a>
+                                <a href="{% url 'core:pumping-update' e.obj.id %}">{% trans "Pumping" %}{% if show_parent %} · {{ e.obj.parent|default_if_none:"–" }}{% endif %}</a>
                             {% else %}
-                                {% trans "Pumping" %} · {{ e.obj.parent|default_if_none:"–" }}
+                                {% trans "Pumping" %}{% if show_parent %} · {{ e.obj.parent|default_if_none:"–" }}{% endif %}
                             {% endif %}
                         {% elif e.kind == "feeding" %}
                             {% if perms.core.change_feeding %}

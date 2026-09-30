@@ -100,6 +100,14 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "produces_milk",
+                    models.BooleanField(
+                        default=True,
+                        help_text="Only these parents can be picked for pumping, breastfeeding and stash milk.",
+                        verbose_name="Produces breast milk",
+                    ),
+                ),
+                (
                     "children",
                     models.ManyToManyField(
                         blank=True,

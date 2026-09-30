@@ -489,7 +489,9 @@ class FeedingFormsTestCase(FormsTestCaseBase):
         robin = models.Parent.objects.create(first_name="Robin")
         robin.children.add(self.child, child_two)
         page = self.c.get("/feedings/add/")
-        self.assertNotIn("parent", page.context["form"].initial)
+        # The only milk-producing parent: filled in, and the field hidden.
+        self.assertEqual(page.context["form"].initial["parent"], robin)
+        self.assertTrue(page.context["form"].fields["parent"].widget.is_hidden)
         end = timezone.localtime() - timezone.timedelta(minutes=5)
         params = {
             "child": child_two.id,

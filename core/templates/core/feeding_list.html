@@ -7,6 +7,7 @@
     <li class="breadcrumb-item active" aria-current="page">{% trans "Feedings" %}</li>
 {% endblock %}
 {% block content %}
+    {% show_milk_parent as show_parent %}
     <h1>
         {% trans "Feedings" %}
         {% if perms.core.add_feeding %}
@@ -68,7 +69,7 @@
                             {% endif %}
                             <td>
                                 {{ feeding.get_method_display }}
-                                {% if feeding.parent %}
+                                {% if feeding.parent and show_parent %}
                                     <br>
                                     <small class="text-muted">
                                         {% if perms.core.view_parent %}

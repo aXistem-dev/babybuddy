@@ -18,6 +18,13 @@ on the parent's edit page). A parent's page shows their linked children, a
 breastfeeding summary, recent pumping, the milk stash summary, and buttons to
 add pumping or a stash adjustment.
 
+Each parent has a **Produces breast milk** checkbox (on by default). Only
+parents with it ticked are offered wherever a parent is picked: who pumped,
+who breastfed, and whose milk a stash entry is. When exactly one parent
+produces breast milk, those fields are hidden everywhere and that parent is
+filled in automatically; lists and the Milk stash page then leave out the
+parent's name too, since it can only be them.
+
 ## Logging pumping
 
 Pumping is logged on a **parent**, not a child, since the milk doesn't belong

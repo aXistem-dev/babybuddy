@@ -7,6 +7,7 @@
     <li class="breadcrumb-item active" aria-current="page">{% trans "Pumping" %}</li>
 {% endblock %}
 {% block content %}
+    {% show_milk_parent as show_parent %}
     <h1>
         {% trans "Pumping" %}
         {% if perms.core.add_pumping %}
@@ -27,7 +28,9 @@
                 <tr>
                     <th>{% trans "Actions" %}</th>
                     <th>{% trans "Date" %}</th>
-                    <th>{% trans "Parent" %}</th>
+                    {% if show_parent %}
+                        <th>{% trans "Parent" %}</th>
+                    {% endif %}
                     <th>{% trans "Amount" %}</th>
                     <th>{% trans "Stored" %}</th>
                     <th>{% trans "Duration" %}</th>
@@ -58,13 +61,15 @@
                                 </div>
                             </td>
                             <th scope="row">{{ pumping.start|datetime_short }}</th>
-                            <td>
-                                {% if pumping.parent %}
-                                    <a href="{% url 'core:parent' pumping.parent.slug %}">{{ pumping.parent }}</a>
-                                {% else %}
-                                    –
-                                {% endif %}
-                            </td>
+                            {% if show_parent %}
+                                <td>
+                                    {% if pumping.parent %}
+                                        <a href="{% url 'core:parent' pumping.parent.slug %}">{{ pumping.parent }}</a>
+                                    {% else %}
+                                        –
+                                    {% endif %}
+                                </td>
+                            {% endif %}
                             <td>{{ pumping.amount }}</td>
                             <td>{{ pumping.stash_amount|default_if_none:"–" }}</td>
                             <td>{{ pumping.duration|duration_string }}</td>

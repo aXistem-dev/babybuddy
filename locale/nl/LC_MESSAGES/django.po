@@ -3441,6 +3441,21 @@ msgstr "Recentste bewegingen"
 msgid "All stash adjustments"
 msgstr "Alle voorraadaanpassingen"
 
+#: core/models.py:303
+msgid "Produces breast milk"
+msgstr "Produceert moedermelk"
+
+#: core/models.py:305
+msgid ""
+"Only these parents can be picked for pumping, breastfeeding and stash milk."
+msgstr ""
+"Alleen deze ouders kunnen gekozen worden bij afkolven, borstvoeding en melk "
+"in de voorraad."
+
+#: api/serializers.py:159
+msgid "This parent doesn't produce breast milk."
+msgstr "Deze ouder produceert geen moedermelk."
+
 #: core/forms.py:790
 msgid ""
 "A discard takes this parent's oldest milk first. Empty: the oldest milk of "

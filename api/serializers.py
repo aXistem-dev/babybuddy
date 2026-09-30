@@ -149,6 +149,15 @@ class BMISerializer(CoreModelSerializer, TaggableSerializer):
         }
 
 
+def check_milk_parent(serializer, attrs):
+    """Refuse a parent who doesn't produce breast milk, unless the entry
+    already had that parent (an edit that leaves it unchanged)."""
+    parent = attrs.get("parent")
+    current = getattr(serializer.instance, "parent_id", None)
+    if parent and not parent.produces_milk and parent.pk != current:
+        raise ValidationError({"parent": _("This parent doesn't produce breast milk.")})
+
+
 class StashDefaultsMixin:
     """Fill in a stash_amount the client did not send at all: a default on
     create, or a value that keeps following/fitting the entry on update."""
@@ -203,9 +212,10 @@ class PumpingSerializer(
         )
 
     def validate(self, attrs):
+        check_milk_parent(self, attrs)
         if self.instance is None and not attrs.get("parent"):
             child = attrs.get("child") or getattr(attrs.get("timer"), "child", None)
-            parent = models.parent_for_child(child)
+            parent = models.parent_for_child(child) or models.single_parent()
             if child is not None and parent is None:
                 raise ValidationError(
                     {
@@ -314,6 +324,7 @@ class FeedingSerializer(
             # it, mirroring how a bottle silently drops a stray `child` on
             # pumping.
             attrs["parent"] = None
+        check_milk_parent(self, attrs)
         attrs = super().validate(attrs)
         if (
             self.instance is None
@@ -326,7 +337,9 @@ class FeedingSerializer(
             # timer-supplied), same as pumping, but without pumping's
             # "ambiguous parent" error -- a child with several linked
             # parents just gets no auto-fill.
-            parent = models.parent_for_child(attrs.get("child"))
+            parent = (
+                models.parent_for_child(attrs.get("child")) or models.single_parent()
+            )
             if parent is not None:
                 attrs["parent"] = parent
         stash_amount = attrs.get(
@@ -442,7 +455,15 @@ class ParentSerializer(serializers.HyperlinkedModelSerializer):
 
     class Meta:
         model = models.Parent
-        fields = ("id", "first_name", "last_name", "slug", "picture", "children")
+        fields = (
+            "id",
+            "first_name",
+            "last_name",
+            "slug",
+            "picture",
+            "produces_milk",
+            "children",
+        )
         lookup_field = "slug"
 
 
@@ -471,13 +492,14 @@ class StashAdjustmentSerializer(CoreModelSerializer, TaggableSerializer):
         )
 
     def validate(self, attrs):
+        check_milk_parent(self, attrs)
         if self.instance is None and "parent" not in self.initial_data:
             # Create only, and only when `parent` was not sent at all (an
-            # explicit `"parent": null` opts out): with a single parent there
-            # is nobody else the milk can belong to.
-            parents = list(models.Parent.objects.all()[:2])
-            if len(parents) == 1:
-                attrs["parent"] = parents[0]
+            # explicit `"parent": null` opts out): with a single milk-producing
+            # parent there is nobody else the milk can belong to.
+            parent = models.single_parent()
+            if parent:
+                attrs["parent"] = parent
         return super().validate(attrs)
 
     def get_fields(self):

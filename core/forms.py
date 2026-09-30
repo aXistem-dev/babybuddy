@@ -6,6 +6,7 @@ from django.forms import widgets
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
@@ -108,8 +109,8 @@ def set_initial_values(kwargs, form_type):
             parent = models.parent_for_child(
                 models.Child.objects.filter(slug=child_slug).first()
             )
-        elif models.Parent.objects.count() == 1:
-            parent = models.Parent.objects.first()
+        else:
+            parent = models.single_parent()
         if parent:
             kwargs["initial"]["parent"] = parent
         kwargs["initial"].pop("child", None)
@@ -125,7 +126,10 @@ def set_initial_values(kwargs, form_type):
                 reason_field = models.StashAdjustment._meta.get_field("reason")
                 kwargs["initial"]["reason"] = reason[: reason_field.max_length]
     elif form_type is FeedingForm:
-        parent = models.parent_for_child(kwargs["initial"].get("child"))
+        parent = (
+            models.parent_for_child(kwargs["initial"].get("child"))
+            or models.single_parent()
+        )
         if parent:
             kwargs["initial"]["parent"] = parent
 
@@ -363,6 +367,29 @@ def keep_stash_amount_in_step(form, data):
         )
 
 
+def limit_to_milk_parents(form, hide_when_none=True):
+    """Offer only milk-producing parents (plus the entry's current parent, so
+    an older entry stays editable) and hide the field when there is nobody to
+    choose between: one milk-producing parent, or none (unless the field must
+    stay visible to show that one is missing). Returns whether it is hidden."""
+    field = form.fields["parent"]
+    current = getattr(form.instance, "parent_id", None)
+    queryset = models.Parent.objects.filter(produces_milk=True)
+    if current:
+        queryset = models.Parent.objects.filter(Q(produces_milk=True) | Q(pk=current))
+    field.queryset = queryset
+    count = models.milk_parents().count()
+    if count > 1 or (count == 0 and not hide_when_none):
+        return False
+    field.required = False
+    field.widget = forms.HiddenInput()
+    form.fieldsets = [
+        {**fieldset, "fields": [f for f in fieldset["fields"] if f != "parent"]}
+        for fieldset in form.fieldsets
+    ] + [{"fields": ["parent"], "layout": "hidden"}]
+    return True
+
+
 def _switch(label):
     return forms.BooleanField(
         required=False,
@@ -580,6 +607,7 @@ class FeedingForm(StashFeedingMixin, CoreModelForm, TaggableModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["parent"].label = _("Breastfed by")
+        limit_to_milk_parents(self)
         self.add_stash_fields()
 
     def clean(self):
@@ -589,7 +617,9 @@ class FeedingForm(StashFeedingMixin, CoreModelForm, TaggableModelForm):
         elif not self.instance.pk and not data.get("parent"):
             # The initial value only covers a child known up front; fill in
             # the parent of the child picked in the form, as the API does.
-            data["parent"] = models.parent_for_child(data.get("child"))
+            data["parent"] = (
+                models.parent_for_child(data.get("child")) or models.single_parent()
+            )
         return self.clean_stash(data, data.get("method"))
 
 
@@ -691,7 +721,7 @@ class MedicationForm(CoreModelForm, TaggableModelForm):
 class ParentForm(forms.ModelForm):
     class Meta:
         model = models.Parent
-        fields = ["first_name", "last_name", "children"]
+        fields = ["first_name", "last_name", "produces_milk", "children"]
         if settings.BABY_BUDDY["ALLOW_UPLOADS"]:
             fields.append("picture")
         widgets = {"children": forms.CheckboxSelectMultiple}
@@ -725,6 +755,7 @@ class PumpingForm(CoreModelForm, TaggableModelForm):
         super().__init__(*args, **kwargs)
         self.fields["parent"].required = True
         self.fields["parent"].empty_label = None
+        limit_to_milk_parents(self, hide_when_none=False)
         self.fields["stash_amount"].help_text = _(
             "Leave empty to store the whole amount."
         )
@@ -737,6 +768,8 @@ class PumpingForm(CoreModelForm, TaggableModelForm):
 
     def clean(self):
         data = super().clean()
+        if not data.get("parent") and "parent" not in self.errors:
+            data["parent"] = models.single_parent()
         if data.get("parent"):
             # Pumping belongs to a parent; a legacy entry's child is dropped.
             self.instance.child = None
@@ -772,17 +805,10 @@ class StashAdjustmentForm(CoreModelForm, TaggableModelForm):
         super().__init__(*args, **kwargs)
         # `?kind=`, `?amount=`, `?reason=` and `?parent=` arrive as initial
         # values via set_initial_values.
-        parents = list(models.Parent.objects.all()[:2])
-        self.single_parent = parents[0] if len(parents) == 1 else None
-        if self.single_parent or not parents:
-            # Nothing to choose: the entry goes to the only parent, or
-            # there is no parent to pick from at all.
-            self.fields["parent"].widget = forms.HiddenInput()
-            self.fieldsets = [
-                {**fieldset, "fields": [f for f in fieldset["fields"] if f != "parent"]}
-                for fieldset in self.fieldsets
-            ] + [{"fields": ["parent"], "layout": "hidden"}]
-        else:
+        self.single_parent = models.single_parent()
+        # Nothing to choose: the entry goes to the only milk-producing parent,
+        # or there is no parent to pick from at all.
+        if not limit_to_milk_parents(self):
             self.fields["parent"].help_text = _(
                 "A discard takes this parent's oldest milk first. "
                 "Empty: the oldest milk of anyone."

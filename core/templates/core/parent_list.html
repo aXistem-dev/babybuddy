@@ -26,6 +26,7 @@
                     <th>{% trans "First Name" %}</th>
                     <th>{% trans "Last Name" %}</th>
                     <th>{% trans "Children" %}</th>
+                    <th>{% trans "Breast milk" %}</th>
                     <th class="text-center">{% trans "Actions" %}</th>
                 </tr>
             </thead>
@@ -36,7 +37,7 @@
                             {% if parent.picture %}
                                 {% include "core/parent_thumbnail.html" %}
                             {% else %}
-                                <img src="{% static 'babybuddy/img/core/child-placeholder.png' %}"
+                                <img src="{% static 'babybuddy/img/core/parent-placeholder.png' %}"
                                      width="40"
                                      height="40"
                                      class="img-fluid rounded-circle" />
@@ -47,6 +48,7 @@
                         </th>
                         <td>{{ parent.last_name }}</td>
                         <td>{{ parent.children.all|join:", " }}</td>
+                        <td>{{ parent.produces_milk|yesno|capfirst }}</td>
                         <td class="text-center">
                             <div class="btn-group btn-group-sm"
                                  role="group"
@@ -68,7 +70,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <th colspan="5">{% trans "No parents found." %}</th>
+                        <th colspan="6">{% trans "No parents found." %}</th>
                     </tr>
                 {% endfor %}
             </tbody>

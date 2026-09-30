@@ -300,6 +300,14 @@ class Parent(models.Model):
     picture = models.ImageField(
         blank=True, null=True, upload_to="parent/picture/", verbose_name=_("Picture")
     )
+    produces_milk = models.BooleanField(
+        default=True,
+        verbose_name=_("Produces breast milk"),
+        help_text=_(
+            "Only these parents can be picked for pumping, breastfeeding and "
+            "stash milk."
+        ),
+    )
     children = models.ManyToManyField(
         "Child",
         blank=True,
@@ -329,18 +337,30 @@ class Parent(models.Model):
         return "{} {}".format(self.first_name, self.last_name)
 
 
+def milk_parents():
+    """The parents that can pump, breastfeed or own stash milk."""
+    return Parent.objects.filter(produces_milk=True)
+
+
 def parent_for_child(child):
-    """The single parent linked to `child`, or None when there are none or several."""
+    """The single milk-producing parent linked to `child`, or None when there
+    are none or several."""
     if child is None:
         return None
-    parents = list(child.parents.all()[:2])
+    parents = list(child.parents.filter(produces_milk=True)[:2])
     return parents[0] if len(parents) == 1 else None
 
 
 def single_parent():
-    """The only Parent in the system, or None when there are none or several."""
-    parents = list(Parent.objects.all()[:2])
+    """The only milk-producing Parent, or None when there are none or several."""
+    parents = list(milk_parents()[:2])
     return parents[0] if len(parents) == 1 else None
+
+
+def shows_milk_parent():
+    """Whether there is a choice of whose milk it is: with at most one
+    milk-producing parent, the parent is filled in and never shown."""
+    return milk_parents().count() > 1
 
 
 class DiaperChange(models.Model):

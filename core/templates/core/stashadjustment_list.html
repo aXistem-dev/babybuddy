@@ -1,5 +1,5 @@
 {% extends "babybuddy/page.html" %}
-{% load datetime i18n widget_tweaks %}
+{% load datetime i18n misc widget_tweaks %}
 {% block title %}
     {% trans "Stash adjustments" %}
 {% endblock %}
@@ -10,6 +10,7 @@
     <li class="breadcrumb-item active" aria-current="page">{% trans "Stash adjustments" %}</li>
 {% endblock %}
 {% block content %}
+    {% show_milk_parent as show_parent %}
     <h1>
         {% trans "Stash adjustments" %}
         {% if perms.core.add_stashadjustment %}
@@ -28,7 +29,9 @@
                     <th>{% trans "Date" %}</th>
                     <th>{% trans "Kind" %}</th>
                     <th>{% trans "Amount" %}</th>
-                    <th>{% trans "Parent" %}</th>
+                    {% if show_parent %}
+                        <th>{% trans "Parent" %}</th>
+                    {% endif %}
                     <th>{% trans "Feeding" %}</th>
                     <th>{% trans "Tags" %}</th>
                 </tr>
@@ -57,13 +60,15 @@
                         <th scope="row">{{ adjustment.time|datetime_short }}</th>
                         <td>{{ adjustment.get_kind_display }}{% if adjustment.reason %} ({{ adjustment.reason }}){% endif %}</td>
                         <td class="{% if adjustment.signed_amount < 0 %}text-danger{% endif %}">{{ adjustment.signed_amount }}</td>
-                        <td>
-                            {% if adjustment.parent %}
-                                <a href="{% url 'core:parent' adjustment.parent.slug %}">{{ adjustment.parent }}</a>
-                            {% else %}
-                                –
-                            {% endif %}
-                        </td>
+                        {% if show_parent %}
+                            <td>
+                                {% if adjustment.parent %}
+                                    <a href="{% url 'core:parent' adjustment.parent.slug %}">{{ adjustment.parent }}</a>
+                                {% else %}
+                                    –
+                                {% endif %}
+                            </td>
+                        {% endif %}
                         <td>
                             {% if adjustment.feeding %}
                                 <a href="{% url 'core:feeding-update' adjustment.feeding.id %}">{{ adjustment.feeding }}</a>

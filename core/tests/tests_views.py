@@ -499,6 +499,8 @@ class ParentDetailPermissionsTestCase(TestCase):
         self.assertIn("2 sessions, 15 min in the last 7 days", content)
 
     def test_feeding_list_links_parent_only_with_view_parent(self):
+        # Names show only when there is a choice of milk-producing parent.
+        models.Parent.objects.create(first_name="Casey")
         child = models.Child.objects.create(
             first_name="Sam", birth_date=timezone.localdate()
         )
@@ -662,6 +664,8 @@ class StashPagesTestCase(TestCase):
         self.assertEqual(len(one), len(more))
 
     def test_movement_links_need_change_permission(self):
+        # Names show only when there is a choice of milk-producing parent.
+        models.Parent.objects.create(first_name="Casey")
         self.add_movements(1, 1)
         links = [
             "/pumping/{}/".format(models.Pumping.objects.get().id),
@@ -685,6 +689,8 @@ class StashPagesTestCase(TestCase):
             self.assertIn(link, content)
 
     def test_stash_page_child_filter(self):
+        # Names show only when there is a choice of milk-producing parent.
+        models.Parent.objects.create(first_name="Casey")
         sam = models.Child.objects.create(
             first_name="Sam", birth_date=timezone.localdate()
         )
@@ -820,6 +826,20 @@ class StashPagesTestCase(TestCase):
         self._bottle_from_stash(1)
         page = self.c.get("/stash/")
         self.assertContains(page, "/stash/warning/dismiss/")
+
+    def test_one_milk_parent_is_never_named(self):
+        self._login("stash-admin", is_superuser=True)
+        models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        t = timezone.localtime() - timezone.timedelta(hours=2)
+        models.Pumping.objects.create(
+            parent=self.robin, start=t, end=t, amount=60, stash_amount=60
+        )
+        content = self.c.get("/stash/").content.decode()
+        self.assertNotIn("Pumping · Robin", content)
+        self.assertNotIn("<td>Robin</td>", content)
+        form = self.c.get("/stash/adjustments/add/").context["form"]
+        self.assertTrue(form.fields["parent"].widget.is_hidden)
+        self.assertEqual(list(form.fields["parent"].queryset), [self.robin])
 
     def test_lots_show_whose_milk_and_throw_away_takes_that_lot(self):
         self._login("stash-admin", is_superuser=True)
