@@ -437,3 +437,54 @@ class EntryPermissionsTestCase(TestCase):
         timer.refresh_from_db()
         self.assertEqual(timer.name, "Edited timer")
         self.assertEqual(timer.user_id, self.user.pk)
+
+    def test_event_add_edit_without_delete_or_type_management(self):
+        event_type = models.EventType.objects.get(slug="bath")
+        data = {
+            "child": self.child.pk,
+            "type": event_type.pk,
+            "time": self.start.isoformat(),
+        }
+        self.assertEqual(self.client.get("/events/").status_code, 200)
+        self.assertEqual(self.client.get("/events/add/").status_code, 200)
+        self.assertEqual(self.client.post("/events/add/", data).status_code, 302)
+        event = models.Event.objects.latest("id")
+        self.assertEqual(event.type, event_type)
+        url = f"/events/{event.pk}/"
+        self.assertEqual(self.client.get(url).status_code, 200)
+        data["notes"] = "Edited"
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.notes, "Edited")
+
+        self.assertEqual(self.client.post(f"{url}delete/").status_code, 403)
+        self.assertTrue(models.Event.objects.filter(pk=event.pk).exists())
+
+        self.assertEqual(self.client.get("/event-types/").status_code, 200)
+        for path in (
+            "/event-types/add/",
+            f"/event-types/{event_type.slug}/",
+            f"/event-types/{event_type.slug}/delete/",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 403)
+                self.assertEqual(
+                    self.client.post(path, {"name": "Changed"}).status_code, 403
+                )
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.name, "Bath")
+
+    def test_event_tags_require_tag_permissions(self):
+        count = models.Event.objects.count()
+        response = self.client.post(
+            "/events/add/",
+            {
+                "child": self.child.pk,
+                "type": models.EventType.objects.get(slug="bath").pk,
+                "time": self.start.isoformat(),
+                "tags": "brand-new",
+            },
+        )
+        self.assert_tag_denied(response)
+        self.assertEqual(models.Event.objects.count(), count)
+        self.assertFalse(models.Tag.objects.filter(name="brand-new").exists())

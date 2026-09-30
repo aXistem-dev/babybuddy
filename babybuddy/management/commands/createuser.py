@@ -65,8 +65,8 @@ class Command(BaseCommand):
             help=(
                 "Specifies caregiver privileges for the user: add and edit "
                 "care entries (feedings, diaper changes, sleep, timers, "
-                "medication, temperature, weight, notes and tummy time) for "
-                "every child, without access to pumping, height, BMI, head "
+                "medication, temperature, weight, notes, tummy time and events) "
+                "for every child, without access to pumping, height, BMI, head "
                 "circumference, user management or settings. Default is False."
             ),
         )

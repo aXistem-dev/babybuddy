@@ -33,6 +33,7 @@ class CaregiverAccessTestCase(APITestCase):
             models.Weight,
             models.Note,
             models.TummyTime,
+            models.Event,
         ):
             with self.subTest(model=model.__name__):
                 endpoint = reverse(f"api:{model._meta.model_name}-list")
@@ -50,6 +51,19 @@ class CaregiverAccessTestCase(APITestCase):
                 self.assertEqual(
                     self.client.post(endpoint, {}, format="json").status_code, 403
                 )
+
+        endpoint = reverse("api:eventtype-list")
+        self.assertEqual(self.client.get(endpoint).status_code, 200)
+        self.assertEqual(
+            self.client.post(endpoint, {"name": "Swim"}, format="json").status_code,
+            403,
+        )
+        event_type = models.EventType.objects.first()
+        endpoint = reverse("api:eventtype-detail", kwargs={"slug": event_type.slug})
+        self.assertEqual(
+            self.client.patch(endpoint, {"name": "Changed"}).status_code, 403
+        )
+        self.assertEqual(self.client.delete(endpoint).status_code, 403)
 
         child = models.Child.objects.first()
         endpoint = reverse("api:child-detail", kwargs={"slug": child.slug})
@@ -95,6 +109,9 @@ class CaregiverAccessTestCase(APITestCase):
             "/weight/add/",
             "/notes/add/",
             "/tummy-time/add/",
+            "/events/",
+            "/events/add/",
+            "/event-types/",
             "/user/settings/",
             reverse("dashboard:dashboard-child", kwargs={"slug": child.slug}),
             reverse("core:child", kwargs={"slug": child.slug}),
@@ -113,6 +130,7 @@ class CaregiverAccessTestCase(APITestCase):
             "/bmi/",
             "/head-circumference/",
             "/tags/",
+            "/event-types/add/",
             "/users/",
             "/users/add/",
             reverse(

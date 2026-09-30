@@ -13,10 +13,14 @@ from django.db.models.signals import post_migrate
 # default is more access rather than less. What stays out is what a caregiver
 # has no reason to record: pumping, the growth measurements that are tracked
 # over months (height, BMI, head circumference), and everything administrative
-# — children, users, tags and site settings. `delete` is never granted.
+# — children, users, tags, event types and site settings. Event types can be
+# viewed, since logging an event through the API means choosing one of them.
+# `delete` is never granted.
 CAREGIVER_VIEW_MODELS = (
     "child",
     "timer",
+    "event",
+    "eventtype",
     "feeding",
     "diaperchange",
     "sleep",
@@ -29,6 +33,7 @@ CAREGIVER_VIEW_MODELS = (
 
 CAREGIVER_ADD_CHANGE_MODELS = (
     "timer",
+    "event",
     "feeding",
     "diaperchange",
     "sleep",

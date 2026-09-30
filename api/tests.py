@@ -1272,6 +1272,18 @@ class CaregiverAPITestCase(APITestCase):
             response = self.client.post(endpoint, data, format="json")
             self.assertEqual(response.status_code, status.HTTP_201_CREATED, endpoint)
 
+    def test_caregiver_can_add_event(self):
+        response = self.client.get(reverse("api:eventtype-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.post(
+            reverse("api:event-list"), {"child": 1, "type": "bath"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.post(
+            reverse("api:eventtype-list"), {"name": "Swim"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_caregiver_can_add_weight(self):
         response = self.client.post(
             reverse("api:weight-list"),
@@ -1552,6 +1564,7 @@ class CaregiverWebTestCase(APITestCase):
             "/changes/add/",
             "/sleep/add/",
             "/timers/add/",
+            "/events/add/",
             "/dashboard/",
             # Personal preferences stay available to every logged-in user.
             "/user/settings/",
