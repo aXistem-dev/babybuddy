@@ -69,7 +69,7 @@ class EventTypeViewSet(viewsets.ModelViewSet):
     queryset = models.EventType.objects.all()
     serializer_class = serializers.EventTypeSerializer
     lookup_field = "slug"
-    filterset_fields = ("name", "slug")
+    filterset_fields = ("id", "name", "slug")
     ordering_fields = ("name", "slug")
     ordering = "name"
 

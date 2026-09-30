@@ -462,6 +462,14 @@ class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertIn("name", response.data)
 
+    def test_get_by_id(self):
+        response = self.client.get(self.endpoint, {"id": 2})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [dict(r) for r in response.data["results"]],
+            [{"id": 2, "name": "Nail trim", "slug": "nail-trim"}],
+        )
+
     def test_post_long_name(self):
         response = self.client.post(self.endpoint, {"name": "x" * 101}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

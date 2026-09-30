@@ -1394,6 +1394,12 @@ paths:
           description: The initial index from which to return the results.
           schema:
             type: integer
+        - name: id
+          required: false
+          in: query
+          description: id
+          schema:
+            type: string
         - name: name
           required: false
           in: query
