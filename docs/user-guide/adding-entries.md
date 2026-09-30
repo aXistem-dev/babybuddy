@@ -13,6 +13,23 @@ Diaper Change. If necessary, modify the child or time for the change. Select
 whether the diaper is wet, solid, or both, and if add any details such as color,
 amount, etc. When complete, select Submit.
 
+### Event
+
+Events are for everything else that happens at a moment and is worth keeping
+track of, such as a bath, a pajama change or a nail trim. Each event has a
+type, and the list of types is up to you.
+
+To set up the types, select Activities and then Events from the top navigation
+bar, and select Event Types. Select Add Event Type and enter a name, e.g. "Bath"
+or "Nail trim". A type that is in use by events can be renamed, but not deleted.
+
+To add an event, select the plus sign in the top navigation bar and select
+Event. If necessary, modify the child or the time, and select the type of the
+event. Add any notes or tags and select Submit.
+
+The child dashboard shows how long ago the last event of each type was, and
+the Events per Day report shows how often each type was recorded.
+
 ### Feeding
 
 <video style="max-width: 320px;" autoplay controls loop muted playsinline>
