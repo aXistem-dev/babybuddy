@@ -7,6 +7,7 @@ from django.utils.translation import gettext as _
 
 from core.models import (
     DiaperChange,
+    Event,
     Feeding,
     Note,
     Sleep,
@@ -37,6 +38,8 @@ def get_objects(date, child=None, user=None):
 
     if permitted("diaperchange"):
         _add_diaper_changes(min_date, max_date, events, child)
+    if permitted("event"):
+        _add_events(min_date, max_date, events, child)
     if permitted("feeding"):
         _add_feedings(min_date, max_date, events, child)
     if permitted("medication"):
@@ -234,6 +237,35 @@ def _add_diaper_changes(min_date, max_date, events, child):
                 },
                 "edit_link": reverse("core:diaperchange-update", args=[instance.id]),
                 "model_name": instance.model_name,
+                "tags": instance.tags.all(),
+            }
+        )
+
+
+def _add_events(min_date, max_date, events, child):
+    instances = (
+        Event.objects.filter(time__range=(min_date, max_date))
+        .select_related("child", "type")
+        .order_by("-time")
+    )
+    if child:
+        instances = instances.filter(child=child)
+    for instance in instances:
+        details = []
+        if instance.notes:
+            details.append(instance.notes)
+        events.append(
+            {
+                "time": timezone.localtime(instance.time),
+                "event": _("%(type)s for %(child)s.")
+                % {
+                    "type": instance.type.name,
+                    "child": instance.child.first_name,
+                },
+                "details": details,
+                "edit_link": reverse("core:event-update", args=[instance.id]),
+                "model_name": instance.model_name,
+                "icon": "tag",
                 "tags": instance.tags.all(),
             }
         )

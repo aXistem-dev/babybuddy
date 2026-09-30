@@ -352,6 +352,11 @@ class TimelinePermissionsTestCase(TestCase):
             child=self.child, note="Timeline private note", time=now
         )
         models.Temperature.objects.create(child=self.child, temperature=38.9, time=now)
+        models.Event.objects.create(
+            child=self.child,
+            type=models.EventType.objects.create(name="Timeline bath"),
+            time=now,
+        )
         models.TummyTime.objects.create(
             child=self.child, start=now, end=now + timezone.timedelta(minutes=5)
         )
@@ -399,12 +404,13 @@ class TimelinePermissionsTestCase(TestCase):
 
         model_names = self._model_names(page)
         self.assertIn("feeding", model_names)
-        for excluded in ["medication", "note", "temperature", "tummytime"]:
+        for excluded in ["event", "medication", "note", "temperature", "tummytime"]:
             self.assertNotIn(excluded, model_names)
 
         content = page.content.decode()
         self.assertNotIn("Timeline Medication", content)
         self.assertNotIn("Timeline private note", content)
+        self.assertNotIn("Timeline bath", content)
 
     def test_read_only_user_sees_the_whole_timeline(self):
         self._login("readonly", read_only=True)
@@ -415,7 +421,9 @@ class TimelinePermissionsTestCase(TestCase):
         self.assertIn("feeding", model_names)
         self.assertIn("medication", model_names)
         self.assertIn("note", model_names)
+        self.assertIn("event", model_names)
 
         content = page.content.decode()
         self.assertIn("Timeline Medication", content)
         self.assertIn("Timeline private note", content)
+        self.assertIn("Timeline bath", content)
