@@ -2,6 +2,7 @@
 from django.db.models import Count
 from django.db.models.functions import TruncDate
 from django.utils.translation import gettext as _
+from django.utils.translation import get_language
 
 import plotly.offline as plotly
 import plotly.graph_objs as go
@@ -33,7 +34,7 @@ def event_types(instances):
 
     traces = []
     for name, (dates, counts) in per_type.items():
-        traces.append(go.Bar(name=name, x=dates, y=counts, hovertemplate=name))
+        traces.append(go.Bar(name=name, x=dates, y=counts, hovertemplate="%{y}"))
 
     layout_args = utils.default_graph_layout_options()
     layout_args["barmode"] = "stack"
@@ -49,5 +50,10 @@ def event_types(instances):
     layout_args["yaxis"]["title"] = _("Number of events")
 
     fig = go.Figure({"data": traces, "layout": go.Layout(**layout_args)})
-    output = plotly.plot(fig, output_type="div", include_plotlyjs=False)
+    output = plotly.plot(
+        fig,
+        output_type="div",
+        include_plotlyjs=False,
+        config={"locale": get_language()},
+    )
     return utils.split_graph_output(output)
