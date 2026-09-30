@@ -42,13 +42,26 @@ class StashTestCase(TestCase):
             stash_amount=drunk,
         )
 
-    def adjust(self, hours_ago, amount, kind, reason=""):
+    def adjust(self, hours_ago, amount, kind, reason="", parent=None):
         return models.StashAdjustment.objects.create(
             time=at(hours_ago),
             amount=amount,
             kind=kind,
             reason=reason,
+            parent=parent,
         )
+
+    def pump_by(self, parent, hours_ago, amount):
+        return models.Pumping.objects.create(
+            parent=parent,
+            start=at(hours_ago + 0.3),
+            end=at(hours_ago),
+            amount=amount,
+            stash_amount=amount,
+        )
+
+    def lots(self):
+        return [(lot.parent_id, round(lot.amount, 2)) for lot in stash.stash_lots()]
 
     def test_empty(self):
         self.assertFalse(stash.stash_has_activity())
@@ -66,6 +79,40 @@ class StashTestCase(TestCase):
         self.assertFalse(stash.stash_has_activity())  # pumped, not stored
         self.adjust(1, 10, "added")
         self.assertTrue(stash.stash_has_activity())
+
+    def test_discard_with_a_parent_takes_that_parents_oldest_milk(self):
+        casey = models.Parent.objects.create(first_name="Casey")
+        self.pump_by(self.robin, 10, 100)
+        self.pump_by(casey, 8, 60)
+        self.pump_by(casey, 5, 40)
+        self.adjust(1, 50, "discarded", parent=casey)
+        self.assertEqual(
+            self.lots(), [(self.robin.id, 100), (casey.id, 10), (casey.id, 40)]
+        )
+
+    def test_discard_beyond_that_parents_milk_takes_the_oldest_of_anyone(self):
+        casey = models.Parent.objects.create(first_name="Casey")
+        self.pump_by(self.robin, 10, 100)
+        self.pump_by(casey, 5, 30)
+        self.adjust(1, 50, "discarded", parent=casey)
+        self.assertEqual(self.lots(), [(self.robin.id, 80)])
+        self.assertEqual(stash.stash_balance(), 80)
+
+    def test_discard_without_a_parent_and_bottles_take_the_oldest_of_anyone(self):
+        casey = models.Parent.objects.create(first_name="Casey")
+        self.pump_by(self.robin, 10, 100)
+        self.pump_by(casey, 5, 100)
+        self.adjust(2, 30, "discarded")
+        self.bottle(1, 30)
+        self.assertEqual(self.lots(), [(self.robin.id, 40), (casey.id, 100)])
+
+    def test_summary_lots_say_whose_milk(self):
+        self.pump_by(self.robin, 10, 100)
+        self.adjust(5, 20, "added")
+        self.assertEqual(
+            [lot["parent"] for lot in stash.stash_summary()["lots"]],
+            [self.robin.id, None],
+        )
 
     def test_negative_since_marks_the_current_dip(self):
         self.assertIsNone(stash.stash_summary()["negative_since"])

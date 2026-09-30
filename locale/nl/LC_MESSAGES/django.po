@@ -3441,6 +3441,14 @@ msgstr "Recentste bewegingen"
 msgid "All stash adjustments"
 msgstr "Alle voorraadaanpassingen"
 
+#: core/forms.py:790
+msgid ""
+"A discard takes this parent's oldest milk first. Empty: the oldest milk of "
+"anyone."
+msgstr ""
+"Weggooien neemt eerst de oudste melk van deze ouder. Leeg: de oudste melk "
+"van wie dan ook."
+
 #: core/templates/core/stash.html:64
 msgid "Baby"
 msgstr "Baby"

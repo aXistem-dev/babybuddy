@@ -782,6 +782,11 @@ class StashAdjustmentForm(CoreModelForm, TaggableModelForm):
                 {**fieldset, "fields": [f for f in fieldset["fields"] if f != "parent"]}
                 for fieldset in self.fieldsets
             ] + [{"fields": ["parent"], "layout": "hidden"}]
+        else:
+            self.fields["parent"].help_text = _(
+                "A discard takes this parent's oldest milk first. "
+                "Empty: the oldest milk of anyone."
+            )
         if self.instance.feeding_id:
             # A discard logged at a feeding stays a discard; its amount can
             # still be edited here.

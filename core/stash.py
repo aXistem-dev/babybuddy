@@ -3,7 +3,6 @@
 Pumping.stash_amount (in), Feeding.stash_amount (out) and StashAdjustment rows, so
 editing or deleting any of them corrects every total automatically."""
 
-from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -30,6 +29,8 @@ class StashEvent:
 class StashLot:
     time: datetime
     amount: float
+    # Whose milk it is: the pumping's parent, or an "added" entry's.
+    parent_id: int = None
 
     def age_hours(self, at=None):
         return ((at or timezone.now()) - self.time).total_seconds() / 3600
@@ -118,27 +119,49 @@ def _negative_since_from_events(events):
     return since
 
 
+def _event_parent_id(event):
+    """The parent a stash event belongs to: a pumping's parent, or the parent
+    set on a stash entry. Bottles have none."""
+    if event.kind == "feeding":
+        return None
+    return event.obj.parent_id
+
+
+def _take_oldest(lots, need, parent_id=None):
+    """Take `need` ml from the oldest lots, only `parent_id`'s when given.
+    Returns how much could not be taken."""
+    for lot in lots:
+        if need <= EPSILON:
+            break
+        if parent_id is not None and lot.parent_id != parent_id:
+            continue
+        used = min(lot.amount, need)
+        lot.amount -= used
+        need -= used
+    lots[:] = [lot for lot in lots if lot.amount > EPSILON]
+    return need
+
+
 def _stash_lots_from_events(events):
     """Compute FIFO lots from a list of events.
 
-    Milk that left an empty stash is a shortfall that later inflows repay
-    first, so the lots always add up to the (non-negative) balance."""
-    lots = deque()
+    Every outflow takes the oldest milk first. A discard with a parent takes
+    that parent's oldest milk first, and only then anyone's. Milk that left an
+    empty stash is a shortfall that later inflows repay first, so the lots
+    always add up to the (non-negative) balance."""
+    lots = []
     shortfall = 0
     for event in events:
         if event.amount > 0:
             amount = event.amount - shortfall
             shortfall = max(-amount, 0)
             if amount > EPSILON:
-                lots.append(StashLot(event.time, amount))
+                lots.append(StashLot(event.time, amount, _event_parent_id(event)))
             continue
         need = -event.amount
-        while need > EPSILON and lots:
-            if lots[0].amount <= need + EPSILON:
-                need -= lots.popleft().amount
-            else:
-                lots[0].amount -= need
-                need = 0
+        if event.kind == "discarded" and _event_parent_id(event) is not None:
+            need = _take_oldest(lots, need, _event_parent_id(event))
+        need = _take_oldest(lots, need)
         if need > EPSILON:
             shortfall += need
     return [lot for lot in lots if lot.amount >= MIN_LOT_AMOUNT]
@@ -187,6 +210,7 @@ def stash_summary(at=None):
             {
                 "time": lot.time,
                 "amount": round(lot.amount, 2),
+                "parent": lot.parent_id,
                 # Kept unrounded so a "Throw away" link empties the lot
                 # exactly, instead of leaving a sliver behind.
                 "throw_away_amount": lot.amount,

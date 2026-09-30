@@ -43,12 +43,13 @@
                     <tr>
                         <td>{{ lot.time|date:"SHORT_DATETIME_FORMAT" }}</td>
                         <td>{{ lot.amount }}</td>
+                        <td>{{ lot.parent_name }}</td>
                         <td>{{ lot.age_hours }} h</td>
                         <td>
                             {% if lot.status == "expired" %}
                                 <span class="badge bg-danger">{% trans "throw away" %}</span>
                                 {% if lot.is_oldest_expired and perms.core.add_stashadjustment %}
-                                    <a href="{% url 'core:stashadjustment-add' %}?kind=discarded&amount={{ lot.throw_away_amount|stringformat:".10g" }}&reason={{ throw_away_reason|urlencode }}"
+                                    <a href="{% url 'core:stashadjustment-add' %}?kind=discarded&amount={{ lot.throw_away_amount|stringformat:".10g" }}&reason={{ throw_away_reason|urlencode }}{% if lot.parent_slug %}&parent={{ lot.parent_slug }}{% endif %}"
                                        class="btn btn-sm btn-outline-danger">{% trans "Throw away" %}</a>
                                 {% endif %}
                             {% elif lot.status == "warn" %}

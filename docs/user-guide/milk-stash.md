@@ -105,6 +105,12 @@ splitting a lot across several bottles or combining several lots into one
 bottle as needed. The age shown always assumes the oldest milk really is used
 first.
 
+One exception: a **Discarded** entry with a parent takes that parent's
+oldest milk first (and only then anyone's, if that parent's milk runs out).
+Without a parent, a discard takes the oldest milk of anyone, like a bottle.
+The Milk stash page shows whose milk each lot is, and its **Throw away**
+button fills in that lot's parent.
+
 For example: two pumping sessions are stored in the stash, 120 ml and then
 150 ml. A 70 ml bottle is given from the stash: it comes entirely from the
 first (older) session, leaving 50 ml of it. A second 70 ml bottle empties that

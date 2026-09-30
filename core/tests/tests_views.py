@@ -821,6 +821,18 @@ class StashPagesTestCase(TestCase):
         page = self.c.get("/stash/")
         self.assertContains(page, "/stash/warning/dismiss/")
 
+    def test_lots_show_whose_milk_and_throw_away_takes_that_lot(self):
+        self._login("stash-admin", is_superuser=True)
+        robin = self.robin
+        models.Parent.objects.create(first_name="Casey")
+        t = timezone.localtime() - timezone.timedelta(hours=80)
+        models.Pumping.objects.create(
+            parent=robin, start=t, end=t, amount=60, stash_amount=60
+        )
+        content = self.c.get("/stash/").content.decode()
+        self.assertIn("<td>Robin</td>", content)
+        self.assertIn("&parent={}".format(robin.slug), content)
+
     def test_menu_has_one_stash_entry_and_page_links_the_list(self):
         self._login("stash-admin", is_superuser=True)
         content = self.c.get("/stash/").content.decode()

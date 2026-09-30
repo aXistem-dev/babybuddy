@@ -499,6 +499,13 @@ class StashView(PermissionRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["summary"] = stash.stash_summary()
+        parents = {p.id: p for p in models.Parent.objects.all()}
+        for lot in context["summary"]["lots"]:
+            # Whose milk each lot is, and the slug a "Throw away" link passes
+            # so the discard takes exactly that lot.
+            parent = parents.get(lot["parent"])
+            lot["parent_name"] = str(parent) if parent else ""
+            lot["parent_slug"] = parent.slug if parent else ""
         token = _stash_warning_token(context["summary"])
         context["show_negative_warning"] = bool(token) and (
             self.request.COOKIES.get(STASH_WARNING_COOKIE) != token
