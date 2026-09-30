@@ -70,6 +70,18 @@ class DiaperChangeFilter(TimeFieldFilter, TagsFieldFilter):
         )
 
 
+class EventFilter(TimeFieldFilter, TagsFieldFilter):
+    type = filters.CharFilter(
+        field_name="type__slug",
+        label="type",
+        help_text="The slug of an event type",
+    )
+
+    class Meta(TimeFieldFilter.Meta):
+        model = models.Event
+        fields = sorted(TimeFieldFilter.Meta.fields + ["type"])
+
+
 class FeedingFilter(StartEndFieldFilter, TagsFieldFilter):
     class Meta(StartEndFieldFilter.Meta):
         model = models.Feeding

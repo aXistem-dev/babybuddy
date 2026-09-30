@@ -1377,6 +1377,641 @@ paths:
           description: ""
       tags:
         - api
+  /api/event-types/:
+    get:
+      operationId: listEventTypes
+      description: ""
+      parameters:
+        - name: limit
+          required: false
+          in: query
+          description: Number of results to return per page.
+          schema:
+            type: integer
+        - name: offset
+          required: false
+          in: query
+          description: The initial index from which to return the results.
+          schema:
+            type: integer
+        - name: name
+          required: false
+          in: query
+          description: name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - count
+                  - results
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=400&limit=100
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=200&limit=100
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventType"
+          description: ""
+      tags:
+        - api
+    post:
+      operationId: createEventType
+      description: ""
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventType"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/EventType"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/EventType"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventType"
+          description: ""
+      tags:
+        - api
+  /api/event-types/{slug}/:
+    get:
+      operationId: retrieveEventType
+      description: ""
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: ""
+          schema:
+            type: string
+        - name: name
+          required: false
+          in: query
+          description: name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventType"
+          description: ""
+      tags:
+        - api
+    put:
+      operationId: updateEventType
+      description: ""
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: ""
+          schema:
+            type: string
+        - name: name
+          required: false
+          in: query
+          description: name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventType"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/EventType"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/EventType"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventType"
+          description: ""
+      tags:
+        - api
+    patch:
+      operationId: partialUpdateEventType
+      description: ""
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: ""
+          schema:
+            type: string
+        - name: name
+          required: false
+          in: query
+          description: name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventType"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/EventType"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/EventType"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventType"
+          description: ""
+      tags:
+        - api
+    delete:
+      operationId: destroyEventType
+      description: 'Delete an event type. A type that is still used by events can not
+        be
+
+        deleted.'
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          description: ""
+          schema:
+            type: string
+        - name: name
+          required: false
+          in: query
+          description: name
+          schema:
+            type: string
+        - name: slug
+          required: false
+          in: query
+          description: slug
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: ""
+      tags:
+        - api
+  /api/events/:
+    get:
+      operationId: listEvents
+      description: ""
+      parameters:
+        - name: limit
+          required: false
+          in: query
+          description: Number of results to return per page.
+          schema:
+            type: integer
+        - name: offset
+          required: false
+          in: query
+          description: The initial index from which to return the results.
+          schema:
+            type: integer
+        - name: child
+          required: false
+          in: query
+          description: child
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: type
+          required: false
+          in: query
+          description: type
+          schema:
+            type: string
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - count
+                  - results
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=400&limit=100
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=200&limit=100
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Event"
+          description: ""
+      tags:
+        - api
+    post:
+      operationId: createEvent
+      description: ""
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Event"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/Event"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Event"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+          description: ""
+      tags:
+        - api
+  /api/events/{id}/:
+    get:
+      operationId: retrieveEvent
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Event.
+          schema:
+            type: string
+        - name: child
+          required: false
+          in: query
+          description: child
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: type
+          required: false
+          in: query
+          description: type
+          schema:
+            type: string
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+          description: ""
+      tags:
+        - api
+    put:
+      operationId: updateEvent
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Event.
+          schema:
+            type: string
+        - name: child
+          required: false
+          in: query
+          description: child
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: type
+          required: false
+          in: query
+          description: type
+          schema:
+            type: string
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Event"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/Event"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Event"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+          description: ""
+      tags:
+        - api
+    patch:
+      operationId: partialUpdateEvent
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Event.
+          schema:
+            type: string
+        - name: child
+          required: false
+          in: query
+          description: child
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: type
+          required: false
+          in: query
+          description: type
+          schema:
+            type: string
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Event"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/Event"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/Event"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+          description: ""
+      tags:
+        - api
+    delete:
+      operationId: destroyEvent
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Event.
+          schema:
+            type: string
+        - name: child
+          required: false
+          in: query
+          description: child
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: type
+          required: false
+          in: query
+          description: type
+          schema:
+            type: string
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: ""
+      tags:
+        - api
   /api/feedings/:
     get:
       operationId: listFeedings
@@ -6234,6 +6869,45 @@ components:
       required:
         - first_name
         - birth_date
+    Event:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        child:
+          type: integer
+        type:
+          type: string
+          description: The slug of an event type.
+        time:
+          type: string
+          format: date-time
+        notes:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - child
+        - type
+    EventType:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          readOnly: true
+          pattern: ^[-\w]+\z
+      required:
+        - name
     Feeding:
       type: object
       properties:

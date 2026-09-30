@@ -314,6 +314,175 @@ class DiaperChangeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertEqual(response.data, entry)
 
 
+class EventAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
+    endpoint = reverse("api:event-list")
+    model = models.Event
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(
+            response.data["results"][0],
+            {
+                "id": 1,
+                "child": 1,
+                "type": "bath",
+                "time": "2017-11-17T20:30:00-05:00",
+                "notes": "Warm water.",
+                "tags": [],
+            },
+        )
+
+    def test_get_with_filters(self):
+        cases = (
+            ({"type": "nail-trim"}, [2]),
+            ({"type": "bath"}, [1]),
+            ({"child": 1}, [1, 2]),
+            ({"date_min": "2017-11-17T00:00:00-05:00"}, [1]),
+            ({"date_max": "2017-11-17T00:00:00-05:00"}, [2]),
+            ({"date": "2017-11-16T09:00:00-05:00"}, [2]),
+        )
+        for params, ids in cases:
+            with self.subTest(params=params):
+                response = self.client.get(self.endpoint, params)
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual([e["id"] for e in response.data["results"]], ids)
+
+    def test_get_with_tags_filter(self):
+        models.Event.objects.get(pk=2).tags.add("hands")
+        response = self.client.get(self.endpoint, {"tags": "hands"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([e["id"] for e in response.data["results"]], [2])
+
+    def test_post(self):
+        data = {
+            "child": 1,
+            "type": "nail-trim",
+            "time": "2017-11-18T10:00:00-05:00",
+            "notes": "Both hands.",
+            "tags": ["hands"],
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["type"], "nail-trim")
+        obj = models.Event.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.type.slug, "nail-trim")
+        self.assertEqual(obj.notes, data["notes"])
+        self.assertEqual(list(obj.tags.names()), ["hands"])
+
+    def test_post_child_and_type_only(self):
+        # The whole request of a one-tap button: no time means now.
+        before = timezone.now()
+        response = self.client.post(
+            self.endpoint, {"child": 1, "type": "bath"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = models.Event.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.child_id, 1)
+        self.assertEqual(obj.type.slug, "bath")
+        self.assertGreaterEqual(obj.time, before)
+        self.assertLessEqual(obj.time, timezone.now())
+
+    def test_post_unknown_type(self):
+        response = self.client.post(
+            self.endpoint, {"child": 1, "type": "swim"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("type", response.data)
+
+    def test_post_type_id_is_not_accepted(self):
+        response = self.client.post(
+            self.endpoint, {"child": 1, "type": 1}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("type", response.data)
+
+    def test_post_future_time(self):
+        time = timezone.localtime() + timezone.timedelta(days=1)
+        response = self.client.post(
+            self.endpoint,
+            {"child": 1, "type": "bath", "time": time.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("time", response.data)
+
+    def test_patch(self):
+        endpoint = "{}{}/".format(self.endpoint, 1)
+        response = self.client.get(endpoint)
+        entry = response.data
+        entry["type"] = "nail-trim"
+        response = self.client.patch(endpoint, {"type": entry["type"]})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, entry)
+
+
+class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
+    endpoint = reverse("api:eventtype-list")
+    model = models.EventType
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [dict(r) for r in response.data["results"]],
+            [
+                {"id": 1, "name": "Bath", "slug": "bath"},
+                {"id": 2, "name": "Nail trim", "slug": "nail-trim"},
+            ],
+        )
+
+    def test_get_by_slug(self):
+        response = self.client.get("{}nail-trim/".format(self.endpoint))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], 2)
+
+    def test_post(self):
+        response = self.client.post(
+            self.endpoint, {"name": "Pajama change"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["slug"], "pajama-change")
+        self.assertTrue(models.EventType.objects.filter(slug="pajama-change").exists())
+
+    def test_post_ignores_slug(self):
+        response = self.client.post(
+            self.endpoint, {"name": "Pajama change", "slug": "other"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["slug"], "pajama-change")
+
+    def test_post_duplicate(self):
+        for name in ("Bath", "BATH"):
+            with self.subTest(name=name):
+                response = self.client.post(
+                    self.endpoint, {"name": name}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("name", response.data)
+
+    def test_patch(self):
+        endpoint = "{}nail-trim/".format(self.endpoint)
+        response = self.client.patch(endpoint, {"name": "Nail trim (hands)"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["slug"], "nail-trim-hands")
+
+    def test_delete(self):
+        endpoint = "{}{}/".format(self.endpoint, "nail-trim")
+        models.Event.objects.filter(type__slug="nail-trim").delete()
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_in_use(self):
+        endpoint = "{}{}/".format(self.endpoint, "bath")
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertTrue(models.EventType.objects.filter(slug="bath").exists())
+
+
 class FeedingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
     endpoint = reverse("api:feeding-list")
     model = models.Feeding
@@ -1701,3 +1870,14 @@ class TestSchemaAPITestCase(APITestCase):
         names = [parameter["name"] for parameter in parameters]
         for name in ("child", "start", "start_min", "end", "end_max", "tags"):
             self.assertIn(name, names)
+
+        parameters = response.data["paths"]["/api/events/"]["get"]["parameters"]
+        names = [parameter["name"] for parameter in parameters]
+        for name in ("child", "type", "date", "date_min", "date_max", "tags"):
+            self.assertIn(name, names)
+
+    def test_api_root_lists_events(self):
+        response = self.client.get("/api/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("events", response.data)
+        self.assertIn("event-types", response.data)

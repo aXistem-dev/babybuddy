@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
 
 from rest_framework import mixins, status, viewsets, views
@@ -54,6 +55,36 @@ class DiaperChangeViewSet(viewsets.ModelViewSet):
     filterset_class = filters.DiaperChangeFilter
     ordering_fields = ("amount", "time")
     ordering = "-time"
+
+
+class EventViewSet(viewsets.ModelViewSet):
+    queryset = models.Event.objects.all()
+    serializer_class = serializers.EventSerializer
+    filterset_class = filters.EventFilter
+    ordering_fields = ("time",)
+    ordering = "-time"
+
+
+class EventTypeViewSet(viewsets.ModelViewSet):
+    queryset = models.EventType.objects.all()
+    serializer_class = serializers.EventTypeSerializer
+    lookup_field = "slug"
+    filterset_fields = ("name", "slug")
+    ordering_fields = ("name", "slug")
+    ordering = "name"
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete an event type. A type that is still used by events can not be
+        deleted.
+        """
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "This event type is used by events and can not be deleted."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
 
 class FeedingViewSet(viewsets.ModelViewSet):

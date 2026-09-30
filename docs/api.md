@@ -14,6 +14,8 @@ Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 - `/api/bmi/` (Body Mass Index)
 - `/api/children/`
 - `/api/changes/` (Diaper Changes)
+- `/api/event-types/`
+- `/api/events/`
 - `/api/feedings/`
 - `/api/head-circumference/`
 - `/api/height/`
@@ -252,6 +254,40 @@ Note that `child` and `start` match the timer values (and `end` is auto-populate
 
 Also note that the timer has been deleted.
 
+### Events
+
+Events record something that happened at a moment, of a type that is defined on
+the instance itself (e.g. "Bath" or "Nail trim"). The types are managed through
+`/api/event-types/`, where each type has an `id`, a `name` and a `slug`. The slug
+is generated from the name and is used to look a type up, e.g.
+`/api/event-types/nail-trim/`.
+
+The `type` field of an event is the **slug** of its event type, not its ID. The
+`time` field is optional and defaults to the time the request is received, so
+logging an event that just happened takes one request with only the child and
+the type:
+
+```shell
+curl --location --request POST '[...]/api/events/' \
+--header 'Authorization: Token [...]' \
+--header 'Content-Type: application/json' \
+--data-raw '{"child": 1, "type": "bath"}'
+```
+
+```json
+{
+  "id": 12,
+  "child": 1,
+  "type": "bath",
+  "time": "2024-05-28T19:30:02.112233-04:00",
+  "notes": null,
+  "tags": []
+}
+```
+
+Events can be filtered by `child`, `type` (a slug), `tags` and time (`date`,
+`date_min` and `date_max`), like the other endpoints with a time field.
+
 ### Response
 
 Returns JSON data in the response body describing the added/updated instance or
@@ -296,6 +332,9 @@ endpoint to be deleted. For example, to delete a Diaper Change entry with ID
 ```shell
 curl -X DELETE https://[...]/api/changes/947/ -H 'Authorization: Token [...]'
 ```
+
+An event type that is still used by events can not be deleted. The request is
+answered with `409 Conflict` and the type is kept.
 
 ### Response
 

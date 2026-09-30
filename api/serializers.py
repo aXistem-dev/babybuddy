@@ -194,6 +194,32 @@ class DiaperChangeSerializer(CoreModelSerializer, TaggableSerializer):
         )
 
 
+class EventSerializer(CoreModelSerializer, TaggableSerializer):
+    type = serializers.SlugRelatedField(
+        help_text="The slug of an event type.",
+        queryset=models.EventType.objects.all(),
+        slug_field="slug",
+    )
+
+    class Meta:
+        model = models.Event
+        fields = ("id", "child", "type", "time", "notes", "tags")
+
+
+class EventTypeSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = models.EventType
+        fields = ("id", "name", "slug")
+
+    def validate(self, attrs):
+        # Run the model's clean() method, which checks the generated slug.
+        instance = deepcopy(self.instance) if self.instance else models.EventType()
+        for attr, value in attrs.items():
+            setattr(instance, attr, value)
+        instance.clean()
+        return attrs
+
+
 class FeedingSerializer(CoreModelWithDurationSerializer, TaggableSerializer):
     class Meta(CoreModelWithDurationSerializer.Meta):
         model = models.Feeding
