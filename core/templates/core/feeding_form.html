@@ -59,12 +59,14 @@
     <script type="application/javascript">
     (function () {
         // The field's own row inside the form. A hidden field has none, and the
-        // nearest ".row" outside the form would be the whole page.
+        // nearest ".row" outside the form would be the whole page. Radio
+        // groups (child, parent) are a wrapper <div> with no `.form`.
         const row = (id) => {
             const el = document.getElementById(id);
             if (!el || el.type === "hidden") return null;
             const r = el.closest(".row, .mb-3, .form-group");
-            return r && el.form && el.form.contains(r) ? r : null;
+            const f = el.closest("form");
+            return r && f && f.contains(r) ? r : null;
         };
         const hide = (id, h) => { const r = row(id); if (r) r.hidden = h; };
         const breastMethods = ["left breast", "right breast", "both breasts"];

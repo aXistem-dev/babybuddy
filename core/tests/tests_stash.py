@@ -67,10 +67,20 @@ class StashTestCase(TestCase):
         self.assertFalse(stash.stash_has_activity())
         self.assertEqual(stash.stash_balance(), 0)
         self.assertEqual(stash.stash_summary()["status"], "ok")
+        # A bottle only starts as taken from the stash once it is in use.
+        self.assertEqual(
+            stash.stash_summary()["defaults"],
+            {"pumping_to_stash": True, "bottle_from_stash": False},
+        )
+
+    def test_bottle_default_follows_setting_once_the_stash_is_in_use(self):
+        self.pump(2, 100, 100)
         self.assertEqual(
             stash.stash_summary()["defaults"],
             {"pumping_to_stash": True, "bottle_from_stash": True},
         )
+        stash.settings().bottle_from_stash_default = False
+        self.assertFalse(stash.stash_summary()["defaults"]["bottle_from_stash"])
 
     def test_activity(self):
         models.Pumping.objects.create(
@@ -105,6 +115,23 @@ class StashTestCase(TestCase):
         self.adjust(2, 30, "discarded")
         self.bottle(1, 30)
         self.assertEqual(self.lots(), [(self.robin.id, 40), (casey.id, 100)])
+
+    def test_discard_without_a_parent_leaves_the_single_parents_fresh_milk(self):
+        self.adjust(100, 100, "added")  # expired starting stock, no parent
+        self.pump_by(self.robin, 2, 60)
+        self.adjust(1, 100, "discarded", "Older than 72 h")
+        self.assertEqual(self.lots(), [(self.robin.id, 60)])
+
+    def test_discard_at_a_bottle_follows_the_bottle(self):
+        """Milk discarded at a bottle takes the oldest milk of anyone, like
+        the bottle itself, even though it names the child's parent."""
+        casey = models.Parent.objects.create(first_name="Casey")
+        self.pump_by(casey, 10, 100)
+        self.pump_by(self.robin, 5, 100)
+        feeding = self.bottle(1, 50)
+        feeding.set_linked_discard(20)
+        self.assertEqual(feeding.linked_discard().parent, self.robin)
+        self.assertEqual(self.lots(), [(casey.id, 30), (self.robin.id, 100)])
 
     def test_summary_lots_say_whose_milk(self):
         self.pump_by(self.robin, 10, 100)

@@ -9,10 +9,11 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.test import Client as HttpClient
 from django.utils import timezone
+from django.utils.formats import get_format
 
 from faker import Faker
 
-from core import models, views
+from core import models, stash, views
 
 
 class ViewsTestCase(TestCase):
@@ -444,6 +445,18 @@ class ParentDetailPermissionsTestCase(TestCase):
         self.assertIn("Recent Pumpings", content)
         self.assertIn("Milk stash", content)
 
+    def test_milk_buttons_only_for_a_parent_who_produces_milk(self):
+        self._login("adder", ["view_parent", "add_pumping", "add_stashadjustment"])
+        buttons = ("Add pumping", "Add to stash", "Discard from stash")
+        content = self.c.get(self.url).content.decode()
+        for button in buttons:
+            self.assertIn(button, content)
+        self.parent.produces_milk = False
+        self.parent.save()
+        content = self.c.get(self.url).content.decode()
+        for button in buttons:
+            self.assertNotIn(button, content)
+
     def test_tables_follow_their_own_view_permissions(self):
         self._login("parent-only", ["view_parent"])
         content = self.c.get(self.url).content.decode()
@@ -853,14 +866,176 @@ class StashPagesTestCase(TestCase):
     def test_lots_show_whose_milk_and_throw_away_takes_that_lot(self):
         self._login("stash-admin", is_superuser=True)
         robin = self.robin
-        models.Parent.objects.create(first_name="Casey")
-        t = timezone.localtime() - timezone.timedelta(hours=80)
-        models.Pumping.objects.create(
-            parent=robin, start=t, end=t, amount=60, stash_amount=60
-        )
+        casey = models.Parent.objects.create(first_name="Casey")
+        self._pumped(robin, 80, 60)
+        self._pumped(casey, 2, 100)
         content = self.c.get("/stash/").content.decode()
         self.assertIn("<td>Robin</td>", content)
         self.assertIn("&parent={}".format(robin.slug), content)
+        (query, _), *_ = [
+            link for link in self.throw_away_links(content) if link[1] == "Throw away"
+        ]
+        adjustment = self._submit_throw_away(query)
+        self.assertEqual(adjustment.parent, robin)
+        self.assertEqual(self._lots(), [(casey.id, 100)])
+
+    def _when(self, value=None):
+        return timezone.localtime(value).strftime(
+            get_format("DATETIME_INPUT_FORMATS")[0]
+        )
+
+    def _pumped(self, parent, hours_ago, amount):
+        t = timezone.localtime() - timezone.timedelta(hours=hours_ago)
+        return models.Pumping.objects.create(
+            parent=parent, start=t, end=t, amount=amount, stash_amount=amount
+        )
+
+    def _lots(self):
+        return [(lot.parent_id, round(lot.amount, 2)) for lot in stash.stash_lots()]
+
+    def _submit_throw_away(self, query):
+        """Save a "Throw away" link's form as it opens, pre-filled."""
+        url = "/stash/adjustments/add/?" + query
+        form = self.c.get(url).context["form"]
+        data = {
+            "time": self._when(),
+            "kind": form.initial["kind"],
+            "amount": form.initial["amount"],
+            "reason": form.initial.get("reason", ""),
+        }
+        if form.initial.get("parent"):
+            data["parent"] = form.initial["parent"].pk
+        page = self.c.post(url, data)
+        self.assertEqual(page.status_code, 302)
+        return models.StashAdjustment.objects.latest("id")
+
+    def test_throw_away_leaves_the_single_parents_fresh_milk(self):
+        self._login("stash-admin", is_superuser=True)
+        self._add_to_stash(100, 100)  # expired starting stock, no parent
+        self._pumped(self.robin, 2, 60)
+        links = self.throw_away_links(self.c.get("/stash/").content.decode())
+        query = [q for q, text in links if text == "Throw away"][0]
+        self.assertNotIn("parent=", query)
+        adjustment = self._submit_throw_away(query)
+        self.assertIsNone(adjustment.parent)
+        self.assertEqual(self._lots(), [(self.robin.id, 60)])
+
+    def test_discard_form_leaves_the_single_parent_unset(self):
+        self._login("stash-admin", is_superuser=True)
+        form = self.c.get("/stash/adjustments/add/?kind=discarded").context["form"]
+        self.assertTrue(form.fields["parent"].widget.is_hidden)
+        self.assertNotIn("parent", form.initial)
+        for kind, parent in (("discarded", None), ("added", self.robin)):
+            with self.subTest(kind=kind):
+                self.c.post(
+                    "/stash/adjustments/add/",
+                    {"time": self._when(), "amount": "10", "kind": kind},
+                )
+                adjustment = models.StashAdjustment.objects.latest("id")
+                self.assertEqual((adjustment.kind, adjustment.parent), (kind, parent))
+
+    def test_former_milk_parents_lot_can_be_thrown_away(self):
+        self._login("stash-admin", is_superuser=True)
+        casey = models.Parent.objects.create(first_name="Casey")
+        self._pumped(casey, 80, 50)
+        casey.produces_milk = False
+        casey.save()
+        self._pumped(self.robin, 2, 60)
+        links = self.throw_away_links(self.c.get("/stash/").content.decode())
+        query = [q for q, text in links if text == "Throw away"][0]
+        self.assertIn("&parent={}".format(casey.slug), query)
+        form = self.c.get("/stash/adjustments/add/?" + query).context["form"]
+        self.assertTrue(form.fields["parent"].widget.is_hidden)
+        self.assertIn(casey, form.fields["parent"].queryset)
+        adjustment = self._submit_throw_away(query)
+        self.assertEqual(adjustment.parent, casey)
+        self.assertEqual(self._lots(), [(self.robin.id, 60)])
+
+    def test_hidden_parent_field_shows_its_error(self):
+        self._login("stash-admin", is_superuser=True)
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        page = self.c.post(
+            "/stash/adjustments/add/",
+            {"time": self._when(), "amount": "10", "kind": "added", "parent": sam.id},
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertTrue(page.context["form"].fields["parent"].widget.is_hidden)
+        self.assertIn("parent", page.context["form"].errors)
+        self.assertRegex(
+            page.content.decode(),
+            r'<div class="alert alert-danger" role="alert">\s*<strong>Parent</strong>:'
+            r"\s*Select a valid choice",
+        )
+        self.assertFalse(models.StashAdjustment.objects.exists())
+
+    def test_bottle_discard_takes_the_oldest_milk_like_the_bottle(self):
+        self._login("stash-admin", is_superuser=True)
+        casey = models.Parent.objects.create(first_name="Casey")
+        self.robin.children.add(self.alex)
+        self._pumped(casey, 10, 100)
+        self._pumped(self.robin, 5, 100)
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        page = self.c.post(
+            "/feedings/add/",
+            {
+                "child": self.alex.id,
+                "start": self._when(t),
+                "end": self._when(t),
+                "type": "breast milk",
+                "method": "bottle",
+                "amount": "50",
+                "from_stash": "on",
+                "discarded": "on",
+                "discarded_amount": "20",
+            },
+        )
+        self.assertEqual(page.status_code, 302)
+        feeding = models.Feeding.objects.get()
+        self.assertEqual(feeding.linked_discard().parent, self.robin)
+        self.assertEqual(self._lots(), [(casey.id, 30), (self.robin.id, 100)])
+
+    def test_pumping_form_without_milk_parents_shows_the_field_and_error(self):
+        self._login("stash-admin", is_superuser=True)
+        self.robin.produces_milk = False
+        self.robin.save()
+        page = self.c.get("/pumping/add/?parent={}".format(self.robin.slug))
+        form = page.context["form"]
+        self.assertFalse(form.fields["parent"].widget.is_hidden)
+        self.assertNotIn("parent", form.initial)
+        self.assertContains(page, '<label for="id_parent"')
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        page = self.c.post(
+            "/pumping/add/?parent={}".format(self.robin.slug),
+            {"start": self._when(t), "end": self._when(t), "amount": "50"},
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("parent", page.context["form"].errors)
+        self.assertContains(page, "This field is required.")
+        self.assertFalse(models.Pumping.objects.exists())
+
+    def test_existing_non_milk_parent_can_stay_on_edit(self):
+        self._login("stash-admin", is_superuser=True)
+        casey = models.Parent.objects.create(first_name="Casey")
+        pumping = self._pumped(casey, 3, 40)
+        casey.produces_milk = False
+        casey.save()
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        data = {
+            "parent": casey.id,
+            "start": self._when(pumping.start),
+            "end": self._when(pumping.end),
+            "amount": "45",
+            "to_stash": "on",
+        }
+        page = self.c.post("/pumping/{}/".format(pumping.id), data)
+        self.assertEqual(page.status_code, 302)
+        pumping.refresh_from_db()
+        self.assertEqual((pumping.parent, pumping.amount), (casey, 45))
+        page = self.c.post(
+            "/pumping/{}/".format(pumping.id), {**data, "parent": sam.id}
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("parent", page.context["form"].errors)
 
     def test_menu_has_one_stash_entry_and_page_links_the_list(self):
         self._login("stash-admin", is_superuser=True)

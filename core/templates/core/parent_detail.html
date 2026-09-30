@@ -13,13 +13,13 @@
     <h1>{{ object }}</h1>
     <p class="text-muted">{{ object.children.all|join:", " }}</p>
     <div class="btn-group mb-3" role="group">
-        {% if perms.core.add_pumping %}
+        {% if object.produces_milk and perms.core.add_pumping %}
             <a class="btn btn-success"
                href="{% url 'core:pumping-add' %}?parent={{ object.slug }}">
                 <i class="icon-pumping" aria-hidden="true"></i> {% trans "Add pumping" %}
             </a>
         {% endif %}
-        {% if perms.core.add_stashadjustment %}
+        {% if object.produces_milk and perms.core.add_stashadjustment %}
             <a class="btn btn-outline-success"
                href="{% url 'core:stashadjustment-add' %}?parent={{ object.slug }}&kind=added">
                 {% trans "Add to stash" %}

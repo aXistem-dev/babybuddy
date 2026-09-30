@@ -5,7 +5,7 @@ from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
 from django.utils.translation import gettext as _
 
-from rest_framework import mixins, status, viewsets, views
+from rest_framework import mixins, permissions, status, viewsets, views
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.schemas.openapi import AutoSchema
@@ -174,8 +174,15 @@ class StashSettingsView(views.APIView):
     schema = AutoSchema(operation_id_base="MilkStashSettings")
     action = "get"
     basename = "stash-settings"
-    queryset = models.Pumping.objects.all()  # permission class -> core.*_pumping
+    queryset = models.Pumping.objects.all()  # permission class -> core.view_pumping
     serializer_class = serializers.StashSettingsSerializer
+
+    def get_permissions(self):
+        # Changing them needs what Site > Settings needs (checked in patch()),
+        # not core.change_pumping.
+        if self.request.method == "PATCH":
+            return [permissions.IsAuthenticated()]
+        return super().get_permissions()
 
     def get(self, request):
         return Response(serializers.stash_settings_data(request.user))

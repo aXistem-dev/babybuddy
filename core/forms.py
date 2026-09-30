@@ -97,9 +97,12 @@ def set_initial_values(kwargs, form_type):
         )
         kwargs["initial"].update({"nap": nap})
 
-    # Set Parent based on `parent` kwarg, the linked child (PumpingForm only), or a
-    # single Parent; set Kind, Amount and Reason based on the `kind`, `amount`
-    # and `reason` kwargs (StashAdjustmentForm only).
+    # Set Parent based on `parent` kwarg, or (PumpingForm only) the linked child
+    # or a single milk-producing Parent; set Kind, Amount and Reason based on
+    # the `kind`, `amount` and `reason` kwargs (StashAdjustmentForm only).
+    # A stash entry never gets the single parent up front: a discard without a
+    # chosen parent takes the oldest milk of anyone, and an added entry gets
+    # the single parent in StashAdjustmentForm.clean().
     # FeedingForm gets its initial parent from whichever child was just
     # resolved above (explicit `child` kwarg or the single-child fallback).
     parent_slug = kwargs.pop("parent", None)
@@ -109,12 +112,19 @@ def set_initial_values(kwargs, form_type):
     if form_type in (PumpingForm, StashAdjustmentForm):
         parent = None
         if parent_slug:
-            parent = models.Parent.objects.filter(slug=parent_slug).first()
+            # Only a milk-producing parent pumps; a stash entry may name a
+            # former one, so a leftover lot of theirs can still be discarded.
+            parents = (
+                models.milk_parents()
+                if form_type is PumpingForm
+                else models.Parent.objects.all()
+            )
+            parent = parents.filter(slug=parent_slug).first()
         elif form_type is PumpingForm and child_slug:
             parent = models.parent_for_child(
                 models.Child.objects.filter(slug=child_slug).first()
             )
-        else:
+        elif form_type is PumpingForm:
             parent = models.single_parent()
         if parent:
             kwargs["initial"]["parent"] = parent
@@ -372,17 +382,18 @@ def keep_stash_amount_in_step(form, data):
         )
 
 
-def limit_to_milk_parents(form, hide_when_none=True):
+def limit_to_milk_parents(form, hide_when_none=True, also=None):
     """Offer only milk-producing parents (plus the entry's current parent, so
-    an older entry stays editable) and hide the field when there is nobody to
-    choose between: one milk-producing parent, or none (unless the field must
-    stay visible to show that one is missing). Returns whether it is hidden."""
+    an older entry stays editable, and `also` when given) and hide the field
+    when there is nobody to choose between: one milk-producing parent, or none
+    (unless the field must stay visible to show that one is missing). Returns
+    whether it is hidden."""
     field = form.fields["parent"]
-    current = getattr(form.instance, "parent_id", None)
-    queryset = models.Parent.objects.filter(produces_milk=True)
-    if current:
-        queryset = models.Parent.objects.filter(Q(produces_milk=True) | Q(pk=current))
-    field.queryset = queryset
+    allowed = Q(produces_milk=True)
+    for extra in (getattr(form.instance, "parent_id", None), also):
+        if extra:
+            allowed |= Q(pk=extra)
+    field.queryset = models.Parent.objects.filter(allowed)
     count = models.milk_parents().count()
     if count > 1 or (count == 0 and not hide_when_none):
         return False
@@ -811,9 +822,12 @@ class StashAdjustmentForm(CoreModelForm, TaggableModelForm):
         # `?kind=`, `?amount=`, `?reason=` and `?parent=` arrive as initial
         # values via set_initial_values.
         self.single_parent = models.single_parent()
-        # Nothing to choose: the entry goes to the only milk-producing parent,
-        # or there is no parent to pick from at all.
-        if not limit_to_milk_parents(self):
+        # A "Throw away" link may name a parent who no longer produces milk,
+        # for a leftover lot of theirs.
+        linked = self.initial.get("parent")
+        # Nothing to choose: an added entry goes to the only milk-producing
+        # parent, or there is no parent to pick from at all.
+        if not limit_to_milk_parents(self, also=getattr(linked, "pk", linked)):
             self.fields["parent"].help_text = _(
                 "A discard takes this parent's oldest milk first. "
                 "Empty: the oldest milk of anyone."
@@ -825,7 +839,15 @@ class StashAdjustmentForm(CoreModelForm, TaggableModelForm):
 
     def clean(self):
         data = super().clean()
-        if not data.get("parent") and self.single_parent:
+        # Only new added milk is the single parent's by default. A discard
+        # without a chosen parent takes the oldest milk of anyone, which may
+        # not be that parent's (starting stock, a former milk parent's).
+        if (
+            not self.instance.pk
+            and data.get("kind") == models.StashAdjustment.ADDED
+            and not data.get("parent")
+            and self.single_parent
+        ):
             data["parent"] = self.single_parent
         return data
 

@@ -146,7 +146,8 @@ def _stash_lots_from_events(events):
     """Compute FIFO lots from a list of events.
 
     Every outflow takes the oldest milk first. A discard with a parent takes
-    that parent's oldest milk first, and only then anyone's. Milk that left an
+    that parent's oldest milk first, and only then anyone's; one logged at a
+    bottle follows the bottle and takes anyone's oldest. Milk that left an
     empty stash is a shortfall that later inflows repay first, so the lots
     always add up to the (non-negative) balance."""
     lots = []
@@ -159,8 +160,13 @@ def _stash_lots_from_events(events):
                 lots.append(StashLot(event.time, amount, _event_parent_id(event)))
             continue
         need = -event.amount
-        if event.kind == "discarded" and _event_parent_id(event) is not None:
-            need = _take_oldest(lots, need, _event_parent_id(event))
+        parent_id = _event_parent_id(event)
+        if (
+            event.kind == "discarded"
+            and parent_id is not None
+            and event.obj.feeding_id is None
+        ):
+            need = _take_oldest(lots, need, parent_id)
         need = _take_oldest(lots, need)
         if need > EPSILON:
             shortfall += need
@@ -222,6 +228,11 @@ def stash_summary(at=None):
             }
         )
     status = max((l["status"] for l in lots), key=STATUS_ORDER.get, default="ok")
+    # The stash is in use (see stash_has_activity); stored or adjusted milk
+    # among the events already fetched saves the query.
+    bottle_from_stash = s.bottle_from_stash_default and (
+        any(e.kind != "feeding" for e in events) or stash_has_activity()
+    )
     return {
         "balance": balance,
         # Identifies the current dip below zero, so a dismissed warning comes
@@ -233,10 +244,11 @@ def stash_summary(at=None):
         "oldest": lots[0]["time"] if lots else None,
         "oldest_age_hours": lots[0]["age_hours"] if lots else None,
         "lots": lots,
-        # Clients (iOS) pre-set their switches from these, like the web forms do.
+        # Clients (iOS) pre-set their switches from these, like the web forms
+        # do: a bottle only starts as taken from the stash once it is in use.
         "defaults": {
             "pumping_to_stash": s.pumping_to_stash_default,
-            "bottle_from_stash": s.bottle_from_stash_default,
+            "bottle_from_stash": bottle_from_stash,
         },
     }
 

@@ -1781,12 +1781,12 @@ class StashPageTestCase(FormsTestCaseBase):
         page = self.c.get("/stash/adjustments/add/?kind=added")
         form = page.context["form"]
         self.assertIsInstance(form.fields["parent"].widget, forms.HiddenInput)
-        self.assertEqual(form.initial["parent"], robin)
+        # Filled in on save, for added milk only: a discard without a parent
+        # takes the oldest milk of anyone.
+        self.assertNotIn("parent", form.initial)
         self.assertContains(
             page,
-            '<input type="hidden" name="parent" value="{}" id="id_parent">'.format(
-                robin.id
-            ),
+            '<input type="hidden" name="parent" id="id_parent">',
             html=True,
         )
         self.assertNotContains(page, '<label for="id_parent"')
@@ -1797,6 +1797,18 @@ class StashPageTestCase(FormsTestCaseBase):
             follow=True,
         )
         self.assertEqual(models.StashAdjustment.objects.get().parent, robin)
+        self.c.post(
+            "/stash/adjustments/add/",
+            {"time": self.localtime_string(t), "amount": "40", "kind": "discarded"},
+            follow=True,
+        )
+        discard = models.StashAdjustment.objects.get(kind="discarded")
+        self.assertIsNone(discard.parent)
+        # An explicitly chosen parent is kept on a discard.
+        form = self.c.get(
+            "/stash/adjustments/add/?kind=discarded&parent=robin"
+        ).context["form"]
+        self.assertEqual(form.initial["parent"], robin)
 
     def test_parent_hidden_with_zero_parents(self):
         page = self.c.get("/stash/adjustments/add/?kind=added")

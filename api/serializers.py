@@ -474,10 +474,13 @@ class StashSettingsSerializer(serializers.Serializer):
 
     pumping_to_stash = serializers.BooleanField(required=False)
     bottle_from_stash = serializers.BooleanField(required=False)
-    warn_age_hours = serializers.IntegerField(min_value=1, required=False)
-    max_age_hours = serializers.IntegerField(min_value=1, required=False)
+    warn_age_hours = serializers.IntegerField(min_value=0, required=False)
+    max_age_hours = serializers.IntegerField(min_value=0, required=False)
 
     def validate(self, attrs):
+        if "warn_age_hours" not in attrs and "max_age_hours" not in attrs:
+            # Leave the ages alone, even if they don't fit together on the web.
+            return attrs
         current = stash.settings()
         warn = attrs.get("warn_age_hours", current.stash_warn_age_hours)
         max_ = attrs.get("max_age_hours", current.stash_max_age_hours)
@@ -539,10 +542,16 @@ class StashAdjustmentSerializer(CoreModelSerializer, TaggableSerializer):
 
     def validate(self, attrs):
         check_milk_parent(self, attrs)
-        if self.instance is None and "parent" not in self.initial_data:
-            # Create only, and only when `parent` was not sent at all (an
-            # explicit `"parent": null` opts out): with a single milk-producing
-            # parent there is nobody else the milk can belong to.
+        if (
+            self.instance is None
+            and attrs.get("kind") == models.StashAdjustment.ADDED
+            and "parent" not in self.initial_data
+        ):
+            # Create only, for added milk only, and only when `parent` was not
+            # sent at all (an explicit `"parent": null` opts out): with a
+            # single milk-producing parent there is nobody else the milk can
+            # belong to. A discard is never filled in: without a parent it
+            # takes the oldest milk of anyone.
             parent = models.single_parent()
             if parent:
                 attrs["parent"] = parent
