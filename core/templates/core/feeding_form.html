@@ -58,7 +58,14 @@
 {% block javascript %}
     <script type="application/javascript">
     (function () {
-        const row = (id) => document.getElementById(id)?.closest(".row, .mb-3, .form-group");
+        // The field's own row inside the form. A hidden field has none, and the
+        // nearest ".row" outside the form would be the whole page.
+        const row = (id) => {
+            const el = document.getElementById(id);
+            if (!el || el.type === "hidden") return null;
+            const r = el.closest(".row, .mb-3, .form-group");
+            return r && el.form && el.form.contains(r) ? r : null;
+        };
         const hide = (id, h) => { const r = row(id); if (r) r.hidden = h; };
         const breastMethods = ["left breast", "right breast", "both breasts"];
         function syncParent() {
