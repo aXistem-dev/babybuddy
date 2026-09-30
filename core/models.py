@@ -403,6 +403,8 @@ class DiaperChange(models.Model):
 class Feeding(models.Model):
     model_name = "feeding"
     STASH_TYPES = ("breast milk", "fortified breast milk")
+    # Every method except breastfeeding: expressed milk the baby drinks.
+    STASH_METHODS = ("bottle", "parent fed", "self fed")
     BREAST_METHODS = ("left breast", "right breast", "both breasts")
     # Feeding types that never come from the breast.
     NOT_FROM_THE_BREAST = ("formula", "solid food")
@@ -500,11 +502,12 @@ class Feeding(models.Model):
             )
         if self.stash_amount is None:
             return
-        if self.type not in self.STASH_TYPES or self.method != "bottle":
+        if self.type not in self.STASH_TYPES or self.method not in self.STASH_METHODS:
             raise ValidationError(
                 {
                     "stash_amount": _(
-                        "Only a bottle of breast milk can come from the stash."
+                        "Only expressed breast milk (not breastfeeding) can come "
+                        "from the stash."
                     )
                 },
                 code="stash_not_breast_milk_bottle",

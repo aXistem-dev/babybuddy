@@ -379,9 +379,12 @@ class StashFeedingMixin:
     def add_stash_fields(self):
         self.fields["from_stash"] = _switch(_("Taken from stash"))
         self.fields["stash_amount"].help_text = _("Leave empty to use the amount fed.")
-        self.fields["discarded"] = _switch(_("Some milk was discarded"))
+        self.fields["discarded"] = _switch(_("Extra milk discarded"))
         self.fields["discarded_amount"] = forms.FloatField(
-            required=False, min_value=0.1, label=_("Amount discarded")
+            required=False,
+            min_value=0.1,
+            label=_("Amount discarded"),
+            help_text=_("On top of the amount fed."),
         )
         self.fields["discard_reason"] = forms.CharField(
             required=False,
@@ -404,7 +407,7 @@ class StashFeedingMixin:
     def clean_stash(self, data, method):
         uses_stash = (
             data.get("from_stash")
-            and method == "bottle"
+            and method in models.Feeding.STASH_METHODS
             and data.get("type") in models.Feeding.STASH_TYPES
         )
         if not uses_stash:

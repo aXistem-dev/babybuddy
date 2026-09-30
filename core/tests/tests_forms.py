@@ -594,6 +594,22 @@ class FeedingStashFormsTestCase(FormsTestCaseBase):
         self.bottle(from_stash="on")
         self.assertEqual(self.latest().stash_amount, 60.0)
 
+    def test_parent_fed_and_self_fed_can_come_from_the_stash(self):
+        self.bottle(from_stash="on")
+        f = self.latest()
+        for method in ("parent fed", "self fed"):
+            with self.subTest(method=method):
+                self.edit(f, method=method, stash_amount="50")
+                f.refresh_from_db()
+                self.assertEqual((f.method, f.stash_amount), (method, 50.0))
+        self.edit(f, method="left breast")
+        f.refresh_from_db()
+        self.assertIsNone(f.stash_amount)
+
+    def test_discard_amount_says_it_is_extra(self):
+        field = self.c.get("/feedings/add/").context["form"].fields["discarded_amount"]
+        self.assertEqual(field.help_text, "On top of the amount fed.")
+
     def test_discard_creates_linked_adjustment(self):
         self.bottle(4, from_stash="on", discarded="on", discarded_amount="10")
         f = self.latest()

@@ -103,9 +103,9 @@
                             {% endif %}
                         {% elif e.kind == "feeding" %}
                             {% if perms.core.change_feeding %}
-                                <a href="{% url 'core:feeding-update' e.obj.id %}">{% trans "Bottle" %} · {{ e.obj.child }}</a>
+                                <a href="{% url 'core:feeding-update' e.obj.id %}">{{ e.obj.get_method_display }} · {{ e.obj.child }}</a>
                             {% else %}
-                                {% trans "Bottle" %} · {{ e.obj.child }}
+                                {{ e.obj.get_method_display }} · {{ e.obj.child }}
                             {% endif %}
                         {% elif perms.core.change_stashadjustment %}
                             <a href="{% url 'core:stashadjustment-update' e.obj.id %}">{{ e.obj.get_kind_display }}{% if e.obj.reason %} ({{ e.obj.reason }}){% endif %}</a>

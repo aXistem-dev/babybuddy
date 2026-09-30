@@ -680,6 +680,10 @@ class FeedingStashTestCase(TestCase):
         self.feeding(stash_amount=60.0).full_clean()
         self.feeding(type="fortified breast milk", stash_amount=40.0).full_clean()
 
+    def test_parent_fed_and_self_fed_breast_milk_may_use_stash(self):
+        self.feeding(method="parent fed", stash_amount=60.0).full_clean()
+        self.feeding(method="self fed", stash_amount=60.0).full_clean()
+
     def test_stash_amount_rejected_for_formula(self):
         with self.assertRaises(ValidationError):
             self.feeding(type="formula", stash_amount=60.0).full_clean()

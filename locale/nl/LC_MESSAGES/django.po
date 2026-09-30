@@ -3187,12 +3187,16 @@ msgid "Leave empty to use the amount fed."
 msgstr "Laat leeg om de gevoede hoeveelheid te gebruiken."
 
 #: core/forms.py:359
-msgid "Some milk was discarded"
-msgstr "Er is melk weggegooid"
+msgid "Extra milk discarded"
+msgstr "Extra melk weggegooid"
 
 #: core/forms.py:361
 msgid "Amount discarded"
 msgstr "Hoeveelheid weggegooid"
+
+#: core/forms.py:388
+msgid "On top of the amount fed."
+msgstr "Bovenop de gegeven hoeveelheid."
 
 #: core/forms.py:366 core/models.py:763
 msgid "Reason"
@@ -3249,8 +3253,10 @@ msgid "Only a breastfeeding method can have a parent."
 msgstr "Alleen een borstvoedingsmethode kan een ouder hebben."
 
 #: core/models.py:494
-msgid "Only a bottle of breast milk can come from the stash."
-msgstr "Alleen een fles moedermelk kan uit de voorraad komen."
+msgid ""
+"Only expressed breast milk (not breastfeeding) can come from the stash."
+msgstr ""
+"Alleen afgekolfde moedermelk (geen borstvoeding) kan uit de voorraad komen."
 
 #: core/models.py:505
 msgid "Must be more than zero and at most the amount fed."

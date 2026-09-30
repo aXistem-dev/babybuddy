@@ -362,7 +362,7 @@ class FeedingSerializer(
     def apply_stash_default(self, attrs):
         if (
             attrs.get("type") in models.Feeding.STASH_TYPES
-            and attrs.get("method") == "bottle"
+            and attrs.get("method") in models.Feeding.STASH_METHODS
             and attrs.get("amount")
             and stash.settings().bottle_from_stash_default
             and stash.stash_has_activity()
@@ -373,7 +373,10 @@ class FeedingSerializer(
     def reconcile_stash_amount(self, attrs):
         type_ = attrs.get("type", self.instance.type)
         method = attrs.get("method", self.instance.method)
-        if type_ not in models.Feeding.STASH_TYPES or method != "bottle":
+        if (
+            type_ not in models.Feeding.STASH_TYPES
+            or method not in models.Feeding.STASH_METHODS
+        ):
             attrs["stash_amount"] = None
             return attrs
         return self._follow_or_clamp_stash_amount(attrs)

@@ -855,6 +855,15 @@ class StashAPITestCase(APITestCase):
         f.refresh_from_db()
         self.assertEqual(f.linked_discard().time, f.start)
 
+    def test_parent_fed_and_self_fed_can_come_from_the_stash(self):
+        for hour, method in ((20, "parent fed"), (21, "self fed")):
+            with self.subTest(method=method):
+                r = self.bottle(hour, method=method, stash_amount=60, stash_discarded=5)
+                self.assertEqual(r.status_code, 201, r.data)
+                self.assertEqual(
+                    (r.data["stash_amount"], r.data["stash_discarded"]), (60.0, 5.0)
+                )
+
     def test_bottle_amount_change_follows_full_stash(self):
         r = self.bottle(13, stash_amount=60)
         self.assertEqual(r.status_code, 201, r.data)

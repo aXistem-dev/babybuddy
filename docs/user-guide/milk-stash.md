@@ -49,9 +49,10 @@ total minutes for today and for the last 7 days, and the side used last.
 Feeding two babies at the same time counts as two sessions, but their shared
 minutes count once. Breastfeeding never touches the milk stash.
 
-## Bottles from the stash
+## Feedings from the stash
 
-A breast milk (or fortified breast milk) bottle can be given from the stash.
+A breast milk (or fortified breast milk) feeding given by bottle, by a parent,
+or self-fed can come from the stash; breastfeeding never does.
 On the feeding form, a **Taken from stash** switch appears whenever the type
 and method make it a candidate. Turning it on takes the full bottle amount out
 of the stash; an "Amount from stash" field lets you take out only part of it.
@@ -61,9 +62,10 @@ stash is already in use (pumped milk has been stored, or a stash adjustment
 logged); until then it starts off, so a family that doesn't use the stash isn't
 pushed below zero.
 
-With **Taken from stash** on, a **Some milk was discarded** switch appears.
+With **Taken from stash** on, an **Extra milk discarded** switch appears.
 Turning it on adds an **Amount discarded** field (for milk that never reached
-the baby: spilled, or left in an unfinished bottle) and an optional free-text
+the baby: spilled, or left in an unfinished bottle; it comes out of the stash
+on top of the amount fed) and an optional free-text
 **Reason** (for example "Spilled" or "Left over"). This creates a stash entry
 (a "stash adjustment") linked to the feeding, so the discarded amount stays
 visible and editable on its own, and is never folded into the amount the baby
