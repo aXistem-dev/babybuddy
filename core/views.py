@@ -247,7 +247,7 @@ class EventTypeList(PermissionRequiredMixin, BabyBuddyPaginatedView, ListView):
     permission_required = ("core.view_eventtype",)
 
     def get_queryset(self):
-        return super().get_queryset().annotate(Count("events"))
+        return super().get_queryset().annotate(Count("events")).order_by(Lower("name"))
 
 
 class EventTypeAdd(CoreAddView):

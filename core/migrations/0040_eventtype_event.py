@@ -2,6 +2,7 @@
 
 import core.models
 import django.db.models.deletion
+import django.db.models.functions.text
 import django.utils.timezone
 from django.db import migrations, models
 
@@ -43,7 +44,7 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Event Type",
                 "verbose_name_plural": "Event Types",
-                "ordering": ["name"],
+                "ordering": [django.db.models.functions.text.Lower("name")],
                 "default_permissions": ("view", "add", "change", "delete"),
             },
         ),

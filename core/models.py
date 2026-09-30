@@ -374,7 +374,7 @@ class EventType(models.Model):
 
     class Meta:
         default_permissions = ("view", "add", "change", "delete")
-        ordering = ["name"]
+        ordering = [Lower("name")]
         verbose_name = _("Event Type")
         verbose_name_plural = _("Event Types")
 

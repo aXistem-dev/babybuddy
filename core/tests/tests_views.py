@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+import warnings
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.management import call_command
+from django.core.paginator import UnorderedObjectListWarning
 from django.test import TestCase
 from django.test import Client as HttpClient
 from django.utils import timezone
@@ -123,6 +126,17 @@ class ViewsTestCase(TestCase):
         self.assertEqual(page.status_code, 200)
         page = self.c.get("/event-types/{}/delete/".format(entry.slug))
         self.assertEqual(page.status_code, 200)
+
+    def test_eventtype_list_is_sorted_by_name(self):
+        models.EventType.objects.create(name="brushing teeth")
+        models.EventType.objects.create(name="Sunscreen")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UnorderedObjectListWarning)
+            page = self.c.get("/event-types/")
+        self.assertEqual(page.status_code, 200)
+        names = [t.name for t in page.context["object_list"]]
+        self.assertIn("brushing teeth", names)
+        self.assertEqual(names, sorted(names, key=str.lower))
 
     def test_feeding_views(self):
         page = self.c.get("/feedings/")

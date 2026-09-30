@@ -247,11 +247,12 @@ class EventTypeTestCase(TestCase):
         self.assertEqual(event_type.slug, "ff" * 50)
 
     def test_event_type_ordering(self):
-        models.EventType.objects.create(name="Nail trim")
+        models.EventType.objects.create(name="nail trim")
+        models.EventType.objects.create(name="Pajama change")
         models.EventType.objects.create(name="Bath")
         self.assertEqual(
             list(models.EventType.objects.values_list("name", flat=True)),
-            ["Bath", "Nail trim"],
+            ["Bath", "nail trim", "Pajama change"],
         )
 
     def test_event_type_clean_rejects_a_conflicting_slug(self):
