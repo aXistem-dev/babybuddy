@@ -67,6 +67,17 @@ class StashTestCase(TestCase):
         self.adjust(1, 10, "added")
         self.assertTrue(stash.stash_has_activity())
 
+    def test_negative_since_marks_the_current_dip(self):
+        self.assertIsNone(stash.stash_summary()["negative_since"])
+        first = self.bottle(5, 30)
+        self.assertEqual(stash.stash_summary()["negative_since"], first.start)
+        self.bottle(4, 20)  # deeper in the same dip
+        self.assertEqual(stash.stash_summary()["negative_since"], first.start)
+        self.adjust(3, 50, "added")  # back at zero
+        self.assertIsNone(stash.stash_summary()["negative_since"])
+        second = self.bottle(2, 10)
+        self.assertEqual(stash.stash_summary()["negative_since"], second.start)
+
     def test_balance_with_every_kind(self):
         self.pump(30, 150, 90)
         self.pump(20, 120, 120)

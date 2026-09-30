@@ -17,7 +17,7 @@
         {% endif %}
     </h1>
     <div class="display-6 mb-2 {% if summary.balance < 0 %}text-danger{% endif %}">{{ summary.balance }}</div>
-    {% if summary.balance < 0 and request.user.settings.stash_negative_warning %}
+    {% if show_negative_warning %}
         <div class="alert alert-warning d-flex justify-content-between align-items-start flex-wrap gap-2">
             <div>
                 {% blocktrans trimmed %}
@@ -62,7 +62,13 @@
             </tbody>
         </table>
     {% endif %}
-    <h2 class="h5">{% trans "Latest movements" %}</h2>
+    <h2 class="h5">
+        {% trans "Latest movements" %}
+        {% if perms.core.view_stashadjustment %}
+            <a href="{% url 'core:stashadjustment-list' %}"
+               class="btn btn-sm btn-outline-secondary ms-2">{% trans "All stash adjustments" %}</a>
+        {% endif %}
+    </h2>
     <form method="get" class="row row-cols-auto g-2 align-items-center mb-2">
         <div class="col">
             <label for="stash-child-filter" class="col-form-label">{% trans "Baby" %}</label>

@@ -3089,18 +3089,6 @@ msgstr ""
 "%(name)s heeft nog kolf- of voorraadgegevens; verplaats of verwijder deze "
 "eerst."
 
-#: babybuddy/models.py:134
-msgid "Show the negative milk stash warning"
-msgstr "Waarschuwing voor negatieve melkvoorraad tonen"
-
-#: babybuddy/models.py:136
-msgid ""
-"Shown on the milk stash page while more milk has left the stash than was "
-"logged going in."
-msgstr ""
-"Wordt getoond op de melkvoorraadpagina zolang er meer melk uit de voorraad "
-"is gehaald dan er is geregistreerd als toegevoegd."
-
 #: babybuddy/site_settings.py:66
 msgid "Store pumped milk in the stash by default"
 msgstr "Afgekolfde melk standaard in de voorraad bewaren"
@@ -3442,6 +3430,10 @@ msgstr "vers"
 #: core/templates/core/stash.html:61
 msgid "Latest movements"
 msgstr "Recentste bewegingen"
+
+#: core/templates/core/stash.html:69
+msgid "All stash adjustments"
+msgstr "Alle voorraadaanpassingen"
 
 #: core/templates/core/stash.html:64
 msgid "Baby"

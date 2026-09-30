@@ -74,8 +74,8 @@ too.
 ## Adding to and removing from the stash
 
 Not every stash change comes from pumping or a bottle. Use **Add to stash** or
-**Discard from stash** (on the parent page, on the Milk stash page, or under
-**Activities > Stash adjustments**) to record things like:
+**Discard from stash** (on the parent page, on the Milk stash page, or
+**Activities > Milk stash > + Stash adjustment**) to record things like:
 
 - starting stock, donor milk, or a correction upward (**Added**)
 - milk discarded outside of a feeding — spilled, left over, too old, given
@@ -90,7 +90,8 @@ baby — a discard takes milk from the shared supply, so no baby drank it; the
 only link to a baby is indirect, through the bottle a discard was logged at.
 
 Stash adjustments are listed, and can be edited or deleted, like any other
-entry.
+entry: the Milk stash page links to the full list with **All stash
+adjustments**.
 
 ## Milk age
 
@@ -127,10 +128,10 @@ warning explaining the likely cause and the fix: an **Added** entry for the
 starting amount, dated at or before the first bottle it covers. (Milk that
 comes in after a shortfall makes up that shortfall first, so a starting entry
 dated too late makes the remaining milk look younger than it really is.)
-Dismissing the warning turns off the **Show the negative milk stash warning**
-setting on your user settings page; turn it back on there to see the warning
-again. It never appears anywhere except the Milk stash page, and only while
-the balance is negative.
+Dismissing the warning hides it in that browser until the balance is back at
+or above zero; the next time the stash drops below zero it shows again. It
+never appears anywhere except the Milk stash page, and only while the balance
+is negative.
 
 ## Per-baby stash use
 
@@ -163,10 +164,6 @@ Four site-wide settings, under **Site > Settings**, control the defaults:
 | Take breast milk bottles from the stash by default | On | Pre-selects "Taken from stash" on new breast milk bottles once the stash is in use |
 | Warn about stashed milk after (hours) | 48 | When the "use first" warning appears |
 | Throw stashed milk away after (hours) | 72 | When the "throw away" alert appears |
-
-One more setting is per user, on your own **Settings** page: **Show the
-negative milk stash warning** (default on). Dismissing the warning on the
-Milk stash page turns it off; turn it back on there to see the warning again.
 
 ## Existing (older) pumping data
 

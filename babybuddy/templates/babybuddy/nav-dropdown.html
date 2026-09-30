@@ -310,17 +310,10 @@
                                 </a>
                             {% endif %}
                             {% if perms.core.view_pumping %}
-                                <a class="dropdown-item{% if request.path == '/stash/' %} active{% endif %}"
+                                <a class="dropdown-item{% if request.path == '/stash/' or request.path == '/stash/adjustments/' %} active{% endif %}"
                                    href="{% url 'core:stash' %}">
                                     <i class="icon-pumping" aria-hidden="true"></i>
                                     {% trans "Milk stash" %}
-                                </a>
-                            {% endif %}
-                            {% if perms.core.view_stashadjustment %}
-                                <a class="dropdown-item{% if request.path == '/stash/adjustments/' %} active{% endif %}"
-                                   href="{% url 'core:stashadjustment-list' %}">
-                                    <i class="icon-pumping" aria-hidden="true"></i>
-                                    {% trans "Stash adjustments" %}
                                 </a>
                             {% endif %}
                             {% if perms.core.add_stashadjustment %}

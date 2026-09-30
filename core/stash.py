@@ -102,6 +102,22 @@ def _stash_balance_from_events(events):
     return round(sum(e.amount for e in events), 2)
 
 
+def _negative_since_from_events(events):
+    """When the balance last dropped below zero, or None while it is not
+    below zero. A new dip after the balance recovered gets a new time."""
+    running = 0
+    since = None
+    for event in events:
+        was_negative = round(running, 2) < 0
+        running += event.amount
+        is_negative = round(running, 2) < 0
+        if is_negative and not was_negative:
+            since = event.time
+        elif not is_negative:
+            since = None
+    return since
+
+
 def _stash_lots_from_events(events):
     """Compute FIFO lots from a list of events.
 
@@ -153,6 +169,7 @@ def stash_summary(at=None):
     # Fetch events once and derive both balance and lots
     events = stash_events(end=at)
     balance = _stash_balance_from_events(events)
+    negative_since = _negative_since_from_events(events)
     fifo_lots = _stash_lots_from_events(events)
 
     lots = []
@@ -183,6 +200,9 @@ def stash_summary(at=None):
     status = max((l["status"] for l in lots), key=STATUS_ORDER.get, default="ok")
     return {
         "balance": balance,
+        # Identifies the current dip below zero, so a dismissed warning comes
+        # back for the next one.
+        "negative_since": negative_since,
         "status": status,
         "warn_age_hours": warn,
         "max_age_hours": max_,

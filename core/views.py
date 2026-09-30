@@ -471,13 +471,38 @@ class PumpingDelete(CoreDeleteView):
     success_url = reverse_lazy("core:pumping-list")
 
 
+# Holds the `negative_since` of the dip below zero whose warning this browser
+# dismissed, so the warning returns for the next dip.
+STASH_WARNING_COOKIE = "stash_negative_warning_dismissed"
+
+
+def _stash_warning_token(summary):
+    since = summary["negative_since"]
+    return since.isoformat() if since else None
+
+
 class StashView(PermissionRequiredMixin, TemplateView):
     template_name = "core/stash.html"
     permission_required = ("core.view_pumping",)
 
+    def get(self, request, *args, **kwargs):
+        response = super().get(request, *args, **kwargs)
+        summary = response.context_data["summary"]
+        if (
+            summary["negative_since"] is None
+            and STASH_WARNING_COOKIE in request.COOKIES
+        ):
+            # Back at or above zero: forget the dismissal.
+            response.delete_cookie(STASH_WARNING_COOKIE)
+        return response
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["summary"] = stash.stash_summary()
+        token = _stash_warning_token(context["summary"])
+        context["show_negative_warning"] = bool(token) and (
+            self.request.COOKIES.get(STASH_WARNING_COOKIE) != token
+        )
         context["expired_amount"] = stash.expired_amount(context["summary"])
         context["throw_away_reason"] = stash.throw_away_reason(context["summary"])
         context["children"] = models.Child.objects.order_by("first_name")
@@ -501,15 +526,23 @@ class StashView(PermissionRequiredMixin, TemplateView):
 
 class StashWarningDismiss(LoginRequiredMixin, View):
     """
-    Turns off the current user's negative-stash warning on the stash page.
-    GET is not supported; the user turns the warning back on from their
-    user settings.
+    Hides the negative-stash warning in this browser until the stash is back
+    at or above zero. GET is not supported.
     """
 
     def post(self, request, *args, **kwargs):
-        request.user.settings.stash_negative_warning = False
-        request.user.settings.save()
-        return HttpResponseRedirect(reverse("core:stash"))
+        response = HttpResponseRedirect(reverse("core:stash"))
+        token = _stash_warning_token(stash.stash_summary())
+        if token:
+            response.set_cookie(
+                STASH_WARNING_COOKIE,
+                token,
+                max_age=365 * 24 * 60 * 60,
+                secure=request.is_secure(),
+                httponly=True,
+                samesite="Lax",
+            )
+        return response
 
 
 class StashAdjustmentList(

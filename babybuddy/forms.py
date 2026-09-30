@@ -135,7 +135,6 @@ class UserSettingsForm(forms.ModelForm):
             "dashboard_refresh_rate",
             "dashboard_hide_empty",
             "dashboard_hide_age",
-            "stash_negative_warning",
             "language",
             "timezone",
             "pagination_count",

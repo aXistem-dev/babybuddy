@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from faker import Faker
 
-from core import models
+from core import models, views
 
 
 class ViewsTestCase(TestCase):
@@ -766,28 +766,67 @@ class StashPagesTestCase(TestCase):
             "The stash is below zero: more milk was taken out than was ever put in.",
         )
 
-    def test_dismiss_hides_for_that_user_only(self):
-        viewer = self._login("viewer", ["view_pumping"])
-        t = timezone.localtime() - timezone.timedelta(hours=1)
-        models.Feeding.objects.create(
+    def _bottle_from_stash(self, hours_ago, amount=50):
+        t = timezone.localtime() - timezone.timedelta(hours=hours_ago)
+        return models.Feeding.objects.create(
             child=self.alex,
             start=t,
             end=t,
             type="breast milk",
             method="bottle",
-            amount=50,
-            stash_amount=50,
+            amount=amount,
+            stash_amount=amount,
         )
+
+    def _add_to_stash(self, hours_ago, amount):
+        t = timezone.localtime() - timezone.timedelta(hours=hours_ago)
+        return models.StashAdjustment.objects.create(
+            time=t, amount=amount, kind="added"
+        )
+
+    def test_dismiss_hides_in_this_browser_only(self):
+        self._login("viewer", ["view_pumping"])
+        self._bottle_from_stash(1)
         page = self.c.post("/stash/warning/dismiss/", follow=True)
         self.assertRedirects(page, "/stash/")
         self.assertNotContains(page, "/stash/warning/dismiss/")
-        viewer.refresh_from_db()
-        self.assertFalse(viewer.settings.stash_negative_warning)
+        self.assertIn(views.STASH_WARNING_COOKIE, self.c.cookies)
 
-        other = self._login("other", ["view_pumping"])
-        self.assertTrue(other.settings.stash_negative_warning)
+        other_browser = HttpClient()
+        other_browser.login(username="viewer", password="password")
+        page = other_browser.get("/stash/")
+        self.assertContains(page, "/stash/warning/dismiss/")
+
+    def test_dismissal_forgotten_once_back_at_zero(self):
+        self._login("viewer", ["view_pumping"])
+        self._bottle_from_stash(3)
+        self.c.post("/stash/warning/dismiss/")
+
+        self._add_to_stash(2, 50)  # back at zero
+        self.c.get("/stash/")
+        self.assertEqual(self.c.cookies[views.STASH_WARNING_COOKIE].value, "")
+
+        self._bottle_from_stash(1)  # below zero again
         page = self.c.get("/stash/")
         self.assertContains(page, "/stash/warning/dismiss/")
+
+    def test_next_dip_shows_again_without_a_visit_in_between(self):
+        self._login("viewer", ["view_pumping"])
+        self._bottle_from_stash(3)
+        self.c.post("/stash/warning/dismiss/")
+        self.assertNotContains(self.c.get("/stash/"), "/stash/warning/dismiss/")
+
+        self._add_to_stash(2, 50)
+        self._bottle_from_stash(1)
+        page = self.c.get("/stash/")
+        self.assertContains(page, "/stash/warning/dismiss/")
+
+    def test_menu_has_one_stash_entry_and_page_links_the_list(self):
+        self._login("stash-admin", is_superuser=True)
+        content = self.c.get("/stash/").content.decode()
+        self.assertEqual(content.count('href="/stash/"'), 1)
+        self.assertIn('href="/stash/adjustments/"', content)
+        self.assertIn('href="/stash/adjustments/add/"', content)
 
     def test_dismiss_requires_post(self):
         self._login("viewer", ["view_pumping"])
