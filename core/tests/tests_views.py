@@ -827,6 +827,15 @@ class StashPagesTestCase(TestCase):
         page = self.c.get("/stash/")
         self.assertContains(page, "/stash/warning/dismiss/")
 
+    def test_parent_pickers_show_the_adult_placeholder(self):
+        self._login("stash-admin", is_superuser=True)
+        models.Parent.objects.create(first_name="Casey")
+        for path in ("/pumping/add/", "/stash/adjustments/add/"):
+            with self.subTest(path=path):
+                content = self.c.get(path).content.decode()
+                self.assertIn("parent-placeholder", content)
+                self.assertNotIn("child-placeholder", content)
+
     def test_one_milk_parent_is_never_named(self):
         self._login("stash-admin", is_superuser=True)
         models.Parent.objects.create(first_name="Sam", produces_milk=False)

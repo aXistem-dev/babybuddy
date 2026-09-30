@@ -106,6 +106,13 @@ class ChildRadioSelect(RadioSelect):
         return option
 
 
+class ParentRadioSelect(ChildRadioSelect):
+    """ChildRadioSelect for parents: an adult placeholder when there's no
+    picture."""
+
+    option_template_name = "core/parent_radio_option.html"
+
+
 class PillRadioSelect(RadioSelect):
     input_type = "radio"
     template_name = "core/pill_radio.html"

@@ -15,7 +15,12 @@ from taggit.forms import TagField, TagWidgetMixin
 from babybuddy.widgets import DateInput, DateTimeInput, TimeInput
 from core import models, stash
 from core.models import Timer
-from core.widgets import TagsEditor, ChildRadioSelect, PillRadioSelect
+from core.widgets import (
+    TagsEditor,
+    ChildRadioSelect,
+    ParentRadioSelect,
+    PillRadioSelect,
+)
 
 
 def set_initial_values(kwargs, form_type):
@@ -600,7 +605,7 @@ class FeedingForm(StashFeedingMixin, CoreModelForm, TaggableModelForm):
             "end": DateTimeInput(),
             "type": PillRadioSelect(),
             "method": PillRadioSelect(),
-            "parent": ChildRadioSelect,  # renders any model with a picture
+            "parent": ParentRadioSelect,
             "notes": forms.Textarea(attrs={"rows": 5}),
         }
 
@@ -745,7 +750,7 @@ class PumpingForm(CoreModelForm, TaggableModelForm):
         model = models.Pumping
         fields = ["parent", "start", "end", "amount", "stash_amount", "notes", "tags"]
         widgets = {
-            "parent": ChildRadioSelect,  # renders any model with a picture
+            "parent": ParentRadioSelect,
             "start": DateTimeInput(),
             "end": DateTimeInput(),
             "notes": forms.Textarea(attrs={"rows": 5}),
@@ -797,7 +802,7 @@ class StashAdjustmentForm(CoreModelForm, TaggableModelForm):
         widgets = {
             "time": DateTimeInput(),
             "kind": PillRadioSelect(),
-            "parent": ChildRadioSelect,
+            "parent": ParentRadioSelect,
             "notes": forms.Textarea(attrs={"rows": 5}),
         }
 
