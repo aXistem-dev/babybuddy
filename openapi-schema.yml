@@ -6787,6 +6787,39 @@ paths:
           description: ""
       tags:
         - api
+  /api/stash/settings:
+    get:
+      operationId: retrieveMilkStashSettings
+      description: The milk stash's site settings. Anyone who can see pumping can read them; only users who may edit them on Site > Settings can change them.
+      parameters: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ""
+      tags:
+        - api
+    patch:
+      operationId: partialUpdateMilkStashSettings
+      description: The milk stash's site settings. Anyone who can see pumping can read them; only users who may edit them on Site > Settings can change them.
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+          application/x-www-form-urlencoded:
+            schema: {}
+          multipart/form-data:
+            schema: {}
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ""
+      tags:
+        - api
   /api/timers/{id}/restart/:
     patch:
       operationId: restartTimer

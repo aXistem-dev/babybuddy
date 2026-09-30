@@ -29,8 +29,8 @@ Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 - `/api/weight/`
 
 Additionally, `/api/stash` (note: no trailing slash) returns a read-only milk
-stash summary; see [Parents and the milk stash](#parents-and-the-milk-stash)
-below.
+stash summary, and `/api/stash/settings` reads and changes the stash settings;
+see [Parents and the milk stash](#parents-and-the-milk-stash) below.
 
 ## Authentication
 
@@ -369,6 +369,7 @@ curl -X GET https://[...]/api/stash -H 'Authorization: Token [...]'
 ```json
 {
   "balance": 340.0,
+  "negative_since": null,
   "status": "warn",
   "warn_age_hours": 48,
   "max_age_hours": 72,
@@ -378,10 +379,13 @@ curl -X GET https://[...]/api/stash -H 'Authorization: Token [...]'
     {
       "time": "2026-09-25T08:12:00-07:00",
       "amount": 120.0,
+      "parent": 1,
+      "throw_away_amount": 120.0,
       "age_hours": 50.1,
       "warn_at": "2026-09-27T08:12:00-07:00",
       "expires_at": "2026-09-28T08:12:00-07:00",
-      "status": "warn"
+      "status": "warn",
+      "is_oldest_expired": false
     }
   ],
   "defaults": {
@@ -394,7 +398,32 @@ curl -X GET https://[...]/api/stash -H 'Authorization: Token [...]'
 `status` (and each lot's own `status`) is one of `ok`, `warn` or `expired`,
 based on the `stash_warn_age_hours` / `stash_max_age_hours` site settings.
 `balance` can be negative if entries were logged with milk already on hand
-before tracking started.
+before tracking started; `negative_since` is then when it last dropped below
+zero (otherwise `null`). Each lot's `parent` is whose milk it is, and
+`is_oldest_expired` marks the one lot a "throw away" shortcut should offer.
+
+### `/api/stash/settings`
+
+The milk stash's site settings (**Site > Settings > Milk stash**). Anyone who
+can view pumping can `GET` them; `PATCH` needs the same rights as changing them
+on the settings page (staff with permission to edit the pumping settings).
+`can_edit` says whether the current user may change them, and
+`warn_age_hours` must stay below `max_age_hours`.
+
+```shell
+curl -X PATCH https://[...]/api/stash/settings -H 'Authorization: Token [...]' \
+  -H 'Content-Type: application/json' -d '{"warn_age_hours": 36}'
+```
+
+```json
+{
+  "pumping_to_stash": true,
+  "bottle_from_stash": true,
+  "warn_age_hours": 36,
+  "max_age_hours": 72,
+  "can_edit": true
+}
+```
 
 ### Parent resolution
 

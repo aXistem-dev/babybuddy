@@ -448,6 +448,52 @@ class FeedingSerializer(
         return data
 
 
+STASH_SETTINGS = {
+    "pumping_to_stash": "pumping_to_stash_default",
+    "bottle_from_stash": "bottle_from_stash_default",
+    "warn_age_hours": "stash_warn_age_hours",
+    "max_age_hours": "stash_max_age_hours",
+}
+
+
+def can_edit_stash_settings(user):
+    """Whoever may change them on Site > Settings: staff with dbsettings'
+    permission for the pumping settings."""
+    return user.is_staff and user.has_perm("core.can_edit_pumping_settings")
+
+
+def stash_settings_data(user):
+    current = stash.settings()
+    data = {field: getattr(current, attr) for field, attr in STASH_SETTINGS.items()}
+    data["can_edit"] = can_edit_stash_settings(user)
+    return data
+
+
+class StashSettingsSerializer(serializers.Serializer):
+    """The milk stash's site settings (Site > Settings > Milk stash)."""
+
+    pumping_to_stash = serializers.BooleanField(required=False)
+    bottle_from_stash = serializers.BooleanField(required=False)
+    warn_age_hours = serializers.IntegerField(min_value=1, required=False)
+    max_age_hours = serializers.IntegerField(min_value=1, required=False)
+
+    def validate(self, attrs):
+        current = stash.settings()
+        warn = attrs.get("warn_age_hours", current.stash_warn_age_hours)
+        max_ = attrs.get("max_age_hours", current.stash_max_age_hours)
+        if warn >= max_:
+            raise ValidationError(
+                {"warn_age_hours": _("Must be less than the throw-away age.")}
+            )
+        return attrs
+
+    def save(self):
+        current = stash.settings()
+        for field, attr in STASH_SETTINGS.items():
+            if field in self.validated_data:
+                setattr(current, attr, self.validated_data[field])
+
+
 class ParentSerializer(serializers.HyperlinkedModelSerializer):
     children = serializers.PrimaryKeyRelatedField(
         many=True, queryset=models.Child.objects.all(), required=False

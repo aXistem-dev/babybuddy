@@ -167,6 +167,31 @@ class StashView(views.APIView):
         return Response(stash.stash_summary())
 
 
+class StashSettingsView(views.APIView):
+    """The milk stash's site settings. Anyone who can see pumping can read
+    them; only users who may edit them on Site > Settings can change them."""
+
+    schema = AutoSchema(operation_id_base="MilkStashSettings")
+    action = "get"
+    basename = "stash-settings"
+    queryset = models.Pumping.objects.all()  # permission class -> core.*_pumping
+    serializer_class = serializers.StashSettingsSerializer
+
+    def get(self, request):
+        return Response(serializers.stash_settings_data(request.user))
+
+    def patch(self, request):
+        if not serializers.can_edit_stash_settings(request.user):
+            return Response(
+                {"detail": _("You can't change the milk stash settings.")},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = self.serializer_class(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializers.stash_settings_data(request.user))
+
+
 class SleepViewSet(viewsets.ModelViewSet):
     queryset = models.Sleep.objects.all()
     serializer_class = serializers.SleepSerializer

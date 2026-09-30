@@ -27,6 +27,18 @@ class SiteSettingsTestCase(TestCase):
             is_superuser=True, is_staff=True, **cls.credentials
         )
 
+    def test_settings_are_grouped_in_sections(self):
+        self.c.login(**self.credentials)
+        content = self.c.get("/settings/").content.decode()
+        heading = '<h2 class="h4 mt-4 mb-3">Milk stash</h2>'
+        self.assertIn(heading, content)
+        self.assertLess(
+            content.index(heading),
+            content.index("Store pumped milk in the stash by default"),
+        )
+        self.assertIn('<h2 class="h4 mt-4 mb-3">Feedings</h2>', content)
+        self.assertIn('<h2 class="h4 mt-4 mb-3">Sleep</h2>', content)
+
     def test_settings_default(self):
         self.c.login(**self.credentials)
         page = self.c.get("/settings/")

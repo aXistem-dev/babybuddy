@@ -171,7 +171,9 @@ Four reports cover the stash and pumping:
 - **Pumping report** (on each parent's page) — pumping amounts for that
   parent.
 
-Four site-wide settings, under **Site > Settings**, control the defaults:
+Four site-wide settings, in the **Milk stash** section of **Site > Settings**,
+control the defaults (the API exposes them at `/api/stash/settings`, which
+apps use to show and change them):
 
 | Setting | Default | Effect |
 |---|---|---|

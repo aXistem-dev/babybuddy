@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from babybuddy.models import get_user_model
 from api import serializers
-from core import models
+from core import models, stash
 from django.conf import settings
 from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.models import Group, Permission
@@ -1059,6 +1059,62 @@ class ParentAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertFalse(models.Parent.objects.filter(pk=self.parent.pk).exists())
         feeding.refresh_from_db()
         self.assertIsNone(feeding.parent)
+
+
+class StashSettingsAPITestCase(APITestCase):
+    fixtures = ["tests.json"]
+    endpoint = reverse("api:stash-settings")
+
+    def test_admin_reads_and_changes_the_settings(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            {
+                "pumping_to_stash": True,
+                "bottle_from_stash": True,
+                "warn_age_hours": 48,
+                "max_age_hours": 72,
+                "can_edit": True,
+            },
+        )
+        response = self.client.patch(
+            self.endpoint,
+            {"bottle_from_stash": False, "warn_age_hours": 24},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertFalse(response.data["bottle_from_stash"])
+        self.assertEqual(response.data["warn_age_hours"], 24)
+        self.assertFalse(stash.settings().bottle_from_stash_default)
+        self.assertEqual(stash.stash_summary()["warn_age_hours"], 24)
+
+    def test_warn_age_must_be_below_the_throw_away_age(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.patch(
+            self.endpoint, {"warn_age_hours": 72}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("warn_age_hours", response.data)
+
+    def test_other_users_can_read_but_not_change(self):
+        user = get_user_model().objects.create_user(username="viewer", password="pw")
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core",
+                codename__in=["view_pumping", "change_pumping"],
+            )
+        )
+        self.client.login(username="viewer", password="pw")
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["can_edit"])
+        response = self.client.patch(
+            self.endpoint, {"pumping_to_stash": False}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(stash.settings().pumping_to_stash_default)
 
 
 class StashAdjustmentAPITestCase(TestBase.BabyBuddyAPITestCaseBase):

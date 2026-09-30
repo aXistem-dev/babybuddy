@@ -3441,6 +3441,14 @@ msgstr "Recentste bewegingen"
 msgid "All stash adjustments"
 msgstr "Alle voorraadaanpassingen"
 
+#: api/serializers.py:560
+msgid "Must be less than the throw-away age."
+msgstr "Moet kleiner zijn dan de leeftijd om weg te gooien."
+
+#: api/views.py:180
+msgid "You can't change the milk stash settings."
+msgstr "Je kunt de instellingen van de melkvoorraad niet wijzigen."
+
 #: core/models.py:303
 msgid "Produces breast milk"
 msgstr "Produceert moedermelk"
