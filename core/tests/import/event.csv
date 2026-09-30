@@ -1,0 +1,5 @@
+id,child_id,child_first_name,child_last_name,type,time,notes,tags
+1,1,Child,One,bath,2020-02-11 19:00:00,,
+2,1,Child,One,nail-trim,2020-02-12 10:30:00,Both hands.,
+3,1,Child,One,pajama-change,2020-02-12 21:00:00,,
+4,1,Child,One,bath,2020-02-13 19:15:00,Short one.,

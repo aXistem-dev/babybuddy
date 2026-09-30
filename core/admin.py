@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.conf import settings
 
-from import_export import fields, resources
+from import_export import fields, resources, widgets
 from import_export.admin import ImportExportMixin, ExportActionMixin
 
 from core import models
@@ -95,6 +95,44 @@ class DiaperChangeAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
         "child__last_name",
     )
     resource_class = DiaperChangeImportExportResource
+
+
+class EventImportExportResource(ImportExportResourceBase):
+    type = fields.Field(
+        attribute="type",
+        column_name="type",
+        widget=widgets.ForeignKeyWidget(models.EventType, field="slug"),
+    )
+
+    class Meta:
+        model = models.Event
+
+
+@admin.register(models.Event)
+class EventAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
+    list_display = ("time", "child", "type")
+    list_filter = ("child", "type", "tags")
+    search_fields = (
+        "child__first_name",
+        "child__last_name",
+        "type__name",
+    )
+    resource_class = EventImportExportResource
+
+
+class EventTypeImportExportResource(resources.ModelResource):
+    id = fields.Field(attribute="id")
+
+    class Meta:
+        model = models.EventType
+        exclude = ("slug",)
+
+
+@admin.register(models.EventType)
+class EventTypeAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
+    list_display = ("name", "slug")
+    search_fields = ("name", "slug")
+    resource_class = EventTypeImportExportResource
 
 
 class FeedingImportExportResource(ImportExportResourceBase):

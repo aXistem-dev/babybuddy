@@ -54,6 +54,25 @@ class ImportTestCase(TestCase):
     def test_diaperchange(self):
         self.import_data(models.DiaperChange, 75)
 
+    def test_event(self):
+        self.import_data(models.EventType, 3)
+        self.import_data(models.Event, 4)
+        self.assertEqual(models.Event.objects.filter(type__slug="bath").count(), 2)
+        self.assertEqual(models.Event.objects.get(pk=2).type.name, "Nail trim")
+
+    def test_event_unknown_type(self):
+        dataset = self.get_dataset("event")
+        resource = admin.EventImportExportResource()
+        result = resource.import_data(dataset, dry_run=True)
+        self.assertTrue(result.has_errors() or result.has_validation_errors())
+
+    def test_eventtype(self):
+        self.import_data(models.EventType, 3)
+        self.assertEqual(
+            list(models.EventType.objects.values_list("slug", flat=True)),
+            ["bath", "nail-trim", "pajama-change"],
+        )
+
     def test_feeding(self):
         self.import_data(models.Feeding, 40)
 
