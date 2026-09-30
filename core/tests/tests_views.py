@@ -735,7 +735,8 @@ class StashPagesTestCase(TestCase):
         )
         page = self.c.get("/stash/")
         self.assertContains(
-            page, "Er ging ooit meer melk uit de voorraad dan er is geregistreerd."
+            page,
+            "De voorraad staat onder nul: er is meer melk uitgehaald dan er ooit in ging.",
         )
 
     def test_warning_hidden_when_balance_positive(self):
@@ -761,7 +762,8 @@ class StashPagesTestCase(TestCase):
         page = self.c.get("/stash/")
         self.assertContains(page, "/stash/warning/dismiss/")
         self.assertContains(
-            page, "More milk left the stash than was ever logged going in."
+            page,
+            "The stash is below zero: more milk was taken out than was ever put in.",
         )
 
     def test_dismiss_hides_for_that_user_only(self):

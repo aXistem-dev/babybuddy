@@ -3401,14 +3401,11 @@ msgstr "Bewaard"
 
 #: core/templates/core/stash.html:23
 msgid ""
-"More milk left the stash than was ever logged going in. This is usually a "
-"bottle that was given without being logged as taken from the stash. Fix it "
-"with an \"Added\" entry dated before the first bottle."
+"The stash is below zero: more milk was taken out than was ever put in. "
+"Add the missing milk with an \"Added\" entry."
 msgstr ""
-"Er ging ooit meer melk uit de voorraad dan er is geregistreerd. Dit is "
-"meestal een flesje dat werd gegeven zonder als \"uit voorraad\" te worden "
-"genoteerd. Los dit op met een \"Toegevoegd\"-registratie van vóór het eerste "
-"flesje."
+"De voorraad staat onder nul: er is meer melk uitgehaald dan er ooit in ging. "
+"Voeg de ontbrekende melk toe met een \"Toegevoegd\"-registratie."
 
 #: core/templates/core/stash.html:31
 msgid "Dismiss"

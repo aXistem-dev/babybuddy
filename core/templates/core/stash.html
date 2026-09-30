@@ -21,9 +21,8 @@
         <div class="alert alert-warning d-flex justify-content-between align-items-start flex-wrap gap-2">
             <div>
                 {% blocktrans trimmed %}
-                    More milk left the stash than was ever logged going in. This is usually a
-                    bottle that was given without being logged as taken from the stash. Fix it
-                    with an "Added" entry dated before the first bottle.
+                    The stash is below zero: more milk was taken out than was ever put in.
+                    Add the missing milk with an "Added" entry.
                 {% endblocktrans %}
             </div>
             <form method="post" action="{% url "core:stash-warning-dismiss" %}">
