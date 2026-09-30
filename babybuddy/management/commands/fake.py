@@ -22,6 +22,7 @@ class Command(BaseCommand):
         self.child = None
         self.weight = None
         self.tags = []
+        self.event_types = []
         self.time = None
         self.time_now = timezone.localtime()
 
@@ -52,6 +53,10 @@ class Command(BaseCommand):
                 self.tags.append(tag)
             except IntegrityError:
                 pass
+
+        for name in ["Bath", "Nail trim", "Pajama change"]:
+            event_type = models.EventType.objects.get_or_create(name=name)[0]
+            self.event_types.append(event_type)
 
         birth_date = timezone.localtime() - timedelta(days=days)
         for i in range(0, children):
@@ -104,6 +109,9 @@ class Command(BaseCommand):
         self._add_medication_entry()
         last_medication_entry_time = self.time
 
+        self._add_event_entry()
+        last_event_entry_time = self.time
+
         while self.time < self.time_now:
             self._add_sleep_entry()
             if choice([True, False]):
@@ -126,6 +134,9 @@ class Command(BaseCommand):
             if choice([True, False, False]):
                 self._add_medication_entry()
                 last_medication_entry_time = self.time
+            if (self.time - last_event_entry_time).days > 0 and choice([True, False]):
+                self._add_event_entry()
+                last_event_entry_time = self.time
             if (self.time - last_weight_entry_time).days > 6:
                 self._add_weight_entry()
                 last_weight_entry_time = self.time
@@ -190,6 +201,28 @@ class Command(BaseCommand):
             instance.save()
             self._add_tags(instance)
         self.time = time
+
+    @transaction.atomic
+    def _add_event_entry(self):
+        """
+        Add an Event entry of a random event type.
+        :returns:
+        """
+        time = self.time + timedelta(minutes=randint(1, 60))
+
+        notes = ""
+        if choice([True, False, False, False]):
+            notes = " ".join(self.faker.sentences(randint(1, 3)))
+
+        if time < self.time_now:
+            instance = models.Event.objects.create(
+                child=self.child,
+                type=choice(self.event_types),
+                time=time,
+                notes=notes,
+            )
+            instance.save()
+            self._add_tags(instance)
 
     @transaction.atomic
     def _add_feeding_entry(self):

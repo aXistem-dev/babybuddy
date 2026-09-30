@@ -4,7 +4,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
 
-from core.models import Child
+from core.models import Child, Event, EventType
 
 
 class CommandsTestCase(TransactionTestCase):
@@ -20,6 +20,16 @@ class CommandsTestCase(TransactionTestCase):
         self.assertEqual(Child.objects.count(), 1)
         call_command("fake", children=2, days=7, verbosity=0)
         self.assertEqual(Child.objects.count(), 3)
+
+    def test_fake_adds_event_types_and_events(self):
+        call_command("migrate", verbosity=0)
+        call_command("fake", children=1, days=7, verbosity=0)
+        names = ["Bath", "Nail trim", "Pajama change"]
+        self.assertEqual(list(EventType.objects.values_list("name", flat=True)), names)
+        self.assertGreater(Event.objects.count(), 0)
+        # Running it again reuses the event types.
+        call_command("fake", children=1, days=7, verbosity=0)
+        self.assertEqual(EventType.objects.count(), len(names))
 
     def test_reset(self):
         call_command("reset", verbosity=0, interactive=False)
