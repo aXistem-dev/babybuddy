@@ -149,8 +149,9 @@ request, the only time it appears. Replacing it later is a `PATCH` with a new
 ## What is announced
 
 Changes to children and to the entries that can be recorded for them: BMI,
-diaper changes, feedings, head circumference, height, medication, notes,
-pumping, sleep, temperature, timers, tummy time and weight. Percentiles are
+diaper changes, events, feedings, head circumference, height, medication, notes,
+pumping, sleep, temperature, timers, tummy time and weight. Changes to event
+types are announced as well (`eventtype.created` and so on). Percentiles are
 left out because they are computed rather than written, so announcing them
 would send an event for every measurement that merely moved a curve.
 

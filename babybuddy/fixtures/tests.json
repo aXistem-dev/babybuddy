@@ -498,5 +498,41 @@
       "color": "#FF0000",
       "last_used": "2017-11-18T16:00:00Z"
     }
+  },
+  {
+    "model": "core.eventtype",
+    "pk": 1,
+    "fields": {
+      "name": "Bath",
+      "slug": "bath"
+    }
+  },
+  {
+    "model": "core.eventtype",
+    "pk": 2,
+    "fields": {
+      "name": "Nail trim",
+      "slug": "nail-trim"
+    }
+  },
+  {
+    "model": "core.event",
+    "pk": 1,
+    "fields": {
+      "child": 1,
+      "type": 1,
+      "time": "2017-11-18T01:30:00Z",
+      "notes": "Warm water."
+    }
+  },
+  {
+    "model": "core.event",
+    "pk": 2,
+    "fields": {
+      "child": 1,
+      "type": 2,
+      "time": "2017-11-16T14:00:00Z",
+      "notes": ""
+    }
   }
 ]

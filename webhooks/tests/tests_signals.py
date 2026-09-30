@@ -60,6 +60,29 @@ class WebhookSignalTestCase(TestCase):
         self.assertEqual(event.type, "feeding.deleted")
         self.assertEqual(event.object_id, primary_key)
 
+    def test_event_changes_are_announced(self):
+        event_type = models.EventType.objects.create(name="Bath")
+        event = models.Event.objects.create(child=self.child, type=event_type)
+        primary_key = str(event.pk)
+        self.assertEqual(WebhookEvent.objects.latest("id").type, "event.created")
+        self.assertEqual(WebhookEvent.objects.latest("id").object_id, primary_key)
+        event.notes = "Warm water."
+        event.save()
+        self.assertEqual(WebhookEvent.objects.latest("id").type, "event.updated")
+        event.delete()
+        latest = WebhookEvent.objects.latest("id")
+        self.assertEqual(latest.type, "event.deleted")
+        self.assertEqual(latest.object_id, primary_key)
+
+    def test_event_type_changes_are_announced(self):
+        event_type = models.EventType.objects.create(name="Bath")
+        self.assertEqual(WebhookEvent.objects.latest("id").type, "eventtype.created")
+        event_type.name = "Shower"
+        event_type.save()
+        self.assertEqual(WebhookEvent.objects.latest("id").type, "eventtype.updated")
+        event_type.delete()
+        self.assertEqual(WebhookEvent.objects.latest("id").type, "eventtype.deleted")
+
     def test_every_record_model_is_watched(self):
         # A new kind of record is a new kind of change to announce. This fails
         # until it is added on purpose, rather than quietly announcing nothing

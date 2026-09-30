@@ -323,6 +323,85 @@ class DiaperChange(models.Model):
         validate_time(self.time, "time")
 
 
+class Event(models.Model):
+    model_name = "event"
+    child = models.ForeignKey(
+        "Child",
+        on_delete=models.CASCADE,
+        related_name="events",
+        verbose_name=_("Child"),
+    )
+    type = models.ForeignKey(
+        "EventType",
+        on_delete=models.PROTECT,
+        related_name="events",
+        verbose_name=_("Type"),
+    )
+    time = models.DateTimeField(
+        blank=False, default=timezone.localtime, null=False, verbose_name=_("Time")
+    )
+    notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
+    tags = TaggableManager(blank=True, through=Tagged)
+
+    objects = models.Manager()
+
+    class Meta:
+        default_permissions = ("view", "add", "change", "delete")
+        ordering = ["-time"]
+        verbose_name = _("Event")
+        verbose_name_plural = _("Events")
+
+    def __str__(self):
+        return str(_("Event"))
+
+    def clean(self):
+        validate_time(self.time, "time")
+
+
+class EventType(models.Model):
+    model_name = "eventtype"
+    name = models.CharField(max_length=255, unique=True, verbose_name=_("Name"))
+    slug = models.SlugField(
+        allow_unicode=True,
+        blank=False,
+        editable=False,
+        max_length=100,
+        unique=True,
+        verbose_name=_("Slug"),
+    )
+
+    objects = models.Manager()
+
+    class Meta:
+        default_permissions = ("view", "add", "change", "delete")
+        ordering = ["name"]
+        verbose_name = _("Event Type")
+        verbose_name_plural = _("Event Types")
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        self.slug = slugify(self.name, allow_unicode=True)
+        super(EventType, self).save(*args, **kwargs)
+
+    def clean(self):
+        # The slug is derived from the name, so two different names can still
+        # end up with the same slug (e.g. "Bath" and "bath!").
+        slug = slugify(self.name or "", allow_unicode=True)
+        if not slug:
+            raise ValidationError(
+                {"name": _("Name must contain at least one letter or number.")},
+                code="slug_empty",
+            )
+        conflicting = EventType.objects.filter(slug=slug).exclude(pk=self.pk)
+        if conflicting.exists():
+            raise ValidationError(
+                {"name": _("An event type with a similar name already exists.")},
+                code="slug_conflict",
+            )
+
+
 class Feeding(models.Model):
     model_name = "feeding"
     child = models.ForeignKey(

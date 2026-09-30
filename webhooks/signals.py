@@ -18,6 +18,8 @@ WATCHED = (
     core_models.BMI,
     core_models.Child,
     core_models.DiaperChange,
+    core_models.Event,
+    core_models.EventType,
     core_models.Feeding,
     core_models.HeadCircumference,
     core_models.Height,

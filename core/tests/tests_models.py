@@ -2,7 +2,9 @@
 import datetime
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.db.models import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -149,6 +151,98 @@ class DiaperChangeTestCase(TestCase):
         self.assertEqual(
             models.DiaperChange.objects.filter(child=child).count(), len(colors)
         )
+
+
+class EventTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+        self.child = models.Child.objects.create(
+            first_name="First", last_name="Last", birth_date=timezone.localdate()
+        )
+        self.event_type = models.EventType.objects.create(name="Bath")
+
+    def test_event_create(self):
+        event = models.Event.objects.create(
+            child=self.child,
+            type=self.event_type,
+            time=timezone.localtime() - timezone.timedelta(hours=1),
+            notes="Warm water.",
+        )
+        self.assertEqual(event, models.Event.objects.first())
+        self.assertEqual(str(event), "Event")
+        self.assertEqual(event.child, self.child)
+        self.assertEqual(event.type, self.event_type)
+        self.assertEqual(list(self.child.events.all()), [event])
+        self.assertEqual(list(self.event_type.events.all()), [event])
+
+    def test_event_time_defaults_to_now(self):
+        before = timezone.now()
+        event = models.Event.objects.create(child=self.child, type=self.event_type)
+        self.assertGreaterEqual(event.time, before)
+        self.assertLessEqual(event.time, timezone.now())
+
+    def test_event_time_can_not_be_in_the_future(self):
+        event = models.Event(
+            child=self.child,
+            type=self.event_type,
+            time=timezone.localtime() + timezone.timedelta(hours=1),
+        )
+        with self.assertRaises(ValidationError) as context:
+            event.clean()
+        self.assertIn("time", context.exception.message_dict)
+
+    def test_event_type_in_use_is_protected(self):
+        models.Event.objects.create(child=self.child, type=self.event_type)
+        with self.assertRaises(ProtectedError):
+            self.event_type.delete()
+        self.assertTrue(models.EventType.objects.filter(pk=self.event_type.pk).exists())
+
+    def test_events_are_deleted_with_their_child(self):
+        models.Event.objects.create(child=self.child, type=self.event_type)
+        self.child.delete()
+        self.assertEqual(models.Event.objects.count(), 0)
+        self.assertTrue(models.EventType.objects.filter(pk=self.event_type.pk).exists())
+
+
+class EventTypeTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+
+    def test_event_type_create(self):
+        event_type = models.EventType.objects.create(name="Pajama change")
+        self.assertEqual(event_type, models.EventType.objects.first())
+        self.assertEqual(str(event_type), "Pajama change")
+        self.assertEqual(event_type.slug, "pajama-change")
+
+    def test_event_type_slug_follows_name(self):
+        event_type = models.EventType.objects.create(name="Nail trim")
+        event_type.name = "Nail trim (hands)"
+        event_type.save()
+        self.assertEqual(event_type.slug, "nail-trim-hands")
+
+    def test_event_type_ordering(self):
+        models.EventType.objects.create(name="Nail trim")
+        models.EventType.objects.create(name="Bath")
+        self.assertEqual(
+            list(models.EventType.objects.values_list("name", flat=True)),
+            ["Bath", "Nail trim"],
+        )
+
+    def test_event_type_clean_rejects_a_conflicting_slug(self):
+        models.EventType.objects.create(name="Bath")
+        with self.assertRaises(ValidationError) as context:
+            models.EventType(name="bath!").clean()
+        self.assertIn("name", context.exception.message_dict)
+
+    def test_event_type_clean_rejects_an_empty_slug(self):
+        with self.assertRaises(ValidationError) as context:
+            models.EventType(name="!!!").clean()
+        self.assertIn("name", context.exception.message_dict)
+
+    def test_event_type_clean_accepts_its_own_slug(self):
+        event_type = models.EventType.objects.create(name="Bath")
+        event_type.name = "BATH"
+        event_type.clean()
 
 
 class FeedingTestCase(TestCase):
