@@ -14,6 +14,7 @@ from babybuddy import models as babybuddy_models
 from webhooks import models as webhooks_models
 
 from . import serializers, filters
+from .pagination import EventTypePagination, with_event_type_permissions
 
 
 class BMIViewSet(viewsets.ModelViewSet):
@@ -72,6 +73,26 @@ class EventTypeViewSet(viewsets.ModelViewSet):
     filterset_fields = ("id", "name", "slug")
     ordering_fields = ("name", "slug")
     ordering = "name"
+    pagination_class = EventTypePagination
+
+    def list(self, request, *args, **kwargs):
+        """
+        List the event types and the user's permissions to manage them.
+        """
+        response = super().list(request, *args, **kwargs)
+        if isinstance(response.data, list):
+            # Without a page size the list is not paginated. It still gets the
+            # paginated shape, so that the permissions are always there.
+            response.data = with_event_type_permissions(
+                {
+                    "count": len(response.data),
+                    "next": None,
+                    "previous": None,
+                    "results": response.data,
+                },
+                request.user,
+            )
+        return response
 
     def destroy(self, request, *args, **kwargs):
         """

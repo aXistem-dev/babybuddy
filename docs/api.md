@@ -130,6 +130,23 @@ Returns JSON data in the response body in the following format:
 - `previous`: URL for the previous set of results.
 - `results`: An array of the results of the request.
 
+The list of event types (`/api/event-types/`) has one more key on every page,
+`permissions`, which tells a client whether the user may add, change and delete
+event types. A client can use it to decide which management options to show,
+instead of working out the user's permissions itself:
+
+```json
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "permissions": { "add": true, "change": true, "delete": false },
+  "results": [{...}]
+}
+```
+
+A single event type does not include `permissions`.
+
 For single entries, returns JSON data in the response body keyed by model field
 names. This will vary between models.
 
