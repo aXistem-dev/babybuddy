@@ -24,7 +24,7 @@ class CommandsTestCase(TransactionTestCase):
     def test_fake_adds_event_types_and_events(self):
         call_command("migrate", verbosity=0)
         call_command("fake", children=1, days=7, verbosity=0)
-        names = ["Bath", "Nail trim", "Pajama change"]
+        names = ["Nail trim", "Sunscreen", "Tooth brushing"]
         self.assertEqual(list(EventType.objects.values_list("name", flat=True)), names)
         self.assertGreater(Event.objects.count(), 0)
         # Running it again reuses the event types.

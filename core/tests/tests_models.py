@@ -159,14 +159,14 @@ class EventTestCase(TestCase):
         self.child = models.Child.objects.create(
             first_name="First", last_name="Last", birth_date=timezone.localdate()
         )
-        self.event_type = models.EventType.objects.create(name="Bath")
+        self.event_type = models.EventType.objects.create(name="Tooth brushing")
 
     def test_event_create(self):
         event = models.Event.objects.create(
             child=self.child,
             type=self.event_type,
             time=timezone.localtime() - timezone.timedelta(hours=1),
-            notes="Warm water.",
+            notes="Soft brush.",
         )
         self.assertEqual(event, models.Event.objects.first())
         self.assertEqual(str(event), "Event")
@@ -209,10 +209,10 @@ class EventTypeTestCase(TestCase):
         call_command("migrate", verbosity=0)
 
     def test_event_type_create(self):
-        event_type = models.EventType.objects.create(name="Pajama change")
+        event_type = models.EventType.objects.create(name="Sunscreen")
         self.assertEqual(event_type, models.EventType.objects.first())
-        self.assertEqual(str(event_type), "Pajama change")
-        self.assertEqual(event_type.slug, "pajama-change")
+        self.assertEqual(str(event_type), "Sunscreen")
+        self.assertEqual(event_type.slug, "sunscreen")
 
     def test_event_type_slug_is_kept_on_rename(self):
         event_type = models.EventType.objects.create(name="Nail trim")
@@ -224,11 +224,11 @@ class EventTypeTestCase(TestCase):
         self.assertEqual(event_type.slug, "nail-trim")
 
     def test_event_type_slug_is_kept_on_rename_to_a_taken_slug(self):
-        models.EventType.objects.create(name="Bath")
+        models.EventType.objects.create(name="Tooth brushing")
         event_type = models.EventType.objects.create(name="Shower")
-        # "Bath!" would slugify to the slug of "Bath", but the slug does not
-        # change on a rename, so there is no conflict.
-        event_type.name = "Bath!"
+        # "Tooth brushing!" would slugify to the slug of "Tooth brushing", but
+        # the slug does not change on a rename, so there is no conflict.
+        event_type.name = "Tooth brushing!"
         event_type.full_clean()
         event_type.save()
         self.assertEqual(event_type.slug, "shower")
@@ -247,18 +247,18 @@ class EventTypeTestCase(TestCase):
         self.assertEqual(event_type.slug, "ff" * 50)
 
     def test_event_type_ordering(self):
+        models.EventType.objects.create(name="Tooth brushing")
         models.EventType.objects.create(name="nail trim")
-        models.EventType.objects.create(name="Pajama change")
-        models.EventType.objects.create(name="Bath")
+        models.EventType.objects.create(name="Sunscreen")
         self.assertEqual(
             list(models.EventType.objects.values_list("name", flat=True)),
-            ["Bath", "nail trim", "Pajama change"],
+            ["nail trim", "Sunscreen", "Tooth brushing"],
         )
 
     def test_event_type_clean_rejects_a_conflicting_slug(self):
-        models.EventType.objects.create(name="Bath")
+        models.EventType.objects.create(name="Tooth brushing")
         with self.assertRaises(ValidationError) as context:
-            models.EventType(name="bath!").clean()
+            models.EventType(name="tooth brushing!").clean()
         self.assertIn("name", context.exception.message_dict)
 
     def test_event_type_clean_rejects_an_empty_slug(self):
@@ -267,14 +267,14 @@ class EventTypeTestCase(TestCase):
         self.assertIn("name", context.exception.message_dict)
 
     def test_event_type_clean_accepts_its_own_slug(self):
-        event_type = models.EventType.objects.create(name="Bath")
-        event_type.name = "BATH"
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        event_type.name = "TOOTH BRUSHING"
         try:
             event_type.full_clean()
         except ValidationError as error:
             self.fail("clean() rejected an unchanged slug: {}".format(error))
         event_type.save()
-        self.assertEqual(event_type.slug, "bath")
+        self.assertEqual(event_type.slug, "tooth-brushing")
 
 
 class FeedingTestCase(TestCase):

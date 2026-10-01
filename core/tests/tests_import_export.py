@@ -57,7 +57,9 @@ class ImportTestCase(TestCase):
     def test_event(self):
         self.import_data(models.EventType, 3)
         self.import_data(models.Event, 4)
-        self.assertEqual(models.Event.objects.filter(type__slug="bath").count(), 2)
+        self.assertEqual(
+            models.Event.objects.filter(type__slug="tooth-brushing").count(), 2
+        )
         self.assertEqual(models.Event.objects.get(pk=2).type.name, "Nail trim")
 
     def test_event_unknown_type(self):
@@ -73,20 +75,26 @@ class ImportTestCase(TestCase):
         self.assertEqual(
             list(models.EventType.objects.values_list("name", "slug")),
             [
-                ("Bath time", "bath"),
+                ("Brushing teeth", "tooth-brushing"),
                 ("Nail trim", "nail-trim"),
-                ("Pajama change", "pajama-change"),
+                ("Sunscreen", "sunscreen"),
             ],
         )
 
     def test_eventtype_export_includes_the_slug(self):
-        event_type = models.EventType.objects.create(name="Bath")
-        event_type.name = "Bath time"
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        event_type.name = "Brushing teeth"
         event_type.save()
         dataset = admin.EventTypeImportExportResource().export()
         self.assertEqual(
             dataset.dict,
-            [{"id": str(event_type.pk), "name": "Bath time", "slug": "bath"}],
+            [
+                {
+                    "id": str(event_type.pk),
+                    "name": "Brushing teeth",
+                    "slug": "tooth-brushing",
+                }
+            ],
         )
 
     def test_feeding(self):

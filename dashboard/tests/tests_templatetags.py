@@ -96,23 +96,23 @@ class TemplateTagsTestCase(TestCase):
         self.assertEqual(
             [(item["type"].slug, item["last"]) for item in data["event_types"]],
             [
-                ("bath", models.Event.objects.get(pk=1).time),
                 ("nail-trim", models.Event.objects.get(pk=2).time),
+                ("tooth-brushing", models.Event.objects.get(pk=1).time),
             ],
         )
 
     def test_card_event_last_type_without_events(self):
-        models.EventType.objects.create(name="Pajama change")
+        models.EventType.objects.create(name="Sunscreen")
         other_child = models.Child.objects.create(
             first_name="Robin", birth_date=timezone.localdate()
         )
         models.Event.objects.create(
-            child=other_child, type=models.EventType.objects.get(slug="pajama-change")
+            child=other_child, type=models.EventType.objects.get(slug="sunscreen")
         )
         data = cards.card_event_last(self.context, self.child)
         last = {item["type"].slug: item["last"] for item in data["event_types"]}
-        self.assertIsNone(last["pajama-change"])
-        self.assertIsNotNone(last["bath"])
+        self.assertIsNone(last["sunscreen"])
+        self.assertIsNotNone(last["tooth-brushing"])
 
     def test_card_event_last_hidden_without_event_types(self):
         models.Event.objects.all().delete()
@@ -140,7 +140,7 @@ class TemplateTagsTestCase(TestCase):
         )
 
     def test_card_event_last_older_events_are_not_never(self):
-        models.EventType.objects.create(name="Pajama change")
+        models.EventType.objects.create(name="Sunscreen")
         request = MockUserRequest(get_user_model().objects.first())
         request.user.settings.dashboard_hide_age = timezone.timedelta(days=1)
         # The fixture's events are years old, so they are all hidden.

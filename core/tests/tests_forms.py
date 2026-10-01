@@ -359,11 +359,11 @@ class EventFormsTestCase(FormsTestCaseBase):
     @classmethod
     def setUpClass(cls):
         super(EventFormsTestCase, cls).setUpClass()
-        cls.bath = models.EventType.objects.create(name="Bath")
+        cls.tooth_brushing = models.EventType.objects.create(name="Tooth brushing")
         cls.nail_trim = models.EventType.objects.create(name="Nail trim")
         cls.event = models.Event.objects.create(
             child=cls.child,
-            type=cls.bath,
+            type=cls.tooth_brushing,
             time=timezone.localtime() - timezone.timedelta(hours=3),
         )
 
@@ -389,7 +389,7 @@ class EventFormsTestCase(FormsTestCaseBase):
     def test_add_rejects_a_future_time(self):
         params = {
             "child": self.child.id,
-            "type": self.bath.id,
+            "type": self.tooth_brushing.id,
             "time": self.localtime_string(
                 timezone.localtime() + timezone.timedelta(days=1)
             ),
@@ -402,7 +402,7 @@ class EventFormsTestCase(FormsTestCaseBase):
         page = self.c.get("/events/add/")
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "pill-container")
-        self.assertContains(page, "Bath")
+        self.assertContains(page, "Tooth brushing")
         self.assertContains(page, "Nail trim")
 
     def test_type_from_parameter(self):
@@ -413,10 +413,12 @@ class EventFormsTestCase(FormsTestCaseBase):
         self.assertNotIn("type", page.context["form"].initial)
 
         page = self.c.get(
-            "/events/add/?child={}&type={}".format(self.child.slug, self.bath.slug)
+            "/events/add/?child={}&type={}".format(
+                self.child.slug, self.tooth_brushing.slug
+            )
         )
         self.assertEqual(page.context["form"].initial["child"], self.child)
-        self.assertEqual(page.context["form"].initial["type"], self.bath)
+        self.assertEqual(page.context["form"].initial["type"], self.tooth_brushing)
 
     def test_edit(self):
         params = {
@@ -435,7 +437,7 @@ class EventFormsTestCase(FormsTestCaseBase):
         )
 
     def test_delete(self):
-        event = models.Event.objects.create(child=self.child, type=self.bath)
+        event = models.Event.objects.create(child=self.child, type=self.tooth_brushing)
         page = self.c.post("/events/{}/delete/".format(event.id), follow=True)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Event entry deleted")
@@ -444,14 +446,16 @@ class EventFormsTestCase(FormsTestCaseBase):
 
 class EventTypeFormsTestCase(FormsTestCaseBase):
     def test_add(self):
-        page = self.c.post("/event-types/add/", {"name": "Bath"}, follow=True)
+        page = self.c.post("/event-types/add/", {"name": "Tooth brushing"}, follow=True)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Event Type entry added")
-        self.assertEqual(models.EventType.objects.get(name="Bath").slug, "bath")
+        self.assertEqual(
+            models.EventType.objects.get(name="Tooth brushing").slug, "tooth-brushing"
+        )
 
     def test_add_rejects_duplicates(self):
-        models.EventType.objects.create(name="Bath")
-        for name in ("Bath", "bath!"):
+        models.EventType.objects.create(name="Tooth brushing")
+        for name in ("Tooth brushing", "tooth brushing!"):
             with self.subTest(name=name):
                 page = self.c.post("/event-types/add/", {"name": name})
                 self.assertEqual(page.status_code, 200)
@@ -459,30 +463,30 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
         self.assertEqual(models.EventType.objects.count(), 1)
 
     def test_edit(self):
-        event_type = models.EventType.objects.create(name="Pajama")
+        event_type = models.EventType.objects.create(name="Sunscreen")
         page = self.c.post(
             "/event-types/{}/".format(event_type.slug),
-            {"name": "Pajama change"},
+            {"name": "Sunscreen lotion"},
             follow=True,
         )
         self.assertEqual(page.status_code, 200)
         event_type.refresh_from_db()
-        self.assertEqual(event_type.name, "Pajama change")
+        self.assertEqual(event_type.name, "Sunscreen lotion")
         # The slug is fixed when the type is created.
-        self.assertEqual(event_type.slug, "pajama")
+        self.assertEqual(event_type.slug, "sunscreen")
 
     def test_edit_keeps_the_slug_for_new_events(self):
-        event_type = models.EventType.objects.create(name="Bath")
+        event_type = models.EventType.objects.create(name="Tooth brushing")
         page = self.c.post(
             "/event-types/{}/".format(event_type.slug),
-            {"name": "Bath time"},
+            {"name": "Brushing teeth"},
             follow=True,
         )
         self.assertEqual(page.status_code, 200)
         event_type.refresh_from_db()
-        self.assertEqual(event_type.slug, "bath")
+        self.assertEqual(event_type.slug, "tooth-brushing")
 
-        page = self.c.get("/events/add/", {"type": "bath"})
+        page = self.c.get("/events/add/", {"type": "tooth-brushing"})
         self.assertEqual(page.context["form"].initial["type"], event_type)
         page = self.c.post(
             "/events/add/",
@@ -516,7 +520,7 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
         self.assertFalse(models.EventType.objects.filter(pk=event_type.pk).exists())
 
     def test_delete_in_use(self):
-        event_type = models.EventType.objects.create(name="Bath")
+        event_type = models.EventType.objects.create(name="Tooth brushing")
         models.Event.objects.create(child=self.child, type=event_type)
         url = "/event-types/{}/delete/".format(event_type.slug)
 
@@ -527,7 +531,9 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
 
         page = self.c.post(url, follow=True)
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, "Bath is still in use and can not be deleted.")
+        self.assertContains(
+            page, "Tooth brushing is still in use and can not be deleted."
+        )
         self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
 
 

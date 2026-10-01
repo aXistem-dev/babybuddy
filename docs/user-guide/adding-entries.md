@@ -16,12 +16,12 @@ amount, etc. When complete, select Submit.
 ### Event
 
 Events are for everything else that happens at a moment and is worth keeping
-track of, such as a bath, a pajama change or a nail trim. Each event has a
-type, and the list of types is up to you.
+track of, such as a nail trim, tooth brushing or putting on sunscreen. Each
+event has a type, and the list of types is up to you.
 
 To set up the types, select Activities and then Events from the top navigation
-bar, and select Event Types. Select Add Event Type and enter a name, e.g. "Bath"
-or "Nail trim". A type that is in use by events can be renamed, but not deleted.
+bar, and select Event Types. Select Add Event Type and enter a name, e.g. "Nail
+trim" or "Tooth brushing". A type that is in use by events can be renamed, but not deleted.
 Renaming a type keeps its slug (the short name in its address, e.g. `nail-trim`),
 so buttons and other integrations that refer to it keep working.
 

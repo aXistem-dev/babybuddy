@@ -61,12 +61,12 @@ class WebhookSignalTestCase(TestCase):
         self.assertEqual(event.object_id, primary_key)
 
     def test_event_changes_are_announced(self):
-        event_type = models.EventType.objects.create(name="Bath")
+        event_type = models.EventType.objects.create(name="Tooth brushing")
         event = models.Event.objects.create(child=self.child, type=event_type)
         primary_key = str(event.pk)
         self.assertEqual(WebhookEvent.objects.latest("id").type, "event.created")
         self.assertEqual(WebhookEvent.objects.latest("id").object_id, primary_key)
-        event.notes = "Warm water."
+        event.notes = "Soft brush."
         event.save()
         self.assertEqual(WebhookEvent.objects.latest("id").type, "event.updated")
         event.delete()
@@ -75,7 +75,7 @@ class WebhookSignalTestCase(TestCase):
         self.assertEqual(latest.object_id, primary_key)
 
     def test_event_type_changes_are_announced(self):
-        event_type = models.EventType.objects.create(name="Bath")
+        event_type = models.EventType.objects.create(name="Tooth brushing")
         self.assertEqual(WebhookEvent.objects.latest("id").type, "eventtype.created")
         event_type.name = "Shower"
         event_type.save()

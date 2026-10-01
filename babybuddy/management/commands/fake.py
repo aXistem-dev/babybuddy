@@ -54,7 +54,7 @@ class Command(BaseCommand):
             except IntegrityError:
                 pass
 
-        for name in ["Bath", "Nail trim", "Pajama change"]:
+        for name in ["Nail trim", "Sunscreen", "Tooth brushing"]:
             event_type = models.EventType.objects.get_or_create(name=name)[0]
             self.event_types.append(event_type)
 

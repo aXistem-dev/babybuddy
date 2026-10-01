@@ -503,8 +503,8 @@
     "model": "core.eventtype",
     "pk": 1,
     "fields": {
-      "name": "Bath",
-      "slug": "bath"
+      "name": "Tooth brushing",
+      "slug": "tooth-brushing"
     }
   },
   {
@@ -522,7 +522,7 @@
       "child": 1,
       "type": 1,
       "time": "2017-11-18T01:30:00Z",
-      "notes": "Warm water."
+      "notes": "Soft brush."
     }
   },
   {

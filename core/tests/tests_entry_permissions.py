@@ -439,7 +439,7 @@ class EntryPermissionsTestCase(TestCase):
         self.assertEqual(timer.user_id, self.user.pk)
 
     def test_event_add_edit_without_delete_or_type_management(self):
-        event_type = models.EventType.objects.get(slug="bath")
+        event_type = models.EventType.objects.get(slug="tooth-brushing")
         data = {
             "child": self.child.pk,
             "type": event_type.pk,
@@ -472,7 +472,7 @@ class EntryPermissionsTestCase(TestCase):
                     self.client.post(path, {"name": "Changed"}).status_code, 403
                 )
         event_type.refresh_from_db()
-        self.assertEqual(event_type.name, "Bath")
+        self.assertEqual(event_type.name, "Tooth brushing")
 
     def test_event_tags_require_tag_permissions(self):
         count = models.Event.objects.count()
@@ -480,7 +480,7 @@ class EntryPermissionsTestCase(TestCase):
             "/events/add/",
             {
                 "child": self.child.pk,
-                "type": models.EventType.objects.get(slug="bath").pk,
+                "type": models.EventType.objects.get(slug="tooth-brushing").pk,
                 "time": self.start.isoformat(),
                 "tags": "brand-new",
             },

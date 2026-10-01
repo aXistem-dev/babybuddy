@@ -392,7 +392,7 @@ class EventType(models.Model):
         if self.slug:
             return
         # The slug is derived from the name, so two different names can still
-        # end up with the same slug (e.g. "Bath" and "bath!").
+        # end up with the same slug (e.g. "Nail trim" and "nail trim!").
         slug = self.slug_from_name()
         if not slug:
             raise ValidationError(

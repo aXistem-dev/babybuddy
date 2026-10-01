@@ -24,17 +24,17 @@ class EventTypesTestCase(TestCase):
     def test_event_types(self):
         c = models.Child(birth_date=dt.datetime.now())
         c.save()
-        bath = models.EventType.objects.create(name="Bath")
+        tooth_brushing = models.EventType.objects.create(name="Tooth brushing")
         nail_trim = models.EventType.objects.create(name="Nail trim")
 
         # The test time zone is UTC-23:00, so each of these falls on the day
         # before its UTC date.
         for event_type, day, hour in (
-            (bath, 1, 18),
-            (bath, 2, 18),
-            (bath, 2, 20),
+            (tooth_brushing, 1, 18),
+            (tooth_brushing, 2, 18),
+            (tooth_brushing, 2, 20),
             (nail_trim, 2, 10),
-            (bath, 4, 19),
+            (tooth_brushing, 4, 19),
         ):
             models.Event.objects.create(
                 child=c,
@@ -46,14 +46,14 @@ class EventTypesTestCase(TestCase):
             html, js = event_types(models.Event.objects.filter(child=c))
         self.assertIsNotNone(html)
         self.assertIsNotNone(js)
-        self.assertIn("Bath", js)
+        self.assertIn("Tooth brushing", js)
         self.assertIn("Nail trim", js)
 
         figure = plot.call_args.args[0]
         self.assertEqual(
             {trace.name: dict(zip(trace.x, trace.y)) for trace in figure.data},
             {
-                "Bath": {
+                "Tooth brushing": {
                     dt.date(1999, 12, 31): 1,
                     dt.date(2000, 1, 1): 2,
                     dt.date(2000, 1, 3): 1,
