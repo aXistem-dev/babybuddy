@@ -54,8 +54,14 @@ class Command(BaseCommand):
             except IntegrityError:
                 pass
 
-        for name in ["Nail trim", "Sunscreen", "Tooth brushing"]:
-            event_type = models.EventType.objects.get_or_create(name=name)[0]
+        for name, emoji in [
+            ("Nail trim", "✂️"),
+            ("Sunscreen", "🧴"),
+            ("Tooth brushing", "🪥"),
+        ]:
+            event_type = models.EventType.objects.get_or_create(
+                name=name, defaults={"emoji": emoji}
+            )[0]
             self.event_types.append(event_type)
 
         birth_date = timezone.localtime() - timedelta(days=days)

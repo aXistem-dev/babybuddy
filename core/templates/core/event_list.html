@@ -60,7 +60,7 @@
                                 <a href="{% url 'core:child' event.child.slug %}">{{ event.child }}</a>
                             </td>
                         {% endif %}
-                        <td>{{ event.type }}</td>
+                        <td>{{ event.type.display_name }}</td>
                         <td>{% include "core/render_tag_list.html" with tags=event.tags.all %}</td>
                     </tr>
                     {% if event.notes %}

@@ -367,6 +367,10 @@ class EventForm(CoreModelForm, TaggableModelForm):
         {"fields": ["notes", "tags"], "layout": "advanced"},
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["type"].label_from_instance = lambda obj: obj.display_name
+
     class Meta:
         model = models.Event
         fields = ["child", "type", "time", "notes", "tags"]
@@ -381,7 +385,7 @@ class EventForm(CoreModelForm, TaggableModelForm):
 class EventTypeForm(forms.ModelForm):
     class Meta:
         model = models.EventType
-        fields = ["name"]
+        fields = ["name", "emoji"]
 
 
 class FeedingForm(CoreModelForm, TaggableModelForm):

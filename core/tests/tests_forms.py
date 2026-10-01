@@ -360,7 +360,9 @@ class EventFormsTestCase(FormsTestCaseBase):
     def setUpClass(cls):
         super(EventFormsTestCase, cls).setUpClass()
         cls.tooth_brushing = models.EventType.objects.create(name="Tooth brushing")
-        cls.nail_trim = models.EventType.objects.create(name="Nail trim")
+        cls.nail_trim = models.EventType.objects.create(
+            name="Nail trim", emoji="\u2702\ufe0f"
+        )
         cls.event = models.Event.objects.create(
             child=cls.child,
             type=cls.tooth_brushing,
@@ -402,8 +404,17 @@ class EventFormsTestCase(FormsTestCaseBase):
         page = self.c.get("/events/add/")
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "pill-container")
-        self.assertContains(page, "Tooth brushing")
-        self.assertContains(page, "Nail trim")
+        # The emoji comes before the name, and a type without one shows only
+        # its name.
+        self.assertContains(page, "\u2702\ufe0f Nail trim")
+        self.assertContains(page, ">Tooth brushing<")
+
+    def test_list_shows_the_emoji(self):
+        models.Event.objects.create(child=self.child, type=self.nail_trim)
+        page = self.c.get("/events/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "<td>\u2702\ufe0f Nail trim</td>", html=True)
+        self.assertContains(page, "<td>Tooth brushing</td>", html=True)
 
     def test_type_from_parameter(self):
         page = self.c.get("/events/add/?type={}".format(self.nail_trim.slug))
@@ -452,6 +463,52 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
         self.assertEqual(
             models.EventType.objects.get(name="Tooth brushing").slug, "tooth-brushing"
         )
+
+    def test_add_with_emoji(self):
+        page = self.c.post(
+            "/event-types/add/",
+            {"name": "Sunscreen", "emoji": "\U0001f9f4"},
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        event_type = models.EventType.objects.get(name="Sunscreen")
+        self.assertEqual(event_type.emoji, "\U0001f9f4")
+        self.assertContains(page, "\U0001f9f4 Sunscreen")
+
+    def test_emoji_field(self):
+        page = self.c.get("/event-types/add/")
+        self.assertEqual(page.status_code, 200)
+        field = page.context["form"].fields["emoji"]
+        self.assertFalse(field.required)
+        self.assertEqual(field.label, "Emoji")
+        self.assertEqual(
+            field.help_text, "A single emoji shown with this type's events"
+        )
+
+    def test_add_rejects_an_invalid_emoji(self):
+        for emoji in ("x", "\U0001f9f4\U0001faa5", "a\U0001f9f4"):
+            with self.subTest(emoji=emoji):
+                page = self.c.post(
+                    "/event-types/add/", {"name": "Sunscreen", "emoji": emoji}
+                )
+                self.assertEqual(page.status_code, 200)
+                self.assertEqual(
+                    page.context["form"].errors["emoji"], ["Enter a single emoji."]
+                )
+        self.assertFalse(models.EventType.objects.exists())
+
+    def test_edit_emoji(self):
+        event_type = models.EventType.objects.create(name="Sunscreen")
+        url = "/event-types/{}/".format(event_type.slug)
+        page = self.c.post(url, {"name": "Sunscreen", "emoji": "\U0001f9f4"})
+        self.assertEqual(page.status_code, 302)
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.emoji, "\U0001f9f4")
+
+        page = self.c.post(url, {"name": "Sunscreen", "emoji": ""})
+        self.assertEqual(page.status_code, 302)
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.emoji, "")
 
     def test_add_rejects_duplicates(self):
         models.EventType.objects.create(name="Tooth brushing")

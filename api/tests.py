@@ -428,8 +428,13 @@ class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertEqual(
             [dict(r) for r in response.data["results"]],
             [
-                {"id": 2, "name": "Nail trim", "slug": "nail-trim"},
-                {"id": 1, "name": "Tooth brushing", "slug": "tooth-brushing"},
+                {"id": 2, "name": "Nail trim", "slug": "nail-trim", "emoji": "✂️"},
+                {
+                    "id": 1,
+                    "name": "Tooth brushing",
+                    "slug": "tooth-brushing",
+                    "emoji": "🪥",
+                },
             ],
         )
 
@@ -465,7 +470,7 @@ class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             [dict(r) for r in response.data["results"]],
-            [{"id": 2, "name": "Nail trim", "slug": "nail-trim"}],
+            [{"id": 2, "name": "Nail trim", "slug": "nail-trim", "emoji": "✂️"}],
         )
 
     def test_post_long_name(self):
@@ -529,7 +534,47 @@ class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         endpoint = "{}{}/".format(self.endpoint, "tooth-brushing")
         response = self.client.delete(endpoint)
         self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertIn("detail", response.data)
         self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+
+    def test_post_with_emoji(self):
+        response = self.client.post(
+            self.endpoint, {"name": "Sunscreen", "emoji": "\U0001f9f4"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["emoji"], "\U0001f9f4")
+        self.assertEqual(
+            models.EventType.objects.get(slug="sunscreen").emoji, "\U0001f9f4"
+        )
+        response = self.client.get("{}sunscreen/".format(self.endpoint))
+        self.assertEqual(response.data["emoji"], "\U0001f9f4")
+
+    def test_post_without_emoji(self):
+        response = self.client.post(self.endpoint, {"name": "Sunscreen"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["emoji"], "")
+
+    def test_post_invalid_emoji(self):
+        for emoji in ("x", "\U0001f9f4\U0001faa5", "\U0001f642" * 17):
+            with self.subTest(emoji=emoji):
+                response = self.client.post(
+                    self.endpoint, {"name": "Sunscreen", "emoji": emoji}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("emoji", response.data)
+        self.assertFalse(models.EventType.objects.filter(slug="sunscreen").exists())
+
+    def test_patch_emoji(self):
+        endpoint = "{}tooth-brushing/".format(self.endpoint)
+        response = self.client.patch(endpoint, {"emoji": "\U0001f601"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["emoji"], "\U0001f601")
+        response = self.client.patch(endpoint, {"emoji": "two words"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("emoji", response.data)
+        response = self.client.patch(endpoint, {"emoji": ""}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(models.EventType.objects.get(slug="tooth-brushing").emoji, "")
 
 
 class FeedingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):

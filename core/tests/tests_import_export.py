@@ -73,16 +73,18 @@ class ImportTestCase(TestCase):
         # A slug in the file is kept, even when it no longer matches the name;
         # a missing one is generated from the name.
         self.assertEqual(
-            list(models.EventType.objects.values_list("name", "slug")),
+            list(models.EventType.objects.values_list("name", "slug", "emoji")),
             [
-                ("Brushing teeth", "tooth-brushing"),
-                ("Nail trim", "nail-trim"),
-                ("Sunscreen", "sunscreen"),
+                ("Brushing teeth", "tooth-brushing", "\U0001faa5"),
+                ("Nail trim", "nail-trim", "\u2702\ufe0f"),
+                ("Sunscreen", "sunscreen", ""),
             ],
         )
 
-    def test_eventtype_export_includes_the_slug(self):
-        event_type = models.EventType.objects.create(name="Tooth brushing")
+    def test_eventtype_export_includes_the_slug_and_emoji(self):
+        event_type = models.EventType.objects.create(
+            name="Tooth brushing", emoji="\U0001faa5"
+        )
         event_type.name = "Brushing teeth"
         event_type.save()
         dataset = admin.EventTypeImportExportResource().export()
@@ -93,6 +95,7 @@ class ImportTestCase(TestCase):
                     "id": str(event_type.pk),
                     "name": "Brushing teeth",
                     "slug": "tooth-brushing",
+                    "emoji": "\U0001faa5",
                 }
             ],
         )

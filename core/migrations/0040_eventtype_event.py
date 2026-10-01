@@ -40,6 +40,17 @@ class Migration(migrations.Migration):
                         verbose_name="Slug",
                     ),
                 ),
+                (
+                    "emoji",
+                    models.CharField(
+                        blank=True,
+                        default="",
+                        help_text="A single emoji shown with this type's events",
+                        max_length=16,
+                        validators=[core.models.validate_emoji],
+                        verbose_name="Emoji",
+                    ),
+                ),
             ],
             options={
                 "verbose_name": "Event Type",

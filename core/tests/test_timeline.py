@@ -217,3 +217,16 @@ class TimelineTestCase(TestCase):
         self.assertEqual(
             get_objects(date=day + datetime.timedelta(days=1), child=self.child), []
         )
+
+    def test_events_show_the_type_emoji(self):
+        day = timezone.make_aware(datetime.datetime(2023, 1, 1))
+        event_type = models.EventType.objects.create(
+            name="Nail trim", emoji="\u2702\ufe0f"
+        )
+        models.Event.objects.create(
+            child=self.child, type=event_type, time=day.replace(hour=10)
+        )
+
+        events = get_objects(date=day, child=self.child)
+
+        self.assertEqual(events[0]["event"], "\u2702\ufe0f Nail trim for Test.")

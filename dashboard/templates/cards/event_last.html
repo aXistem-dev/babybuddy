@@ -5,7 +5,7 @@
 {% endblock %}
 {% block title %}
     {% if event %}
-        <div>{{ event.type }}</div>
+        <div>{{ event.type.display_name }}</div>
         <div>
             {% blocktrans trimmed with time_ago=event.time|timesince %}
                 {{ time_ago }} ago
@@ -19,7 +19,7 @@
 {% block content %}
     {% for item in event_types %}
         <div class="d-flex justify-content-between py-1 border-bottom">
-            <span>{{ item.type }}</span>
+            <span>{{ item.type.display_name }}</span>
             <span>
                 {% if item.last %}
                     {% blocktrans trimmed with time_ago=item.last|timesince %}

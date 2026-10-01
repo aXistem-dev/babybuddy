@@ -129,7 +129,7 @@ class EventTypeImportExportResource(resources.ModelResource):
 
 @admin.register(models.EventType)
 class EventTypeAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
-    list_display = ("name", "slug")
+    list_display = ("name", "emoji", "slug")
     search_fields = ("name", "slug")
     resource_class = EventTypeImportExportResource
 

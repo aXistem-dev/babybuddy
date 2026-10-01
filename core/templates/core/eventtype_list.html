@@ -50,7 +50,7 @@
                             </div>
                         </td>
                         <th scope="row">
-                            <a href="{% url 'core:event-list' %}?type={{ eventtype.id }}&filtered=1">{{ eventtype.name }}</a>
+                            <a href="{% url 'core:event-list' %}?type={{ eventtype.id }}&filtered=1">{{ eventtype.display_name }}</a>
                         </th>
                         <td>
                             <span class="font-monospace">{{ eventtype.slug }}</span>

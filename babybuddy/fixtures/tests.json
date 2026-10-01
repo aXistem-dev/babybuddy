@@ -504,7 +504,8 @@
     "pk": 1,
     "fields": {
       "name": "Tooth brushing",
-      "slug": "tooth-brushing"
+      "slug": "tooth-brushing",
+      "emoji": "\ud83e\udea5"
     }
   },
   {
@@ -512,7 +513,8 @@
     "pk": 2,
     "fields": {
       "name": "Nail trim",
-      "slug": "nail-trim"
+      "slug": "nail-trim",
+      "emoji": "\u2702\ufe0f"
     }
   },
   {

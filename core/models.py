@@ -86,6 +86,109 @@ def validate_unique_period(queryset, model):
             )
 
 
+EMOJI_MAX_CODE_POINTS = 16
+EMOJI_BASE_RANGES = (
+    (0x1F000, 0x1FAFF),
+    (0x2600, 0x27BF),
+    (0x2300, 0x23FF),
+    (0x2B00, 0x2BFF),
+)
+EMOJI_BASE_CODE_POINTS = {
+    0x00A9,  # copyright sign
+    0x00AE,  # registered sign
+    0x203C,  # double exclamation mark
+    0x2049,  # exclamation question mark
+    0x2122,  # trade mark sign
+    0x2139,  # information source
+    0x3030,  # wavy dash
+    0x303D,  # part alternation mark
+    0x3297,  # circled ideograph congratulation
+    0x3299,  # circled ideograph secret
+}
+EMOJI_KEYCAP_BASES = {ord(c) for c in "0123456789#*"}
+EMOJI_REGIONAL_INDICATORS = (0x1F1E6, 0x1F1FF)
+EMOJI_SKIN_TONES = (0x1F3FB, 0x1F3FF)
+EMOJI_TAGS = (0xE0020, 0xE007E)
+EMOJI_CANCEL_TAG = 0xE007F
+EMOJI_KEYCAP = 0x20E3
+EMOJI_VS16 = 0xFE0F
+EMOJI_ZWJ = 0x200D
+
+
+def _in_range(code_point, code_point_range):
+    return code_point_range[0] <= code_point <= code_point_range[1]
+
+
+def _is_emoji_base(code_point):
+    if _in_range(code_point, EMOJI_REGIONAL_INDICATORS) or _in_range(
+        code_point, EMOJI_SKIN_TONES
+    ):
+        return False
+    return code_point in EMOJI_BASE_CODE_POINTS or any(
+        _in_range(code_point, r) for r in EMOJI_BASE_RANGES
+    )
+
+
+def _is_single_emoji(value):
+    """
+    Check that a string is exactly one emoji grapheme. This follows the shape
+    of emoji sequences rather than Unicode's full emoji data, so it is a little
+    permissive: one base emoji, optionally followed by a variation selector, a
+    skin tone, a keycap mark or a tag sequence, and more of those joined with
+    zero width joiners. Flags are two regional indicators and keycaps are a
+    digit, "#" or "*" with a variation selector and a keycap mark.
+    """
+    code_points = [ord(c) for c in value]
+    if not code_points or len(code_points) > EMOJI_MAX_CODE_POINTS:
+        return False
+    if all(_in_range(c, EMOJI_REGIONAL_INDICATORS) for c in code_points):
+        return len(code_points) == 2
+    if code_points[0] in EMOJI_KEYCAP_BASES:
+        return code_points[1:] == [EMOJI_VS16, EMOJI_KEYCAP]
+
+    i = 0
+    while True:
+        if i >= len(code_points) or not _is_emoji_base(code_points[i]):
+            return False
+        i += 1
+        seen = set()
+        while i < len(code_points):
+            code_point = code_points[i]
+            if _in_range(code_point, EMOJI_SKIN_TONES):
+                kind = "skin_tone"
+            elif code_point in (EMOJI_VS16, EMOJI_KEYCAP):
+                kind = code_point
+            elif _in_range(code_point, EMOJI_TAGS):
+                # A tag sequence (e.g. a subdivision flag) ends with a cancel
+                # tag.
+                while i < len(code_points) and _in_range(code_points[i], EMOJI_TAGS):
+                    i += 1
+                if i >= len(code_points) or code_points[i] != EMOJI_CANCEL_TAG:
+                    return False
+                kind = "tags"
+            else:
+                break
+            if kind in seen:
+                return False
+            seen.add(kind)
+            i += 1
+        if i == len(code_points):
+            return True
+        if code_points[i] != EMOJI_ZWJ:
+            return False
+        i += 1
+
+
+def validate_emoji(value):
+    """
+    Confirm that a value is empty or a single emoji.
+    :param value: the string to check.
+    :return:
+    """
+    if value and not _is_single_emoji(value):
+        raise ValidationError(_("Enter a single emoji."), code="emoji_invalid")
+
+
 def validate_time(time, field_name):
     """
     Confirm that a time is not in the future.
@@ -369,6 +472,14 @@ class EventType(models.Model):
         unique=True,
         verbose_name=_("Slug"),
     )
+    emoji = models.CharField(
+        blank=True,
+        default="",
+        help_text=_("A single emoji shown with this type's events"),
+        max_length=EMOJI_MAX_CODE_POINTS,
+        validators=[validate_emoji],
+        verbose_name=_("Emoji"),
+    )
 
     objects = models.Manager()
 
@@ -379,6 +490,13 @@ class EventType(models.Model):
         verbose_name_plural = _("Event Types")
 
     def __str__(self):
+        return self.name
+
+    @property
+    def display_name(self):
+        """The name, preceded by the emoji when the type has one."""
+        if self.emoji:
+            return "{} {}".format(self.emoji, self.name)
         return self.name
 
     def save(self, *args, **kwargs):

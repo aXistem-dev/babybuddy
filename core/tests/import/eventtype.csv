@@ -1,4 +1,4 @@
-id,name,slug
-1,Brushing teeth,tooth-brushing
-2,Nail trim,nail-trim
-3,Sunscreen,
+id,name,slug,emoji
+1,Brushing teeth,tooth-brushing,🪥
+2,Nail trim,nail-trim,✂️
+3,Sunscreen,,

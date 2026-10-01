@@ -259,7 +259,7 @@ def _add_events(min_date, max_date, events, child):
                 "time": timezone.localtime(instance.time),
                 "event": _("%(type)s for %(child)s.")
                 % {
-                    "type": instance.type.name,
+                    "type": instance.type.display_name,
                     "child": instance.child.first_name,
                 },
                 "details": details,

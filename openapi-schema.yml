@@ -6912,6 +6912,10 @@ components:
           type: string
           readOnly: true
           pattern: ^[-\w]+\z
+        emoji:
+          type: string
+          description: A single emoji shown with this type's events
+          maxLength: 16
       required:
         - name
     Feeding:

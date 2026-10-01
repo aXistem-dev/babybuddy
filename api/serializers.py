@@ -209,7 +209,7 @@ class EventSerializer(CoreModelSerializer, TaggableSerializer):
 class EventTypeSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = models.EventType
-        fields = ("id", "name", "slug")
+        fields = ("id", "name", "slug", "emoji")
 
     def validate(self, attrs):
         # Run the model's clean() method, which checks the generated slug.
