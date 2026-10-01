@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from datetime import timedelta
 from django import template
-from django.db.models import Avg, Count, Max, Q, Sum
+from django.db.models import Avg, Count, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.utils.translation import gettext as _
@@ -13,6 +13,9 @@ from core import models
 from core.templatetags.misc import feeding_time_diff_base
 
 register = template.Library()
+
+# The number of events on the last events card.
+EVENT_LAST_COUNT = 5
 
 
 def _hide_empty(context):
@@ -198,41 +201,26 @@ def card_breastfeeding(context, child, date=None):
 @register.inclusion_tag("cards/event_last.html", takes_context=True)
 def card_event_last(context, child):
     """
-    Time since the most recent event of each event type. The card is hidden
-    when no event types exist.
+    The child's most recent events of any type, newest first. The card is
+    hidden when the child has no events at all.
     :param child: an instance of the Child model.
-    :returns: a dictionary with a list of event types, each with the time of
-        the child's most recent event of that type (or None) and whether the
-        child only has events of that type that are too old to show, and the
-        most recent Event instance.
+    :returns: a dictionary with a list of up to five Event instances.
     """
     all_instances = models.Event.objects.filter(child=child)
-    instances = all_instances.filter(**_filter_data_age(context, "time"))
-    last_times = dict(
-        instances.order_by()
-        .values("type")
-        .annotate(last=Max("time"))
-        .values_list("type", "last")
+    instances = list(
+        all_instances.filter(**_filter_data_age(context, "time"))
+        .select_related("type")
+        .order_by("-time", "-id")[:EVENT_LAST_COUNT]
     )
-    used_types = set(all_instances.order_by().values_list("type", flat=True))
-    event_types = [
-        {
-            "type": event_type,
-            "last": last_times.get(event_type.pk),
-            "only_older": event_type.pk in used_types
-            and event_type.pk not in last_times,
-        }
-        for event_type in models.EventType.objects.all()
-    ]
-    instance = instances.select_related("type").order_by("-time").first()
+    has_events = bool(instances) or all_instances.exists()
 
     return {
         "type": "event",
         "icon": "tag",
-        "event": instance,
-        "event_types": event_types,
-        "empty": not instance,
-        "hide_empty": _hide_empty(context) or not event_types,
+        "events": instances,
+        "can_change": context["request"].user.has_perm("core.change_event"),
+        "empty": not instances,
+        "hide_empty": _hide_empty(context) or not has_events,
     }
 
 

@@ -92,38 +92,76 @@ class TemplateTagsTestCase(TestCase):
         self.assertEqual(data["type"], "event")
         self.assertFalse(data["empty"])
         self.assertFalse(data["hide_empty"])
-        self.assertEqual(data["event"], models.Event.objects.get(pk=1))
+        self.assertTrue(data["can_change"])
         self.assertEqual(
-            [(item["type"].slug, item["last"]) for item in data["event_types"]],
-            [
-                ("nail-trim", models.Event.objects.get(pk=2).time),
-                ("tooth-brushing", models.Event.objects.get(pk=1).time),
-            ],
+            data["events"],
+            [models.Event.objects.get(pk=1), models.Event.objects.get(pk=2)],
         )
 
-    def test_card_event_last_type_without_events(self):
-        models.EventType.objects.create(name="Sunscreen")
+    def test_card_event_last_five_newest_across_types(self):
+        tooth_brushing = models.EventType.objects.get(slug="tooth-brushing")
+        nail_trim = models.EventType.objects.get(slug="nail-trim")
+        sunscreen = models.EventType.objects.create(name="Sunscreen")
+        base = timezone.make_aware(timezone.datetime(2017, 11, 20, 8, 0))
+        added = [
+            models.Event.objects.create(
+                child=self.child,
+                type=event_type,
+                time=base + timezone.timedelta(hours=hours),
+            )
+            for event_type, hours in (
+                (sunscreen, 0),
+                (tooth_brushing, 1),
+                (tooth_brushing, 2),
+                (nail_trim, 3),
+                (sunscreen, 4),
+            )
+        ]
+        # Events of another child are left out.
         other_child = models.Child.objects.create(
             first_name="Robin", birth_date=timezone.localdate()
         )
         models.Event.objects.create(
-            child=other_child, type=models.EventType.objects.get(slug="sunscreen")
+            child=other_child, type=nail_trim, time=base + timezone.timedelta(hours=5)
         )
-        data = cards.card_event_last(self.context, self.child)
-        last = {item["type"].slug: item["last"] for item in data["event_types"]}
-        self.assertIsNone(last["sunscreen"])
-        self.assertIsNotNone(last["tooth-brushing"])
 
-    def test_card_event_last_hidden_without_event_types(self):
-        models.Event.objects.all().delete()
-        models.EventType.objects.all().delete()
+        data = cards.card_event_last(self.context, self.child)
+        self.assertEqual(data["events"], list(reversed(added)))
+        # The same type can appear more than once.
+        self.assertEqual(
+            [event.type.slug for event in data["events"]],
+            ["sunscreen", "nail-trim", "tooth-brushing", "tooth-brushing", "sunscreen"],
+        )
+
+    def test_card_event_last_hidden_without_events(self):
+        models.Event.objects.filter(child=self.child).delete()
+        other_child = models.Child.objects.create(
+            first_name="Robin", birth_date=timezone.localdate()
+        )
+        models.Event.objects.create(
+            child=other_child, type=models.EventType.objects.get(slug="nail-trim")
+        )
         data = cards.card_event_last(self.context, self.child)
         self.assertTrue(data["empty"])
         self.assertTrue(data["hide_empty"])
-        self.assertEqual(data["event_types"], [])
+        self.assertEqual(data["events"], [])
+        html = render_to_string("cards/event_last.html", data)
+        self.assertEqual(html.strip(), "")
 
     @mock.patch("dashboard.templatetags.cards.timezone")
     def test_card_event_last_filter_age(self, mocked_timezone):
+        request = MockUserRequest(get_user_model().objects.first())
+        request.user.settings.dashboard_hide_age = timezone.timedelta(days=1)
+        context = {"request": request}
+        time = timezone.localtime().strptime("2017-11-18 12:00", "%Y-%m-%d %H:%M")
+        mocked_timezone.localtime.return_value = timezone.make_aware(time)
+
+        data = cards.card_event_last(context, self.child)
+        self.assertFalse(data["empty"])
+        self.assertEqual(data["events"], [models.Event.objects.get(pk=1)])
+
+    @mock.patch("dashboard.templatetags.cards.timezone")
+    def test_card_event_last_only_older_events(self, mocked_timezone):
         request = MockUserRequest(get_user_model().objects.first())
         request.user.settings.dashboard_hide_age = timezone.timedelta(days=1)
         context = {"request": request}
@@ -132,15 +170,11 @@ class TemplateTagsTestCase(TestCase):
 
         data = cards.card_event_last(context, self.child)
         self.assertTrue(data["empty"])
+        # The child has events, they are only too old to show.
         self.assertFalse(data["hide_empty"])
-        self.assertEqual([item["last"] for item in data["event_types"]], [None, None])
-        # Both types have events, they are only too old to show.
-        self.assertEqual(
-            [item["only_older"] for item in data["event_types"]], [True, True]
-        )
+        self.assertEqual(data["events"], [])
 
-    def test_card_event_last_older_events_are_not_never(self):
-        models.EventType.objects.create(name="Sunscreen")
+    def test_card_event_last_no_recent_events(self):
         request = MockUserRequest(get_user_model().objects.first())
         request.user.settings.dashboard_hide_age = timezone.timedelta(days=1)
         # The fixture's events are years old, so they are all hidden.
@@ -148,8 +182,40 @@ class TemplateTagsTestCase(TestCase):
             "cards/event_last.html",
             cards.card_event_last({"request": request}, self.child),
         )
-        self.assertEqual(html.count("No recent events"), 2)
-        self.assertEqual(html.count("Never"), 2)
+        self.assertIn("Last Events", html)
+        self.assertIn("No recent events", html)
+        self.assertNotIn("Nail trim", html)
+
+    def test_card_event_last_rows(self):
+        html = render_to_string(
+            "cards/event_last.html",
+            cards.card_event_last(self.context, self.child),
+        )
+        self.assertNotIn("No recent events", html)
+        self.assertInHTML(
+            '<a href="/events/1/">\U0001faa5 Tooth brushing</a>', html, count=1
+        )
+        self.assertInHTML(
+            '<a href="/events/2/">\u2702\ufe0f Nail trim</a>', html, count=1
+        )
+        self.assertEqual(html.count(" ago"), 2)
+
+    def test_card_event_last_rows_without_change_permission(self):
+        user = get_user_model().objects.create_user(username="viewer")
+        html = render_to_string(
+            "cards/event_last.html",
+            cards.card_event_last({"request": MockUserRequest(user)}, self.child),
+        )
+        self.assertIn("\u2702\ufe0f Nail trim", html)
+        self.assertNotIn("/events/2/", html)
+
+    def test_card_event_last_type_without_emoji(self):
+        models.EventType.objects.filter(slug="nail-trim").update(emoji="")
+        html = render_to_string(
+            "cards/event_last.html",
+            cards.card_event_last(self.context, self.child),
+        )
+        self.assertInHTML('<a href="/events/2/">Nail trim</a>', html, count=1)
 
     def test_card_diaperchange_types(self):
         data = cards.card_diaperchange_types(self.context, self.child, self.date)
