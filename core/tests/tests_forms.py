@@ -497,6 +497,19 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
                 )
         self.assertFalse(models.EventType.objects.exists())
 
+    def test_emoji_whitespace_is_stripped(self):
+        page = self.c.post(
+            "/event-types/add/", {"name": "Sunscreen", "emoji": " \U0001f9f4 "}
+        )
+        self.assertEqual(page.status_code, 302)
+        self.assertEqual(models.EventType.objects.get().emoji, "\U0001f9f4")
+
+        page = self.c.post(
+            "/event-types/add/", {"name": "Tooth brushing", "emoji": "   "}
+        )
+        self.assertEqual(page.status_code, 302)
+        self.assertEqual(models.EventType.objects.get(name="Tooth brushing").emoji, "")
+
     def test_edit_emoji(self):
         event_type = models.EventType.objects.create(name="Sunscreen")
         url = "/event-types/{}/".format(event_type.slug)

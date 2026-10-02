@@ -564,6 +564,19 @@ class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 self.assertIn("emoji", response.data)
         self.assertFalse(models.EventType.objects.filter(slug="sunscreen").exists())
 
+    def test_post_emoji_whitespace_is_stripped(self):
+        response = self.client.post(
+            self.endpoint, {"name": "Sunscreen", "emoji": " \U0001f9f4 "}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["emoji"], "\U0001f9f4")
+        response = self.client.patch(
+            "{}sunscreen/".format(self.endpoint), {"emoji": "   "}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["emoji"], "")
+        self.assertEqual(models.EventType.objects.get(slug="sunscreen").emoji, "")
+
     def test_patch_emoji(self):
         endpoint = "{}tooth-brushing/".format(self.endpoint)
         response = self.client.patch(endpoint, {"emoji": "\U0001f601"}, format="json")
