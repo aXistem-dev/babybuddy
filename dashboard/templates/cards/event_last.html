@@ -1,10 +1,17 @@
 {% extends "cards/base.html" %}
-{% load i18n %}
+{% load duration i18n %}
 {% block header %}
     <a href="{% url "core:event-list" %}">{% trans "Last Events" %}</a>
 {% endblock %}
 {% block title %}
-    {% if not events %}
+    {% if events %}
+        <div>
+            {% blocktrans trimmed with time_ago=events.0.time|deltasince|duration_string:'m' %}
+                {{ time_ago }} ago
+            {% endblocktrans %}
+        </div>
+        <small>{{ events.0.time|time }}</small>
+    {% else %}
         {% trans "No recent events" %}
     {% endif %}
 {% endblock %}

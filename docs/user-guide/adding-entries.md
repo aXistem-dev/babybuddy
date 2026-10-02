@@ -34,12 +34,13 @@ Event. If necessary, modify the child or the time, and select the type of the
 event. Add any notes or tags and select Submit.
 
 The Last Events card on the child dashboard lists the child's five most recent
-events of any type, newest first, with how long ago each one was. The same type
-can appear more than once. If you can edit events, select one to edit it. The
-card follows the dashboard setting that hides older data: when the child only
-has older events, it shows "No recent events", and it is not shown for a child
-without any events. The Events per Day report shows how often each type was
-recorded.
+events of any type, newest first, with how long ago each one was; its title
+shows how long ago the newest one was. The same type can appear more than once.
+If you can edit events, select one to edit it. The card follows the dashboard
+setting that hides older data: when the child only has older events, it shows
+"No recent events", or it is hidden when the "Hide Empty Dashboard Cards"
+setting is on. The card is not shown for a child without any events. The Events
+per Day report shows how often each type was recorded.
 
 ### Feeding
 

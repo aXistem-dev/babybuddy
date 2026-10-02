@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.template.loader import render_to_string
 from django.test import TestCase
 from django.utils import timezone
+from django.utils.formats import date_format
 
 from babybuddy.models import Settings
 from core import models
@@ -192,13 +193,20 @@ class TemplateTagsTestCase(TestCase):
             cards.card_event_last(self.context, self.child),
         )
         self.assertNotIn("No recent events", html)
+        self.assertNotIn("<strong></strong>", "".join(html.split()))
+        # The title shows the time of the newest event, like the other cards.
+        newest = timezone.localtime(models.Event.objects.get(pk=1).time)
+        self.assertInHTML(
+            "<small>{}</small>".format(date_format(newest, "TIME_FORMAT")), html
+        )
         self.assertInHTML(
             '<a href="/events/1/">\U0001faa5 Tooth brushing</a>', html, count=1
         )
         self.assertInHTML(
             '<a href="/events/2/">\u2702\ufe0f Nail trim</a>', html, count=1
         )
-        self.assertEqual(html.count(" ago"), 2)
+        # Once in the title and once per row.
+        self.assertEqual(html.count(" ago"), 3)
 
     def test_card_event_last_rows_without_change_permission(self):
         user = get_user_model().objects.create_user(username="viewer")
