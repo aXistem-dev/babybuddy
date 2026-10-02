@@ -65,8 +65,8 @@ class StashSettings(dbsettings.Group):
         widget=CheckboxInput,
         description=_("Store pumped milk in the stash by default"),
         help_text=_(
-            'Pre-selects "Store in stash" on new pumping entries; also applies to '
-            "pumping created through the API without a stash amount."
+            "On by default for new pumping, including pumping added through the "
+            "API without a stash amount."
         ),
     )
     bottle_from_stash_default = StashBooleanValue(
@@ -75,18 +75,17 @@ class StashSettings(dbsettings.Group):
         widget=CheckboxInput,
         description=_("Take breast milk bottles from the stash by default"),
         help_text=_(
-            'Pre-selects "Taken from stash" on new breast milk bottles once the '
-            "stash has been used; API-created bottles without a stash amount "
-            "follow the same rule."
+            "On by default for new breast-milk bottles once the stash is in use, "
+            "including bottles added through the API without a stash amount."
         ),
     )
     stash_warn_age_hours = dbsettings.PositiveIntegerValue(
         default=48,
-        description=_("Warn about stashed milk after (hours)"),
-        help_text=_("Milk older than this is marked to use first."),
+        description=_("Expiring soon after (hours)"),
+        help_text=_("Milk this old is marked as expiring soon."),
     )
     stash_max_age_hours = dbsettings.PositiveIntegerValue(
         default=72,
-        description=_("Throw stashed milk away after (hours)"),
-        help_text=_("Milk older than this is marked expired."),
+        description=_("Expires after (hours)"),
+        help_text=_("Milk this old has expired and should be thrown away."),
     )

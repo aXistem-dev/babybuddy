@@ -1152,7 +1152,10 @@ class StashSettingsAPITestCase(APITestCase):
             self.endpoint, {"warn_age_hours": 72}, format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("warn_age_hours", response.data)
+        self.assertEqual(
+            response.data["warn_age_hours"],
+            ['"Expiring soon after" has to be less than "Expires after".'],
+        )
 
     def test_patch_needs_the_settings_permission_not_change_pumping(self):
         user = get_user_model().objects.create_user(

@@ -138,10 +138,10 @@ remaining 50 ml and takes the other 20 ml from the second session, leaving
 Two site-wide thresholds control how that age is shown, both on the **Milk
 stash** page and the dashboard's stash card:
 
-- After **48 hours** (by default) the oldest milk is marked **use first**,
+- After **48 hours** (by default) the oldest milk is marked **expiring soon**,
   shown in orange.
-- After **72 hours** (by default) it's marked **throw away**, shown in red,
-  next to a **Throw away** button. It opens a new **Discarded** stash entry
+- After **72 hours** (by default) it's marked **expired**, shown in red, next
+  to a **Throw away** button. It opens a new **Discarded** stash entry
   pre-filled with that lot's amount, the current time, and the reason "Older
   than 72 h" — all editable before saving. While any milk has expired, the
   Milk stash page also shows a **Throw away all expired milk** button that
@@ -188,10 +188,10 @@ apps use to show and change them):
 
 | Setting | Default | Effect |
 |---|---|---|
-| Store pumped milk in the stash by default | On | Pre-selects "Store in stash" on new pumping entries |
-| Take breast milk bottles from the stash by default | On | Pre-selects "Taken from stash" on new breast milk bottles once the stash is in use |
-| Warn about stashed milk after (hours) | 48 | When the "use first" warning appears |
-| Throw stashed milk away after (hours) | 72 | When the "throw away" alert appears |
+| Store pumped milk in the stash by default | On | On by default for new pumping |
+| Take breast milk bottles from the stash by default | On | On by default for new breast-milk bottles once the stash is in use |
+| Expiring soon after (hours) | 48 | Milk this old is marked as expiring soon |
+| Expires after (hours) | 72 | Milk this old has expired and should be thrown away |
 
 ## Existing (older) pumping data
 

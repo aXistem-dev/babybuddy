@@ -50,13 +50,13 @@
                         <td>{{ lot.age_hours }} h</td>
                         <td>
                             {% if lot.status == "expired" %}
-                                <span class="badge bg-danger">{% trans "throw away" %}</span>
+                                <span class="badge bg-danger">{% trans "expired" %}</span>
                                 {% if lot.is_oldest_expired and perms.core.add_stashadjustment %}
                                     <a href="{% url 'core:stashadjustment-add' %}?kind=discarded&amount={{ lot.throw_away_amount|stringformat:".10g" }}&reason={{ throw_away_reason|urlencode }}{% if lot.parent_slug %}&parent={{ lot.parent_slug }}{% endif %}"
                                        class="btn btn-sm btn-outline-danger">{% trans "Throw away" %}</a>
                                 {% endif %}
                             {% elif lot.status == "warn" %}
-                                <span class="badge bg-warning text-dark">{% trans "use first" %}</span>
+                                <span class="badge bg-warning text-dark">{% trans "expiring soon" %}</span>
                             {% else %}
                                 <span class="badge bg-success">{% trans "fresh" %}</span>
                             {% endif %}

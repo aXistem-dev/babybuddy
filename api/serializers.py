@@ -486,7 +486,11 @@ class StashSettingsSerializer(serializers.Serializer):
         max_ = attrs.get("max_age_hours", current.stash_max_age_hours)
         if warn >= max_:
             raise ValidationError(
-                {"warn_age_hours": _("Must be less than the throw-away age.")}
+                {
+                    "warn_age_hours": _(
+                        '"Expiring soon after" has to be less than "Expires after".'
+                    )
+                }
             )
         return attrs
 

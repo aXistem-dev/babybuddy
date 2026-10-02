@@ -640,6 +640,32 @@ class StashPagesTestCase(TestCase):
                 self.assertIn("Milk stash", content)
                 self.assertNotIn("?kind=discarded&amount=", content)
 
+    def test_age_states_are_named_expiring_soon_and_expired(self):
+        dashboard = "/children/{}/dashboard/".format(self.alex.slug)
+        self._login("stash-admin", is_superuser=True)
+        models.StashAdjustment.objects.create(
+            time=timezone.localtime() - timezone.timedelta(hours=50),
+            amount=40,
+            kind="added",
+        )
+        page = self.c.get("/stash/")
+        self.assertContains(page, ">expiring soon</span>")
+        self.assertNotContains(page, ">expired</span>")
+        page = self.c.get(dashboard)
+        self.assertContains(page, "Some milk is expiring soon.")
+
+        models.StashAdjustment.objects.create(
+            time=timezone.localtime() - timezone.timedelta(hours=100),
+            amount=60,
+            kind="added",
+        )
+        page = self.c.get("/stash/")
+        self.assertContains(page, ">expiring soon</span>")
+        self.assertContains(page, ">expired</span>")
+        page = self.c.get(dashboard)
+        self.assertContains(page, "Some milk has expired: throw it away.")
+        self.assertNotContains(page, "Some milk is expiring soon.")
+
     def add_movements(self, count, hours_ago):
         for i in range(count):
             t = timezone.localtime() - timezone.timedelta(hours=hours_ago + i)

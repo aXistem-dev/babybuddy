@@ -10,7 +10,7 @@
 {% endblock %}
 {% block content %}
     {% if summary.status == "expired" %}
-        <strong class="text-danger">{% trans "Some milk is past its limit: throw it away." %}</strong>
+        <strong class="text-danger">{% trans "Some milk has expired: throw it away." %}</strong>
         {% if can_add %}
             <div>
                 <a href="{% url "core:stashadjustment-add" %}?kind=discarded&amount={{ expired_amount|stringformat:".10g" }}&reason={{ throw_away_reason|urlencode }}"
@@ -18,7 +18,7 @@
             </div>
         {% endif %}
     {% elif summary.status == "warn" %}
-        <strong class="text-warning">{% trans "Some milk is getting old: use it first." %}</strong>
+        <strong class="text-warning">{% trans "Some milk is expiring soon." %}</strong>
     {% endif %}
     {% if summary.oldest %}
         <div>

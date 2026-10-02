@@ -398,8 +398,9 @@ curl -X GET https://[...]/api/stash -H 'Authorization: Token [...]'
 }
 ```
 
-`status` (and each lot's own `status`) is one of `ok`, `warn` or `expired`,
-based on the `stash_warn_age_hours` / `stash_max_age_hours` site settings.
+`status` (and each lot's own `status`) is one of `ok`, `warn` (expiring soon)
+or `expired`, based on the `stash_warn_age_hours` / `stash_max_age_hours` site
+settings ("Expiring soon after" and "Expires after").
 `balance` can be negative if entries were logged with milk already on hand
 before tracking started; `negative_since` is then when it last dropped below
 zero (otherwise `null`). Each lot's `parent` is whose milk it is, and
