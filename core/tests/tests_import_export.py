@@ -81,6 +81,30 @@ class ImportTestCase(TestCase):
             ],
         )
 
+    def test_eventtype_invalid_emoji(self):
+        dataset = tablib.Dataset(
+            ["1", "Nail trim", "", "\u2702\ufe0f"],
+            ["2", "Sunscreen", "", "abc"],
+            ["3", "Tooth brushing", "", "\U0001f9f4\U0001f9f4"],
+            headers=["id", "name", "slug", "emoji"],
+        )
+        result = admin.EventTypeImportExportResource().import_data(
+            dataset, dry_run=False
+        )
+        self.assertTrue(result.has_validation_errors())
+        self.assertEqual(
+            [row.number for row in result.invalid_rows],
+            [2, 3],
+        )
+        for row in result.invalid_rows:
+            self.assertEqual(row.error_dict, {"emoji": ["Enter a single emoji."]})
+        # The rows with an invalid emoji are not saved. (The admin's import
+        # stops at the preview when a row is invalid, so it saves nothing.)
+        self.assertEqual(
+            list(models.EventType.objects.values_list("name", flat=True)),
+            ["Nail trim"],
+        )
+
     def test_eventtype_export_includes_the_slug_and_emoji(self):
         event_type = models.EventType.objects.create(
             name="Tooth brushing", emoji="\U0001faa5"

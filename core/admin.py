@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from django.contrib import admin
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 from import_export import fields, resources, widgets
 from import_export.admin import ImportExportMixin, ExportActionMixin
@@ -125,6 +126,19 @@ class EventTypeImportExportResource(resources.ModelResource):
 
     class Meta:
         model = models.EventType
+
+    def validate_instance(
+        self, instance, import_validation_errors=None, validate_unique=True
+    ):
+        # The model is not cleaned as a whole on import, because the slug of a
+        # row without one is only generated when the type is saved. The emoji
+        # is still checked, like on the form and in the API.
+        errors = dict(import_validation_errors or {})
+        try:
+            models.validate_emoji(instance.emoji)
+        except ValidationError as error:
+            errors["emoji"] = error
+        super().validate_instance(instance, errors, validate_unique)
 
 
 @admin.register(models.EventType)
