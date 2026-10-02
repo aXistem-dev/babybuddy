@@ -372,7 +372,7 @@ class EventAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertEqual(list(obj.tags.names()), ["hands"])
 
     def test_post_child_and_type_only(self):
-        # The whole request of a one-tap button: no time means now.
+        # Only a child and a type: no time means now.
         before = timezone.now()
         response = self.client.post(
             self.endpoint, {"child": 1, "type": "tooth-brushing"}, format="json"
