@@ -3095,12 +3095,11 @@ msgstr "Afgekolfde melk standaard in de voorraad bewaren"
 
 #: babybuddy/site_settings.py:68
 msgid ""
-"Pre-selects \"Store in stash\" on new pumping entries; also applies to "
-"pumping created through the API without a stash amount."
+"On by default for new pumping, including pumping added through the API "
+"without a stash amount."
 msgstr ""
-"Zet \"In voorraad bewaren\" standaard aan bij nieuwe kolfregistraties; geldt "
-"ook voor kolfregistraties die zonder voorraadhoeveelheid via de API worden "
-"aangemaakt."
+"Standaard aan bij nieuwe kolfregistraties, ook bij kolfregistraties die "
+"zonder voorraadhoeveelheid via de API worden toegevoegd."
 
 #: babybuddy/site_settings.py:76
 msgid "Take breast milk bottles from the stash by default"
@@ -3108,29 +3107,27 @@ msgstr "Flesvoeding met moedermelk standaard uit de voorraad halen"
 
 #: babybuddy/site_settings.py:78
 msgid ""
-"Pre-selects \"Taken from stash\" on new breast milk bottles once the stash "
-"has been used; API-created bottles without a stash amount follow the same "
-"rule."
+"On by default for new breast-milk bottles once the stash is in use, "
+"including bottles added through the API without a stash amount."
 msgstr ""
-"Zet \"Uit voorraad\" standaard aan bij nieuwe flessen moedermelk zodra de "
-"voorraad in gebruik is; flessen die zonder voorraadhoeveelheid via de API "
-"worden aangemaakt volgen dezelfde regel."
+"Standaard aan bij nieuwe flessen moedermelk zodra de voorraad in gebruik is, "
+"ook bij flessen die zonder voorraadhoeveelheid via de API worden toegevoegd."
 
 #: babybuddy/site_settings.py:85
-msgid "Warn about stashed milk after (hours)"
-msgstr "Waarschuwen voor melk in voorraad na (uren)"
+msgid "Expiring soon after (hours)"
+msgstr "Verloopt bijna na (uren)"
 
 #: babybuddy/site_settings.py:86
-msgid "Milk older than this is marked to use first."
-msgstr "Melk die ouder is dan dit wordt gemarkeerd om eerst te gebruiken."
+msgid "Milk this old is marked as expiring soon."
+msgstr "Melk van deze leeftijd wordt gemarkeerd als bijna verlopen."
 
 #: babybuddy/site_settings.py:90
-msgid "Throw stashed milk away after (hours)"
-msgstr "Melk in voorraad weggooien na (uren)"
+msgid "Expires after (hours)"
+msgstr "Verloopt na (uren)"
 
 #: babybuddy/site_settings.py:91
-msgid "Milk older than this is marked expired."
-msgstr "Melk die ouder is dan dit wordt als vervallen gemarkeerd."
+msgid "Milk this old has expired and should be thrown away."
+msgstr "Melk van deze leeftijd is verlopen en moet weggegooid worden."
 
 #: babybuddy/templates/babybuddy/nav-dropdown.html:146 core/models.py:317
 #: core/templates/core/parent_confirm_delete.html:8
@@ -3414,8 +3411,8 @@ msgid "Throw away all expired milk"
 msgstr "Alle vervallen melk weggooien"
 
 #: core/templates/core/stash.html:46
-msgid "throw away"
-msgstr "weggooien"
+msgid "expired"
+msgstr "verlopen"
 
 #: core/templates/core/stash.html:53 dashboard/templates/cards/stash.html:17
 msgid "Throw away"
@@ -3426,8 +3423,8 @@ msgid "Older than %(hours)s h"
 msgstr "Ouder dan %(hours)s u"
 
 #: core/templates/core/stash.html:51
-msgid "use first"
-msgstr "eerst gebruiken"
+msgid "expiring soon"
+msgstr "verloopt bijna"
 
 #: core/templates/core/stash.html:53
 msgid "fresh"
@@ -3450,8 +3447,8 @@ msgid "Formula and solid food can't be given from the breast."
 msgstr "Kunstvoeding en vast voedsel kunnen niet via de borst gegeven worden."
 
 #: api/serializers.py:560
-msgid "Must be less than the throw-away age."
-msgstr "Moet kleiner zijn dan de leeftijd om weg te gooien."
+msgid "\"Expiring soon after\" has to be less than \"Expires after\"."
+msgstr "\"Verloopt bijna na\" moet kleiner zijn dan \"Verloopt na\"."
 
 #: api/views.py:180
 msgid "You can't change the milk stash settings."
@@ -3504,12 +3501,12 @@ msgid "Add a Stash Adjustment"
 msgstr "Een voorraadaanpassing toevoegen"
 
 #: dashboard/templates/cards/stash.html:13
-msgid "Some milk is past its limit: throw it away."
-msgstr "Er is melk over de datum: gooi die weg."
+msgid "Some milk has expired: throw it away."
+msgstr "Er is verlopen melk: gooi die weg."
 
 #: dashboard/templates/cards/stash.html:15
-msgid "Some milk is getting old: use it first."
-msgstr "Er is melk die oud begint te worden: gebruik die eerst."
+msgid "Some milk is expiring soon."
+msgstr "Er is melk die bijna verloopt."
 
 #: dashboard/templates/cards/stash.html:19
 #, python-format
