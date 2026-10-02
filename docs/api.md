@@ -523,25 +523,3 @@ curl -X GET https://[...]/api/ -H 'Authorization: Token [...]'
 A server with this feature lists `parents`, `stash-adjustments` and `stash`
 alongside the other endpoints. A client that doesn't find them should fall
 back to child-based pumping and skip the stash UI entirely.
-
-### Home Assistant example
-
-A [RESTful sensor](https://www.home-assistant.io/integrations/sensor.rest/)
-can expose the stash status, for use in an automation (e.g. a notification
-when milk needs using or throwing away):
-
-```yaml
-sensor:
-  - platform: rest
-    name: Milk Stash
-    resource: https://[...]/api/stash
-    method: GET
-    headers:
-      Authorization: !secret babybuddy_api_token
-    value_template: "{{ value_json.status }}"
-    json_attributes:
-      - balance
-      - oldest_age_hours
-      - warn_age_hours
-      - max_age_hours
-```
