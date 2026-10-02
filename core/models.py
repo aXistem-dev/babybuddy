@@ -92,6 +92,10 @@ EMOJI_BASE_RANGES = (
     (0x2600, 0x27BF),
     (0x2300, 0x23FF),
     (0x2B00, 0x2BFF),
+    (0x2194, 0x2199),  # arrows
+    (0x21A9, 0x21AA),  # curved arrows
+    (0x25FB, 0x25FE),  # medium squares
+    (0x2934, 0x2935),  # arrows curving up and down
 )
 EMOJI_BASE_CODE_POINTS = {
     0x00A9,  # copyright sign
@@ -100,6 +104,11 @@ EMOJI_BASE_CODE_POINTS = {
     0x2049,  # exclamation question mark
     0x2122,  # trade mark sign
     0x2139,  # information source
+    0x24C2,  # circled M
+    0x25AA,  # small black square
+    0x25AB,  # small white square
+    0x25B6,  # play button
+    0x25C0,  # reverse button
     0x3030,  # wavy dash
     0x303D,  # part alternation mark
     0x3297,  # circled ideograph congratulation
