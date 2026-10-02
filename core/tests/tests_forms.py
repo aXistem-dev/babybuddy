@@ -15,7 +15,8 @@ from django.utils.formats import get_format, reset_format_cache
 from faker import Faker
 from PIL import Image
 
-from core import forms, models
+from core import models
+from core.forms import EventTypeDeleteForm
 
 
 class FormsTestCaseBase(TestCase):
@@ -660,14 +661,14 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
         self.assertEqual(event_type.events.count(), 1)
 
     def add_an_event_after_the_check(self, event_type):
-        original_clean = forms.EventTypeDeleteForm.clean
+        original_clean = EventTypeDeleteForm.clean
 
         def clean_then_add_an_event(form):
             cleaned_data = original_clean(form)
             models.Event.objects.create(child=self.child, type=event_type)
             return cleaned_data
 
-        return patch.object(forms.EventTypeDeleteForm, "clean", clean_then_add_an_event)
+        return patch.object(EventTypeDeleteForm, "clean", clean_then_add_an_event)
 
     def test_delete_when_events_were_added_after_the_check(self):
         # Asking to delete the events of a type that has none deletes nothing
