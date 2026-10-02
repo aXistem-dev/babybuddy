@@ -403,6 +403,8 @@ class EventTypeDeleteForm(forms.Form):
     def __init__(self, *args, event_type, user, **kwargs):
         self.event_type = event_type
         self.user = user
+        # The number of events the user confirmed deleting, set by clean().
+        self.confirmed_event_count = 0
         super().__init__(*args, **kwargs)
 
     def clean(self):
@@ -426,6 +428,7 @@ class EventTypeDeleteForm(forms.Form):
                     "confirm again."
                 )
             )
+        self.confirmed_event_count = count
         return cleaned_data
 
 

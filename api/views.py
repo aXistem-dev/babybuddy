@@ -153,24 +153,35 @@ class EventTypeViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
             # One transaction: either the type and all of its events are gone,
-            # or nothing is. Each event is deleted on its own, so webhooks
-            # report every deleted event before the deleted type.
-            with transaction.atomic():
-                instance.events.all().delete()
-                instance.delete()
+            # or nothing is. Locking the type keeps events from being added to
+            # it meanwhile, where the database supports it. Each event is
+            # deleted on its own, so webhooks report every deleted event before
+            # the deleted type.
+            try:
+                with transaction.atomic():
+                    instance = models.EventType.objects.select_for_update().get(
+                        pk=instance.pk
+                    )
+                    instance.events.all().delete()
+                    instance.delete()
+            except ProtectedError:
+                return self.in_use_response(instance)
             return Response(status=status.HTTP_204_NO_CONTENT)
         try:
             instance.delete()
         except ProtectedError:
-            return Response(
-                {
-                    "detail": "This event type is used by events and can not be "
-                    "deleted.",
-                    "event_count": instance.events.count(),
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
+            return self.in_use_response(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @staticmethod
+    def in_use_response(instance):
+        return Response(
+            {
+                "detail": "This event type is used by events and can not be deleted.",
+                "event_count": instance.events.count(),
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
 
 
 class FeedingViewSet(viewsets.ModelViewSet):

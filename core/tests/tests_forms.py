@@ -659,9 +659,7 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
         self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
         self.assertEqual(event_type.events.count(), 1)
 
-    def test_delete_when_events_were_added_after_the_check(self):
-        event_type = models.EventType.objects.create(name="Tooth brushing")
-        url = "/event-types/{}/delete/".format(event_type.slug)
+    def add_an_event_after_the_check(self, event_type):
         original_clean = forms.EventTypeDeleteForm.clean
 
         def clean_then_add_an_event(form):
@@ -669,13 +667,55 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
             models.Event.objects.create(child=self.child, type=event_type)
             return cleaned_data
 
-        with patch.object(forms.EventTypeDeleteForm, "clean", clean_then_add_an_event):
-            page = self.c.post(url, follow=True)
+        return patch.object(forms.EventTypeDeleteForm, "clean", clean_then_add_an_event)
+
+    def test_delete_when_events_were_added_after_the_check(self):
+        # Asking to delete the events of a type that has none deletes nothing
+        # but the type, even when an event is added meanwhile.
+        for data in ({}, {"delete_events": "on", "event_count": 0}):
+            with self.subTest(data=data):
+                event_type = models.EventType.objects.create(name="Tooth brushing")
+                url = "/event-types/{}/delete/".format(event_type.slug)
+                with self.add_an_event_after_the_check(event_type):
+                    page = self.c.post(url, data, follow=True)
+                self.assertEqual(page.status_code, 200)
+                self.assertContains(
+                    page, "Tooth brushing is still in use and can not be deleted."
+                )
+                self.assertTrue(
+                    models.EventType.objects.filter(pk=event_type.pk).exists()
+                )
+                self.assertEqual(event_type.events.count(), 1)
+                event_type.events.all().delete()
+                event_type.delete()
+
+    def test_delete_with_events_when_events_were_added_after_the_check(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+        with self.add_an_event_after_the_check(event_type):
+            page = self.c.post(
+                url, {"delete_events": "on", "event_count": 1}, follow=True
+            )
         self.assertEqual(page.status_code, 200)
-        self.assertContains(
-            page, "Tooth brushing is still in use and can not be deleted."
-        )
+        self.assertContains(page, "The number of events of this type has changed.")
+        self.assertContains(page, "This will also delete 2 events of this type.")
         self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
+        self.assertEqual(event_type.events.count(), 2)
+
+    def test_delete_with_events_is_one_transaction(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+        with patch.object(
+            models.EventType, "delete", side_effect=RuntimeError("delete failed")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.c.post(url, {"delete_events": "on", "event_count": 1})
+        # The event was deleted before the type failed, and came back with the
+        # rollback.
+        self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
+        self.assertEqual(event_type.events.count(), 1)
 
 
 class FeedingFormsTestCase(FormsTestCaseBase):

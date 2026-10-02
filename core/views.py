@@ -265,6 +265,12 @@ class EventTypeUpdate(CoreUpdateView):
     success_url = reverse_lazy("core:eventtype-list")
 
 
+class EventsChanged(Exception):
+    """
+    The events of a type changed after the user confirmed deleting them.
+    """
+
+
 class EventTypeDelete(CoreDeleteView):
     model = models.EventType
     form_class = forms.EventTypeDeleteForm
@@ -285,18 +291,30 @@ class EventTypeDelete(CoreDeleteView):
         return context
 
     def form_valid(self, form):
-        if form.cleaned_data.get("delete_events"):
-            # The form checked the permission and the number of events, so the
-            # type goes together with all of its events, or nothing goes.
-            with transaction.atomic():
-                self.object.events.all().delete()
-                return super().form_valid(form)
-        # An event type still in use is protected from deletion. The form
-        # refuses this, and this covers events that were added after the form
-        # was checked.
+        # The type goes together with the events the user confirmed, or
+        # nothing goes. Locking the type keeps events from being added to it
+        # meanwhile, where the database supports it.
         try:
-            return super().form_valid(form)
+            with transaction.atomic():
+                event_type = models.EventType.objects.select_for_update().get(
+                    pk=self.object.pk
+                )
+                if form.confirmed_event_count:
+                    if event_type.events.count() != form.confirmed_event_count:
+                        raise EventsChanged
+                    event_type.events.all().delete()
+                return super().form_valid(form)
+        except EventsChanged:
+            messages.error(
+                self.request,
+                _(
+                    "The number of events of this type has changed. Check it and "
+                    "confirm again."
+                ),
+            )
+            return HttpResponseRedirect(self.request.path)
         except ProtectedError:
+            # Covers events that were added after the form was checked.
             messages.error(
                 self.request,
                 _("%(name)s is still in use and can not be deleted.")

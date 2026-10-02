@@ -23,7 +23,7 @@
             <div class="alert alert-danger" role="alert">
                 <h4 class="alert-heading">
                     {% blocktrans trimmed with count=object.events__count count counter=object.events__count %}
-                        This will also delete 1 event of this type.
+                        This will also delete {{ count }} event of this type.
                     {% plural %}
                         This will also delete {{ count }} events of this type.
                     {% endblocktrans %}
@@ -45,7 +45,7 @@
             <div class="alert alert-warning" role="alert">
                 <h4 class="alert-heading">
                     {% blocktrans trimmed with count=object.events__count count counter=object.events__count %}
-                        There is 1 event of this type.
+                        There is {{ count }} event of this type.
                     {% plural %}
                         There are {{ count }} events of this type.
                     {% endblocktrans %}
