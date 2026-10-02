@@ -477,7 +477,9 @@ class ParentDetailPermissionsTestCase(TestCase):
         child = models.Child.objects.create(
             first_name="Sam", birth_date=timezone.localdate()
         )
-        now = timezone.localtime()
+        # A fixed time early today, so the test doesn't depend on the clock
+        # (just after midnight, "a few minutes ago" would be yesterday).
+        now = timezone.localtime().replace(hour=1, minute=0, second=0, microsecond=0)
         for start, end in ((25, 15), (15, 0)):
             models.Feeding.objects.create(
                 child=child,
@@ -493,7 +495,7 @@ class ParentDetailPermissionsTestCase(TestCase):
         self.assertIn("2 sessions, 25 min in the last 7 days", content)
 
     def test_parent_page_breastfeeding_card_counts_tandem_minutes_once(self):
-        now = timezone.localtime()
+        now = timezone.localtime().replace(hour=1, minute=0, second=0, microsecond=0)
         for name in ("Sam", "Casey"):
             child = models.Child.objects.create(
                 first_name=name, birth_date=timezone.localdate()
