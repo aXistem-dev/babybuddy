@@ -532,10 +532,109 @@ class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
 
     def test_delete_in_use(self):
         endpoint = "{}{}/".format(self.endpoint, "tooth-brushing")
-        response = self.client.delete(endpoint)
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        count = models.Event.objects.filter(type__slug="tooth-brushing").count()
+        self.assertGreater(count, 0)
+        for params in ("", "?delete_events=false", "?delete_events=0"):
+            with self.subTest(params=params):
+                response = self.client.delete(endpoint + params)
+                self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+                self.assertIn("detail", response.data)
+                self.assertEqual(response.data["event_count"], count)
+        self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+        self.assertEqual(
+            models.Event.objects.filter(type__slug="tooth-brushing").count(), count
+        )
+
+    def test_delete_with_events(self):
+        endpoint = "{}{}/".format(self.endpoint, "tooth-brushing")
+        other_events = models.Event.objects.exclude(type__slug="tooth-brushing")
+        other_ids = set(other_events.values_list("id", flat=True))
+        self.assertTrue(other_ids)
+        response = self.client.delete(endpoint + "?delete_events=true")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            models.EventType.objects.filter(slug="tooth-brushing").exists()
+        )
+        self.assertFalse(models.Event.objects.filter(type__slug="tooth-brushing"))
+        self.assertEqual(
+            set(models.Event.objects.values_list("id", flat=True)), other_ids
+        )
+
+    def test_delete_with_events_for_an_unused_type(self):
+        models.Event.objects.filter(type__slug="nail-trim").delete()
+        response = self.client.delete(
+            "{}nail-trim/?delete_events=1".format(self.endpoint)
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(models.EventType.objects.filter(slug="nail-trim").exists())
+
+    def test_delete_events_invalid_value(self):
+        response = self.client.delete(
+            "{}tooth-brushing/?delete_events=maybe".format(self.endpoint)
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("delete_events", response.data)
+        self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+
+    def test_delete_with_events_needs_permission_to_delete_events(self):
+        user = get_user_model().objects.create_user(
+            username="types", password="types", is_active=True
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core",
+                codename__in=["view_eventtype", "delete_eventtype"],
+            )
+        )
+        self.client.force_authenticate(user)
+        count = models.Event.objects.filter(type__slug="tooth-brushing").count()
+        response = self.client.delete(
+            "{}tooth-brushing/?delete_events=true".format(self.endpoint)
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertIn("detail", response.data)
         self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+        self.assertEqual(
+            models.Event.objects.filter(type__slug="tooth-brushing").count(), count
+        )
+
+    def test_delete_with_events_is_one_transaction(self):
+        count = models.Event.objects.filter(type__slug="tooth-brushing").count()
+        with patch.object(
+            models.EventType, "delete", side_effect=RuntimeError("delete failed")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.delete(
+                    "{}tooth-brushing/?delete_events=true".format(self.endpoint)
+                )
+        # The events were deleted before the type failed, and came back with
+        # the rollback.
+        self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+        self.assertEqual(
+            models.Event.objects.filter(type__slug="tooth-brushing").count(), count
+        )
+
+    def test_delete_with_events_is_announced_to_webhooks(self):
+        endpoint = WebhookEndpoint.objects.create(
+            name="Listener", url="http://listener.test/hook", secret="secret"
+        )
+        event_type = models.EventType.objects.get(slug="tooth-brushing")
+        event_ids = sorted(
+            str(pk) for pk in event_type.events.values_list("id", flat=True)
+        )
+        self.assertTrue(event_ids)
+        response = self.client.delete(
+            "{}tooth-brushing/?delete_events=true".format(self.endpoint)
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        announced = list(
+            endpoint.events.order_by("id").values_list("type", "object_id")
+        )
+        self.assertEqual(
+            sorted(object_id for kind, object_id in announced[:-1]), event_ids
+        )
+        self.assertTrue(all(kind == "event.deleted" for kind, _ in announced[:-1]))
+        self.assertEqual(announced[-1], ("eventtype.deleted", str(event_type.pk)))
 
     def test_post_with_emoji(self):
         response = self.client.post(
@@ -624,7 +723,8 @@ class EventTypePermissionsAPITestCase(APITestCase):
     def test_admin(self):
         self.client.login(username="admin", password="admin")
         self.assertEqual(
-            self.get_permissions(), {"add": True, "change": True, "delete": True}
+            self.get_permissions(),
+            {"add": True, "change": True, "delete": True, "delete_with_events": True},
         )
 
     def test_caregiver(self):
@@ -632,18 +732,51 @@ class EventTypePermissionsAPITestCase(APITestCase):
             "caregiver", groups=[settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"]]
         )
         self.assertEqual(
-            self.get_permissions(), {"add": False, "change": False, "delete": False}
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": False,
+                "delete": False,
+                "delete_with_events": False,
+            },
         )
 
     def test_change_without_delete(self):
         self.create_user("editor", permissions=["view_eventtype", "change_eventtype"])
         self.assertEqual(
-            self.get_permissions(), {"add": False, "change": True, "delete": False}
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": True,
+                "delete": False,
+                "delete_with_events": False,
+            },
         )
+
+    def test_delete_types_without_deleting_events(self):
+        self.create_user("types", permissions=["view_eventtype", "delete_eventtype"])
+        self.assertEqual(
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": False,
+                "delete": True,
+                "delete_with_events": False,
+            },
+        )
+
+    def test_delete_events_without_deleting_types(self):
+        self.create_user("events", permissions=["view_eventtype", "delete_event"])
+        self.assertFalse(self.get_permissions()["delete_with_events"])
 
     def test_every_page(self):
         self.client.login(username="admin", password="admin")
-        expected = {"add": True, "change": True, "delete": True}
+        expected = {
+            "add": True,
+            "change": True,
+            "delete": True,
+            "delete_with_events": True,
+        }
         for offset in (0, 1, 2):
             with self.subTest(offset=offset):
                 self.assertEqual(
@@ -659,7 +792,10 @@ class EventTypePermissionsAPITestCase(APITestCase):
         with patch("api.pagination.EventTypePagination.default_limit", new=None):
             permissions = self.get_permissions()
             response = self.client.get(self.endpoint)
-        self.assertEqual(permissions, {"add": True, "change": True, "delete": True})
+        self.assertEqual(
+            permissions,
+            {"add": True, "change": True, "delete": True, "delete_with_events": True},
+        )
         self.assertEqual(response.data["count"], 2)
         self.assertEqual(response.data["next"], None)
         self.assertEqual(len(response.data["results"]), 2)
@@ -680,7 +816,13 @@ class EventTypePermissionsAPITestCase(APITestCase):
         self.assertIn("permissions", schema["required"])
         self.assertEqual(
             set(schema["properties"]["permissions"]["properties"]),
-            {"add", "change", "delete"},
+            {"add", "change", "delete", "delete_with_events"},
+        )
+        operation = response.data["paths"]["/api/event-types/{slug}/"]["delete"]
+        self.assertIn("409", operation["responses"])
+        self.assertIn(
+            "delete_events",
+            [parameter["name"] for parameter in operation["parameters"]],
         )
         # Other lists keep the standard pagination.
         schema = response.data["paths"]["/api/events/"]["get"]["responses"]

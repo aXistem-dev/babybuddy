@@ -1444,11 +1444,14 @@ paths:
                     example: http://api.example.org/accounts/?offset=200&limit=100
                   permissions:
                     type: object
-                    description: Whether the user may add, change and delete event types.
+                    description:
+                      Whether the user may add, change and delete event
+                      types, and delete a type together with its events.
                     required:
                       - add
                       - change
                       - delete
+                      - delete_with_events
                     properties:
                       add:
                         type: boolean
@@ -1457,6 +1460,9 @@ paths:
                         type: boolean
                         example: true
                       delete:
+                        type: boolean
+                        example: true
+                      delete_with_events:
                         type: boolean
                         example: true
                   results:
@@ -1501,6 +1507,12 @@ paths:
           description: ""
           schema:
             type: string
+        - name: id
+          required: false
+          in: query
+          description: id
+          schema:
+            type: string
         - name: name
           required: false
           in: query
@@ -1536,6 +1548,12 @@ paths:
           in: path
           required: true
           description: ""
+          schema:
+            type: string
+        - name: id
+          required: false
+          in: query
+          description: id
           schema:
             type: string
         - name: name
@@ -1586,6 +1604,12 @@ paths:
           description: ""
           schema:
             type: string
+        - name: id
+          required: false
+          in: query
+          description: id
+          schema:
+            type: string
         - name: name
           required: false
           in: query
@@ -1626,15 +1650,21 @@ paths:
         - api
     delete:
       operationId: destroyEventType
-      description: 'Delete an event type. A type that is still used by events can not
-        be
+      description:
+        "Delete an event type. A type that is still used by events is only
 
-        deleted.'
+        deleted with ?delete_events=true, which deletes its events as well."
       parameters:
         - name: slug
           in: path
           required: true
           description: ""
+          schema:
+            type: string
+        - name: id
+          required: false
+          in: query
+          description: id
           schema:
             type: string
         - name: name
@@ -1655,9 +1685,22 @@ paths:
           description: Which field to use when ordering the results.
           schema:
             type: string
+        - name: delete_events
+          required: false
+          in: query
+          description:
+            Set to true to also delete every event of this type. Without
+            it, a type that is used by events is not deleted (409).
+          schema:
+            type: boolean
+            default: false
       responses:
         "204":
           description: ""
+        "409":
+          description:
+            The type is used by events (`event_count`) and `delete_events`
+            was not set.
       tags:
         - api
   /api/events/:

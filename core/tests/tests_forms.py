@@ -2,8 +2,10 @@
 import datetime
 import io
 import tempfile
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
@@ -13,7 +15,7 @@ from django.utils.formats import get_format, reset_format_cache
 from faker import Faker
 from PIL import Image
 
-from core import models
+from core import forms, models
 
 
 class FormsTestCaseBase(TestCase):
@@ -589,17 +591,86 @@ class EventTypeFormsTestCase(FormsTestCaseBase):
         self.assertContains(page, "Event Type entry deleted")
         self.assertFalse(models.EventType.objects.filter(pk=event_type.pk).exists())
 
-    def test_delete_in_use(self):
+    def test_delete_in_use_asks_to_delete_the_events_too(self):
         event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
         models.Event.objects.create(child=self.child, type=event_type)
         url = "/event-types/{}/delete/".format(event_type.slug)
 
         page = self.c.get(url)
         self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "This will also delete 2 events of this type.")
+        self.assertContains(page, "This can't be undone.")
+        self.assertContains(page, 'name="delete_events"')
+        self.assertContains(page, 'name="event_count" value="2"')
+
+        # Not confirmed: nothing is deleted.
+        page = self.c.post(url, {"event_count": 2})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(
+            page, "Confirm that the events of this type will be deleted too."
+        )
+        self.assertEqual(event_type.events.count(), 2)
+
+        page = self.c.post(url, {"delete_events": "on", "event_count": 2}, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event Type entry deleted")
+        self.assertFalse(models.EventType.objects.filter(pk=event_type.pk).exists())
+        self.assertFalse(models.Event.objects.filter(type_id=event_type.pk).exists())
+
+    def test_delete_in_use_after_the_events_changed(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+
+        # The page showed one event, and another one was added since.
+        models.Event.objects.create(child=self.child, type=event_type)
+        page = self.c.post(url, {"delete_events": "on", "event_count": 1})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "The number of events of this type has changed.")
+        self.assertContains(page, "This will also delete 2 events of this type.")
+        self.assertEqual(event_type.events.count(), 2)
+
+    def test_delete_in_use_without_permission_to_delete_events(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+        user = get_user_model().objects.create_user(username="types", password="types")
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core",
+                codename__in=["view_eventtype", "delete_eventtype"],
+            )
+        )
+        client = HttpClient()
+        client.login(username="types", password="types")
+
+        page = client.get(url)
+        self.assertEqual(page.status_code, 200)
         self.assertContains(page, "There is 1 event of this type.")
+        self.assertNotContains(page, 'name="delete_events"')
         self.assertNotContains(page, "Are you sure you want to delete")
 
-        page = self.c.post(url, follow=True)
+        page = client.post(url, {"delete_events": "on", "event_count": 1})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(
+            page, "Tooth brushing is still in use and can not be deleted."
+        )
+        self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
+        self.assertEqual(event_type.events.count(), 1)
+
+    def test_delete_when_events_were_added_after_the_check(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        url = "/event-types/{}/delete/".format(event_type.slug)
+        original_clean = forms.EventTypeDeleteForm.clean
+
+        def clean_then_add_an_event(form):
+            cleaned_data = original_clean(form)
+            models.Event.objects.create(child=self.child, type=event_type)
+            return cleaned_data
+
+        with patch.object(forms.EventTypeDeleteForm, "clean", clean_then_add_an_event):
+            page = self.c.post(url, follow=True)
         self.assertEqual(page.status_code, 200)
         self.assertContains(
             page, "Tooth brushing is still in use and can not be deleted."

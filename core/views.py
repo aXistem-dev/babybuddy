@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from django.contrib import messages
 from django.contrib.messages.views import SuccessMessageMixin
+from django.db import transaction
 from django.db.models import Count, ProtectedError
 from django.db.models.functions import Lower
 from django.forms import Form, ValidationError
@@ -266,16 +267,33 @@ class EventTypeUpdate(CoreUpdateView):
 
 class EventTypeDelete(CoreDeleteView):
     model = models.EventType
+    form_class = forms.EventTypeDeleteForm
     permission_required = ("core.delete_eventtype",)
     success_url = reverse_lazy("core:eventtype-list")
 
     def get_queryset(self):
         return super().get_queryset().annotate(Count("events"))
 
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs.update({"event_type": self.object, "user": self.request.user})
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_delete_events"] = self.request.user.has_perm("core.delete_event")
+        return context
+
     def form_valid(self, form):
-        # An event type still in use is protected from deletion; the template
-        # explains this instead of offering the button, and this covers events
-        # that were added after the page was opened.
+        if form.cleaned_data.get("delete_events"):
+            # The form checked the permission and the number of events, so the
+            # type goes together with all of its events, or nothing goes.
+            with transaction.atomic():
+                self.object.events.all().delete()
+                return super().form_valid(form)
+        # An event type still in use is protected from deletion. The form
+        # refuses this, and this covers events that were added after the form
+        # was checked.
         try:
             return super().form_valid(form)
         except ProtectedError:

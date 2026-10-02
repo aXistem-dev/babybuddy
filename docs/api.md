@@ -132,15 +132,22 @@ Returns JSON data in the response body in the following format:
 
 The list of event types (`/api/event-types/`) has one more key on every page,
 `permissions`, which tells a client whether the user may add, change and delete
-event types. A client can use it to decide which management options to show,
-instead of working out the user's permissions itself:
+event types, and whether they may delete a type together with its events
+(`delete_with_events`, see [`DELETE` Method](#delete-method)). A client can use
+it to decide which management options to show, instead of working out the
+user's permissions itself:
 
 ```json
 {
   "count": 3,
   "next": null,
   "previous": null,
-  "permissions": { "add": true, "change": true, "delete": false },
+  "permissions": {
+    "add": true,
+    "change": true,
+    "delete": true,
+    "delete_with_events": false
+  },
   "results": [{...}]
 }
 ```
@@ -376,8 +383,32 @@ endpoint to be deleted. For example, to delete a Diaper Change entry with ID
 curl -X DELETE https://[...]/api/changes/947/ -H 'Authorization: Token [...]'
 ```
 
-An event type that is still used by events can not be deleted. The request is
-answered with `409 Conflict` and the type is kept.
+An event type that is still used by events is not deleted by a plain `DELETE`.
+The request is answered with `409 Conflict`, the type is kept, and the response
+says how many events use it:
+
+```json
+{
+  "detail": "This event type is used by events and can not be deleted.",
+  "event_count": 4
+}
+```
+
+To delete the type and all of its events, repeat the request with
+`delete_events=true`:
+
+```shell
+curl -X DELETE 'https://[...]/api/event-types/nail-trim/?delete_events=true' \
+    -H 'Authorization: Token [...]'
+```
+
+This needs permission to delete both event types and events (the
+`delete_with_events` flag in the list's `permissions`), otherwise it is answered
+with `403 Forbidden`. The events and the type are deleted in one transaction:
+either all of them are deleted or none are. Every event deleted this way is
+reported to webhooks as its own `event.deleted`, followed by
+`eventtype.deleted`. Any event of the type is deleted, including one added
+after the `409` was received, and this can't be undone.
 
 ### Response
 

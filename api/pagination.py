@@ -1,7 +1,14 @@
 # -*- coding: utf-8 -*-
 from rest_framework.pagination import LimitOffsetPagination
 
-EVENT_TYPE_ACTIONS = ("add", "change", "delete")
+EVENT_TYPE_ACTIONS = ("add", "change", "delete", "delete_with_events")
+
+
+def can_delete_event_type_with_events(user):
+    """
+    Whether a user may delete an event type together with all of its events.
+    """
+    return user.has_perm("core.delete_eventtype") and user.has_perm("core.delete_event")
 
 
 def event_type_permissions(user):
@@ -9,10 +16,12 @@ def event_type_permissions(user):
     The event type management actions a user may take, so that clients can
     offer them without working out the permissions themselves.
     """
-    return {
+    permissions = {
         action: user.has_perm("core.{}_eventtype".format(action))
-        for action in EVENT_TYPE_ACTIONS
+        for action in ("add", "change", "delete")
     }
+    permissions["delete_with_events"] = can_delete_event_type_with_events(user)
+    return permissions
 
 
 def with_event_type_permissions(data, user):
@@ -44,7 +53,7 @@ class EventTypePagination(LimitOffsetPagination):
         properties["permissions"] = {
             "type": "object",
             "description": "Whether the user may add, change and delete event "
-            "types.",
+            "types, and delete a type together with its events.",
             "required": list(EVENT_TYPE_ACTIONS),
             "properties": {
                 action: {"type": "boolean", "example": True}

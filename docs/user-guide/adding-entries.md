@@ -24,10 +24,12 @@ bar, and select Event Types. Select Add Event Type and enter a name, e.g. "Nail
 trim" or "Tooth brushing". A type can also have an emoji, e.g. ✂️ or 🪥, which
 is shown before its name wherever its events appear: in the event list, on the
 event form, in the timeline and on the child dashboard. The emoji is optional
-and must be a single emoji; use your device's emoji keyboard to enter it. A type
-that is in use by events can be renamed, but not deleted. Renaming a type keeps
-its slug (the short name in its address, e.g. `nail-trim`), so buttons and other
-integrations that refer to it keep working.
+and must be a single emoji; use your device's emoji keyboard to enter it.
+Renaming a type keeps its slug (the short name in its address, e.g.
+`nail-trim`), so existing links and integrations aren't affected. Deleting a
+type that is in use by events deletes those events too: the delete page shows
+how many there are and asks you to confirm. This also needs permission to delete
+events; without it, a type that is in use can't be deleted.
 
 To add an event, select the plus sign in the top navigation bar and select
 Event. If necessary, modify the child or the time, and select the type of the

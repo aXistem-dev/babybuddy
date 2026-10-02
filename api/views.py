@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
 
@@ -14,7 +15,11 @@ from babybuddy import models as babybuddy_models
 from webhooks import models as webhooks_models
 
 from . import serializers, filters
-from .pagination import EventTypePagination, with_event_type_permissions
+from .pagination import (
+    EventTypePagination,
+    can_delete_event_type_with_events,
+    with_event_type_permissions,
+)
 
 
 class BMIViewSet(viewsets.ModelViewSet):
@@ -66,6 +71,37 @@ class EventViewSet(viewsets.ModelViewSet):
     ordering = "-time"
 
 
+class EventTypeSchema(AutoSchema):
+    """
+    Documents the opt-in to delete an event type together with its events.
+    """
+
+    def get_filter_parameters(self, path, method):
+        parameters = super().get_filter_parameters(path, method)
+        if method == "DELETE":
+            parameters.append(
+                {
+                    "name": "delete_events",
+                    "required": False,
+                    "in": "query",
+                    "description": "Set to true to also delete every event of "
+                    "this type. Without it, a type that is used by events is not "
+                    "deleted (409).",
+                    "schema": {"type": "boolean", "default": False},
+                }
+            )
+        return parameters
+
+    def get_responses(self, path, method):
+        responses = super().get_responses(path, method)
+        if method == "DELETE":
+            responses["409"] = {
+                "description": "The type is used by events (`event_count`) and "
+                "`delete_events` was not set."
+            }
+        return responses
+
+
 class EventTypeViewSet(viewsets.ModelViewSet):
     queryset = models.EventType.objects.all()
     serializer_class = serializers.EventTypeSerializer
@@ -74,6 +110,7 @@ class EventTypeViewSet(viewsets.ModelViewSet):
     ordering_fields = ("name", "slug")
     ordering = "name"
     pagination_class = EventTypePagination
+    schema = EventTypeSchema()
 
     def list(self, request, *args, **kwargs):
         """
@@ -96,16 +133,44 @@ class EventTypeViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         """
-        Delete an event type. A type that is still used by events can not be
-        deleted.
+        Delete an event type. A type that is still used by events is only
+        deleted with ?delete_events=true, which deletes its events as well.
         """
+        delete_events = request.query_params.get("delete_events", "false").lower()
+        if delete_events not in ("true", "false", "1", "0"):
+            return Response(
+                {"delete_events": ["Must be true or false."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        instance = self.get_object()
+        if delete_events in ("true", "1"):
+            if not can_delete_event_type_with_events(request.user):
+                return Response(
+                    {
+                        "detail": "You do not have permission to delete events, "
+                        "so this event type can not be deleted with its events."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            # One transaction: either the type and all of its events are gone,
+            # or nothing is. Each event is deleted on its own, so webhooks
+            # report every deleted event before the deleted type.
+            with transaction.atomic():
+                instance.events.all().delete()
+                instance.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
         try:
-            return super().destroy(request, *args, **kwargs)
+            instance.delete()
         except ProtectedError:
             return Response(
-                {"detail": "This event type is used by events and can not be deleted."},
+                {
+                    "detail": "This event type is used by events and can not be "
+                    "deleted.",
+                    "event_count": instance.events.count(),
+                },
                 status=status.HTTP_409_CONFLICT,
             )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class FeedingViewSet(viewsets.ModelViewSet):

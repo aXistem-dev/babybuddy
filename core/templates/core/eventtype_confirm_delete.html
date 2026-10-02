@@ -15,7 +15,32 @@
 {% block content %}
     <form role="form" method="post">
         {% csrf_token %}
-        {% if object.events__count > 0 %}
+        {% for error in form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endfor %}
+        {% if object.events__count > 0 and can_delete_events %}
+            <h1>{% confirm_delete_text object %}</h1>
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading">
+                    {% blocktrans trimmed with count=object.events__count count counter=object.events__count %}
+                        This will also delete 1 event of this type.
+                    {% plural %}
+                        This will also delete {{ count }} events of this type.
+                    {% endblocktrans %}
+                </h4>
+                <p class="mb-0">{% trans "This can't be undone." %}</p>
+            </div>
+            <input type="hidden" name="event_count" value="{{ object.events__count }}">
+            <div class="form-check mb-3">
+                <input type="checkbox"
+                       class="form-check-input"
+                       name="delete_events"
+                       id="id_delete_events"
+                       required>
+                <label class="form-check-label" for="id_delete_events">{{ form.delete_events.label }}</label>
+            </div>
+            <button type="submit" class="btn btn-danger">{% trans "Delete" %}</button>
+        {% elif object.events__count > 0 %}
             <h1>{{ object }}</h1>
             <div class="alert alert-warning" role="alert">
                 <h4 class="alert-heading">
