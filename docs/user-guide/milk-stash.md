@@ -186,12 +186,12 @@ Four site-wide settings, in the **Milk stash** section of **Site > Settings**,
 control the defaults (the API exposes them at `/api/stash/settings`, which
 apps use to show and change them):
 
-| Setting | Default | Effect |
-|---|---|---|
-| Store pumped milk in the stash by default | On | On by default for new pumping |
-| Take breast milk bottles from the stash by default | On | On by default for new breast-milk bottles once the stash is in use |
-| Expiring soon after (hours) | 48 | Milk this old is marked as expiring soon |
-| Expires after (hours) | 72 | Milk this old has expired and should be thrown away |
+| Setting                                            | Default | Effect                                                             |
+| -------------------------------------------------- | ------- | ------------------------------------------------------------------ |
+| Store pumped milk in the stash by default          | On      | On by default for new pumping                                      |
+| Take breast milk bottles from the stash by default | On      | On by default for new breast-milk bottles once the stash is in use |
+| Expiring soon after (hours)                        | 48      | Milk this old is marked as expiring soon                           |
+| Expires after (hours)                              | 72      | Milk this old has expired and should be thrown away                |
 
 ## Existing (older) pumping data
 
