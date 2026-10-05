@@ -718,40 +718,6 @@ class StashAPITestCase(APITestCase):
             (self.robin.id, self.child.id, 100.0),
         )
 
-    def test_pumping_placeholder_amount_takes_the_stash_default(self):
-        # A button saves 0 ml; the real amount filled in later is stored as
-        # it would have been on creation.
-        r = self.pumping(16, amount=0, child=self.child.id)
-        self.assertEqual(r.status_code, 201, r.data)
-        self.assertEqual((r.data["amount"], r.data["stash_amount"]), (0.0, None))
-        endpoint = reverse("api:pumping-detail", args=[r.data["id"]])
-        r = self.client.patch(endpoint, {"amount": 120}, format="json")
-        self.assertEqual(r.status_code, 200, r.data)
-        self.assertEqual(r.data["stash_amount"], 120.0)
-        # Later amount edits follow the existing rules.
-        r = self.client.patch(endpoint, {"amount": 110}, format="json")
-        self.assertEqual(r.data["stash_amount"], 110.0)
-
-    def test_pumping_placeholder_amount_without_the_default(self):
-        stash.settings().pumping_to_stash_default = False
-        r = self.pumping(17, amount=0, parent=self.robin.id)
-        endpoint = reverse("api:pumping-detail", args=[r.data["id"]])
-        r = self.client.patch(endpoint, {"amount": 120}, format="json")
-        self.assertEqual(r.status_code, 200, r.data)
-        self.assertIsNone(r.data["stash_amount"])
-        stash.settings().pumping_to_stash_default = True
-
-    def test_pumping_placeholder_amount_with_an_explicit_choice(self):
-        for hour, (sent, expected) in enumerate(((None, None), (50, 50.0)), start=18):
-            with self.subTest(stash_amount=sent):
-                r = self.pumping(hour, amount=0, parent=self.robin.id)
-                endpoint = reverse("api:pumping-detail", args=[r.data["id"]])
-                r = self.client.patch(
-                    endpoint, {"amount": 120, "stash_amount": sent}, format="json"
-                )
-                self.assertEqual(r.status_code, 200, r.data)
-                self.assertEqual(r.data["stash_amount"], expected)
-
     def test_child_only_resolves_parent(self):
         r = self.pumping(9, child=self.child.id)
         self.assertEqual(r.status_code, 201, r.data)

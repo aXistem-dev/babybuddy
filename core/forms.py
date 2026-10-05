@@ -810,15 +810,8 @@ class PumpingForm(CoreModelForm, TaggableModelForm):
         self.fields["stash_amount"].help_text = _(
             "Leave empty to store the whole amount."
         )
-        if self.instance.pk and self.instance.amount:
+        if self.instance.pk:
             self.initial["to_stash"] = self.instance.stash_amount is not None
-        elif self.instance.pk:
-            # No real amount yet (e.g. 0 from a button): the switch starts as
-            # it would on a new entry, for when the amount is filled in.
-            self.initial["to_stash"] = (
-                self.instance.stash_amount is not None
-                or stash.settings().pumping_to_stash_default
-            )
         else:
             self.initial.setdefault(
                 "to_stash", stash.settings().pumping_to_stash_default

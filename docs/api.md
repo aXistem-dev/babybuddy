@@ -330,11 +330,6 @@ sessions by child as before, `parent` finds them by parent, and
 `stash_amount__isnull` finds sessions that did (or didn't) put milk in the
 stash.
 
-A session saved with amount `0` (e.g. from a button, before the milk is
-measured) is stored as the pumping default says once its real amount is first
-filled in by a `PATCH` that leaves out `stash_amount`, as it would have been on
-creation. Sending `stash_amount` (or `null`) always decides.
-
 ### `/api/feedings/`
 
 New fields: `stash_amount` (ml taken from the stash that the baby drank),
