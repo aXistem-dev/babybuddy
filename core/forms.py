@@ -434,28 +434,18 @@ class StashFeedingMixin:
             max_length=models.StashAdjustment._meta.get_field("reason").max_length,
             label=_("Reason"),
         )
-        if (
-            self.instance.pk
-            and self.instance.amount is None
-            and self.instance.type in models.Feeding.STASH_TYPES
-            and self.instance.method in models.Feeding.STASH_METHODS
-        ):
-            # A bottle without an amount yet (e.g. logged from a timer): the
-            # switch starts as it would on a new one, for when the amount is
-            # filled in.
-            self.initial["from_stash"] = (
-                self.instance.stash_amount is not None
-                or stash.bottle_from_stash_default()
-            )
-        elif self.instance.pk:
-            self.initial["from_stash"] = self.instance.stash_amount is not None
         if self.instance.pk:
+            self.initial["from_stash"] = self.instance.stash_amount is not None
             discard = self.instance.linked_discard()
             self.initial["discarded"] = discard is not None
             self.initial["discarded_amount"] = discard.amount if discard else None
             self.initial["discard_reason"] = discard.reason if discard else ""
         else:
-            self.initial.setdefault("from_stash", stash.bottle_from_stash_default())
+            self.initial.setdefault(
+                "from_stash",
+                stash.settings().bottle_from_stash_default
+                and stash.stash_has_activity(),
+            )
 
     def clean_stash(self, data, method):
         uses_stash = (
@@ -470,13 +460,7 @@ class StashFeedingMixin:
         keep_stash_amount_in_step(self, data)
         if data.get("stash_amount") is None:
             data["stash_amount"] = data.get("amount")
-        if (
-            data["stash_amount"] is None
-            and "amount" not in self.errors
-            and not (self.instance.pk and self.instance.amount is None)
-        ):
-            # A bottle that still has no amount (e.g. logged from a timer) can
-            # be edited without one; nothing comes from the stash until it has.
+        if data["stash_amount"] is None and "amount" not in self.errors:
             self.add_error("amount", _("Enter the amount taken from the stash."))
         if data.get("discarded") and not data.get("discarded_amount"):
             self.add_error("discarded_amount", _("Enter how much was discarded."))

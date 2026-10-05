@@ -63,12 +63,6 @@ def stash_has_activity():
     )
 
 
-def bottle_from_stash_default():
-    """Whether a breast-milk bottle starts as taken from the stash: the setting
-    is on and the stash is in use."""
-    return settings().bottle_from_stash_default and stash_has_activity()
-
-
 def follow_or_clamp_stash_amount(stash_amount, old_amount, new_amount):
     """The stash amount to keep when an edit changes `amount` but leaves the
     stash amount alone: an entry that was fully stashed follows the new amount,

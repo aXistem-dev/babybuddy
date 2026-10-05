@@ -73,10 +73,7 @@ Enter the bottle's amount (or the amount from the stash) when the switch is on.
 For a new bottle, the switch starts on when the site setting is on and the
 stash is already in use (pumped milk has been stored, or a stash adjustment
 logged); until then it starts off, so a family that doesn't use the stash isn't
-pushed below zero. A bottle that was logged without an amount (for example
-from a timer) gets the same starting switch when you edit it to fill in the
-amount, and so does a bottle logged through the API whose amount is filled in
-later.
+pushed below zero.
 
 With **Taken from stash** on, an **Extra milk discarded** switch appears.
 Turning it on adds an **Amount discarded** field (for milk that never reached

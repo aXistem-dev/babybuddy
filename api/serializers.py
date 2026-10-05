@@ -363,7 +363,8 @@ class FeedingSerializer(
             attrs.get("type") in models.Feeding.STASH_TYPES
             and attrs.get("method") in models.Feeding.STASH_METHODS
             and attrs.get("amount")
-            and stash.bottle_from_stash_default()
+            and stash.settings().bottle_from_stash_default
+            and stash.stash_has_activity()
         ):
             attrs["stash_amount"] = attrs["amount"]
         return attrs
@@ -376,17 +377,6 @@ class FeedingSerializer(
             or method not in models.Feeding.STASH_METHODS
         ):
             attrs["stash_amount"] = None
-            return attrs
-        if (
-            self.instance.amount is None
-            and self.instance.stash_amount is None
-            and attrs.get("amount")
-        ):
-            # The amount is filled in for the first time (e.g. a feeding logged
-            # from a timer without one): the stash default applies as it would
-            # have on creation.
-            if stash.bottle_from_stash_default():
-                attrs["stash_amount"] = attrs["amount"]
             return attrs
         return self._follow_or_clamp_stash_amount(attrs)
 
