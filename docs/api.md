@@ -320,10 +320,15 @@ child IDs).
 ### `/api/pumping/`
 
 New fields: `parent` and `stash_amount` (ml of this session that went into
-the stash). `child` is now optional and kept only for backwards
-compatibility (see [Parent resolution](#parent-resolution) below). Filters:
-`parent` finds pumping sessions by parent; `stash_amount__isnull` finds
-sessions that did (or didn't) put milk in the stash.
+the stash). `child` is optional: the child the session is for. A `child` that
+is sent is always kept, and when an entry with a `parent` but no `child` is
+saved and that parent has exactly one linked child, that child is filled in.
+Deleting a child keeps a parent's sessions (their `child` becomes `null`) and
+deletes the ones that only had that child (see
+[Parent resolution](#parent-resolution) below). Filters: `child` finds
+sessions by child as before, `parent` finds them by parent, and
+`stash_amount__isnull` finds sessions that did (or didn't) put milk in the
+stash.
 
 ### `/api/feedings/`
 
@@ -441,14 +446,17 @@ curl -X PATCH https://[...]/api/stash/settings -H 'Authorization: Token [...]' \
 
 Only parents who produce breast milk (`produces_milk`) count. A `POST` to
 `/api/pumping/` that sends `child` but no `parent` resolves the parent from
-that child's linked milk-producing parents: if the child has exactly one, the
-entry is stored against that parent with `child` left `null`. If exactly one
-parent produces breast milk at all, that parent is filled in, even for a child
-with no linked parent (and for a request with no `child`). Otherwise the
-request is rejected with a 400 response asking for `parent` explicitly. A
-`timer` field that carries a child follows the same rule. This keeps older
-clients — including ones that only know about child-based pumping — working
-unmodified, as long as each child has a single linked milk-producing parent.
+that child's linked milk-producing parents: if the child has exactly one, that
+parent is filled in. If exactly one parent produces breast milk at all, that
+parent is filled in, even for a child with no linked parent (and for a request
+with no `child`). Otherwise the entry is stored on the child alone, as it would
+be without parents. The `child` is kept in every case. A `timer` field that
+carries a child follows the same rule. A request with neither a parent nor a
+child that can be resolved is rejected with a 400 response asking for
+`parent`.
+
+This keeps clients that only know about child-based pumping working
+unmodified: their entries are accepted and stay listed for the child.
 
 A `parent` who doesn't produce breast milk is refused (400) on pumping,
 feedings and stash adjustments, unless it's the entry's existing parent (an

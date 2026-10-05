@@ -30,7 +30,9 @@ class CommandsTestCase(TransactionTestCase):
         self.assertEqual(Parent.objects.count(), 1)
         parent = Parent.objects.get()
         self.assertEqual(set(parent.children.all()), set(Child.objects.all()))
-        self.assertFalse(Pumping.objects.filter(child__isnull=False).exists())
+        self.assertFalse(Pumping.objects.filter(parent__isnull=True).exists())
+        # Sessions logged while the parent had one child are that child's too.
+        self.assertTrue(Pumping.objects.filter(child__isnull=False).exists())
         self.assertTrue(Pumping.objects.filter(stash_amount__isnull=False).exists())
         breastfeeds = Feeding.objects.filter(method__in=Feeding.BREAST_METHODS)
         self.assertTrue(breastfeeds.exists())

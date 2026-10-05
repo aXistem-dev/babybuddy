@@ -6,7 +6,9 @@ from core import models
 
 
 class Command(BaseCommand):
-    help = "Move pumping entries that are not linked to a parent onto a parent."
+    help = (
+        "Link pumping entries that have no parent to a parent; they keep their child."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument("--parent", required=True, help="Parent slug")
@@ -31,10 +33,10 @@ class Command(BaseCommand):
         overlapping = self.count_overlapping(moved, list(parent.pumping.all()))
         if not options["dry_run"]:
             parent.children.add(*children)
-            rows.update(parent=parent, child=None)
+            rows.update(parent=parent)
         self.stdout.write(
             "%s %d pumping entries to %s"
-            % ("Would move" if options["dry_run"] else "Moved", len(moved), parent)
+            % ("Would link" if options["dry_run"] else "Linked", len(moved), parent)
         )
         if overlapping:
             self.stdout.write(

@@ -1022,7 +1022,7 @@ class PumpingFormsTestCase(FormsTestCaseBase):
         p.refresh_from_db()
         self.assertEqual((p.amount, p.stash_amount), (40.0, 40.0))
 
-    def test_edit_legacy_entry_moves_it_to_the_parent(self):
+    def test_edit_legacy_entry_adds_the_parent_and_keeps_the_child(self):
         sam = models.Child.objects.create(
             first_name="Sam", birth_date=timezone.localdate()
         )
@@ -1035,9 +1035,66 @@ class PumpingFormsTestCase(FormsTestCaseBase):
         )
         self.edit(legacy, to_stash="")
         legacy.refresh_from_db()
-        self.assertEqual((legacy.parent, legacy.child), (self.robin, None))
+        self.assertEqual((legacy.parent, legacy.child), (self.robin, sam))
+        # Deleting the child leaves the parent's entry, without the child.
         sam.delete()
-        self.assertTrue(models.Pumping.objects.filter(pk=legacy.pk).exists())
+        legacy.refresh_from_db()
+        self.assertEqual((legacy.parent, legacy.child), (self.robin, None))
+
+    def add_second_child(self):
+        second = models.Child.objects.create(
+            first_name="Jamie", birth_date=timezone.localdate()
+        )
+        self.robin.children.add(second)
+        return second
+
+    def test_add_for_a_single_child_parent_fills_the_child(self):
+        page = self.c.post("/pumping/add/", self.params(offset=200), follow=True)
+        self.assertContains(page, "Pumping entry added!")
+        self.assertEqual(models.Pumping.objects.latest("id").child, self.child)
+
+    def test_add_from_a_childs_page_keeps_that_child(self):
+        second = self.add_second_child()
+        page = self.c.post(
+            "/pumping/add/?child={}".format(second.slug),
+            self.params(offset=210),
+            follow=True,
+        )
+        self.assertContains(page, "Pumping entry added!")
+        entry = models.Pumping.objects.latest("id")
+        self.assertEqual((entry.parent, entry.child), (self.robin, second))
+        # Without a child, a parent of two children leaves it empty.
+        self.c.post("/pumping/add/", self.params(offset=230), follow=True)
+        entry = models.Pumping.objects.latest("id")
+        self.assertEqual((entry.parent, entry.child), (self.robin, None))
+
+    def test_add_from_a_timer_keeps_the_timers_child(self):
+        second = self.add_second_child()
+        timer = models.Timer.objects.create(
+            user=self.user,
+            child=second,
+            start=timezone.localtime() - timezone.timedelta(minutes=20),
+        )
+        page = self.c.post(
+            "/pumping/add/?timer={}".format(timer.id),
+            self.params(offset=250),
+            follow=True,
+        )
+        self.assertContains(page, "Pumping entry added!")
+        self.assertEqual(models.Pumping.objects.latest("id").child, second)
+
+    def test_another_parent_does_not_keep_the_previous_parents_child(self):
+        casey = models.Parent.objects.create(first_name="Casey")
+        sam = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+        casey.children.add(sam)
+        self.c.post("/pumping/add/", self.params(offset=270), follow=True)
+        entry = models.Pumping.objects.latest("id")
+        self.assertEqual(entry.child, self.child)
+        self.edit(entry, parent=casey.id, to_stash="")
+        entry.refresh_from_db()
+        self.assertEqual((entry.parent, entry.child), (casey, sam))
 
     def test_list_filters_by_parent(self):
         page = self.c.get("/pumping/", {"parent": self.robin.id})

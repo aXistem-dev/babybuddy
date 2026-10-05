@@ -691,17 +691,31 @@ class Note(models.Model):
         return str(_("Note"))
 
 
+def keep_parent_pumping(collector, field, sub_objs, using):
+    """
+    Deleting a child deletes the child's own pumping entries, but an entry
+    that belongs to a parent stays with that parent, without the child.
+    """
+    own = [entry for entry in sub_objs if not entry.parent_id]
+    shared = [entry for entry in sub_objs if entry.parent_id]
+    if own:
+        models.CASCADE(collector, field, own, using)
+    if shared:
+        collector.add_field_update(field, None, shared)
+
+
 class Pumping(models.Model):
     model_name = "pumping"
     child = models.ForeignKey(
         "Child",
         blank=True,
         null=True,
-        on_delete=models.CASCADE,
+        on_delete=keep_parent_pumping,
         related_name="pumping",
         verbose_name=_("Child"),
         help_text=_(
-            "Legacy: pumping belongs to a parent. Kept for older entries and apps."
+            "The child this pumping is for, when there is one. Kept for apps that "
+            "log pumping per child."
         ),
     )
     parent = models.ForeignKey(
@@ -755,14 +769,24 @@ class Pumping(models.Model):
     def save(self, *args, **kwargs):
         if self.start and self.end:
             self.duration = timezone_aware_duration(self.start, self.end)
+        if self.parent_id and not self.child_id:
+            # With a single child the entry is also that child's, so clients
+            # that list pumping per child find it.
+            children = list(
+                Child.objects.filter(parents=self.parent_id).values_list(
+                    "pk", flat=True
+                )[:2]
+            )
+            if len(children) == 1:
+                self.child_id = children[0]
         super(Pumping, self).save(*args, **kwargs)
 
     def clean(self):
         validate_time(self.start, "start")
         validate_duration(self)
-        # Required for new entries; an existing child-based (legacy) row keeps
-        # working without one, so it isn't force-migrated by an unrelated edit.
-        if not self.parent_id and not (self.pk and self.child_id):
+        # Pumping belongs to a parent; an entry from a client that logs
+        # pumping per child may have only the child.
+        if not self.parent_id and not self.child_id:
             raise ValidationError(
                 {"parent": _("Choose the parent who pumped.")},
                 code="pumping_no_parent",

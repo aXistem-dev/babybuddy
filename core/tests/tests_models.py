@@ -598,12 +598,31 @@ class ParentPumpingTestCase(TestCase):
         self.assertIsNone(p.child)
         self.assertEqual(list(self.robin.pumping.all()), [p])
 
-    def test_parent_is_required(self):
+    def test_parent_or_child_is_required(self):
+        with self.assertRaises(ValidationError):
+            self.make().full_clean()
         child = models.Child.objects.create(
             first_name="Alex", birth_date=timezone.localdate()
         )
-        with self.assertRaises(ValidationError):
-            self.make(child=child).full_clean()
+        self.make(child=child).full_clean()
+
+    def test_single_child_of_the_parent_is_filled_in(self):
+        robin = self.robin
+        alex = models.Child.objects.create(
+            first_name="Alex", birth_date=timezone.localdate()
+        )
+        robin.children.add(alex)
+        pumping = self.make(parent=robin)
+        pumping.save()
+        self.assertEqual(pumping.child, alex)
+        robin.children.add(
+            models.Child.objects.create(
+                first_name="Sam", birth_date=timezone.localdate()
+            )
+        )
+        pumping = self.make(parent=robin)
+        pumping.save()
+        self.assertIsNone(pumping.child)
 
     def test_legacy_child_only_pumping_stays_valid_once_saved(self):
         # A pre-existing (already saved) child-only row keeps passing

@@ -50,9 +50,9 @@ class Migration(migrations.Migration):
             name="child",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Legacy: pumping belongs to a parent. Kept for older entries and apps.",
+                help_text="The child this pumping is for, when there is one. Kept for apps that log pumping per child.",
                 null=True,
-                on_delete=django.db.models.deletion.CASCADE,
+                on_delete=core.models.keep_parent_pumping,
                 related_name="pumping",
                 to="core.child",
                 verbose_name="Child",

@@ -9,7 +9,7 @@ from core import models
 
 
 class LinkPumpingCommandTestCase(TestCase):
-    def test_moves_child_pumping_to_parent(self):
+    def test_links_child_pumping_to_parent(self):
         call_command("migrate", verbosity=0)
         child = models.Child.objects.create(
             first_name="Alex", birth_date=timezone.localdate()
@@ -26,10 +26,10 @@ class LinkPumpingCommandTestCase(TestCase):
         self.assertIsNone(models.Pumping.objects.get().parent)
         call_command("link_pumping_to_parents", "--parent", "robin")
         p = models.Pumping.objects.get()
-        self.assertEqual((p.parent, p.child), (robin, None))
+        self.assertEqual((p.parent, p.child), (robin, child))
         self.assertIn(child, robin.children.all())
 
-    def test_reports_moved_entries_that_overlap(self):
+    def test_reports_linked_entries_that_overlap(self):
         call_command("migrate", verbosity=0)
         alex, sam = (
             models.Child.objects.create(
@@ -51,5 +51,5 @@ class LinkPumpingCommandTestCase(TestCase):
         )
         out = io.StringIO()
         call_command("link_pumping_to_parents", "--parent", "robin", stdout=out)
-        self.assertIn("Moved 2 pumping entries to Robin", out.getvalue())
+        self.assertIn("Linked 2 pumping entries to Robin", out.getvalue())
         self.assertIn("1 of them overlaps", out.getvalue())

@@ -214,29 +214,15 @@ class PumpingSerializer(
     def validate(self, attrs):
         check_milk_parent(self, attrs)
         if self.instance is None and not attrs.get("parent"):
+            # A client that logs pumping per child gets that child's milk
+            # parent when there is exactly one; otherwise the entry stays on
+            # the child alone, as it would without parents. The child is kept
+            # either way, so the client still finds the entry by child.
             child = attrs.get("child") or getattr(attrs.get("timer"), "child", None)
             parent = models.parent_for_child(child) or models.single_parent()
-            if child is not None and parent is None:
-                raise ValidationError(
-                    {
-                        "parent": _(
-                            "This child has no single linked parent; send `parent`."
-                        )
-                    }
-                )
             if parent is not None:
                 attrs["parent"] = parent
-        # super().validate() (CoreModelWithDurationSerializer) may itself set
-        # attrs["child"] from a supplied timer's child, so the parent-owned
-        # invariant below has to be enforced after it runs, not before.
-        attrs = super().validate(attrs)
-        if self.instance is None or self.instance.parent_id or attrs.get("parent"):
-            # A brand new row, or an update on a row that has (or is gaining)
-            # a parent, never keeps a child: whether it arrived directly in
-            # the request or was resolved from a timer just above, pumping
-            # belongs to the parent and the legacy field stays NULL.
-            attrs["child"] = None
-        return attrs
+        return super().validate(attrs)
 
     def apply_stash_default(self, attrs):
         if stash.settings().pumping_to_stash_default and attrs.get("amount"):

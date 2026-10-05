@@ -743,6 +743,22 @@ class ParentForm(forms.ModelForm):
         widgets = {"children": forms.CheckboxSelectMultiple}
 
 
+def child_for_entry(child_slug, timer_id):
+    """The child a new entry is for: the timer's child, or the child the page
+    was opened for."""
+    timer = None
+    if timer_id:
+        try:
+            timer = models.Timer.objects.filter(id=timer_id).first()
+        except (ValueError, TypeError, OverflowError):
+            pass
+    if timer and timer.child:
+        return timer.child
+    if child_slug:
+        return models.Child.objects.filter(slug=child_slug).first()
+    return None
+
+
 class PumpingForm(CoreModelForm, TaggableModelForm):
     to_stash = forms.BooleanField(
         required=False,
@@ -768,6 +784,9 @@ class PumpingForm(CoreModelForm, TaggableModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        # The child the page was opened for (a child's page, or a timer of
+        # that child). The form has no child field; a new entry keeps it.
+        self.child_for_entry = child_for_entry(kwargs.get("child"), kwargs.get("timer"))
         super().__init__(*args, **kwargs)
         self.fields["parent"].required = True
         self.fields["parent"].empty_label = None
@@ -786,8 +805,19 @@ class PumpingForm(CoreModelForm, TaggableModelForm):
         data = super().clean()
         if not data.get("parent") and "parent" not in self.errors:
             data["parent"] = models.single_parent()
-        if data.get("parent"):
-            # Pumping belongs to a parent; a legacy entry's child is dropped.
+        parent = data.get("parent")
+        if not self.instance.pk and self.child_for_entry:
+            self.instance.child = self.child_for_entry
+        elif (
+            self.instance.parent_id
+            and "parent" in self.changed_data
+            and parent
+            and self.instance.child_id
+            and not parent.children.filter(pk=self.instance.child_id).exists()
+        ):
+            # Another parent: the child came with the previous one, so saving
+            # fills in the new parent's child, if it has a single one. (The
+            # instance still holds the previous parent until the form saves.)
             self.instance.child = None
         if not data.get("to_stash"):
             data["stash_amount"] = None

@@ -283,7 +283,8 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         obj = models.Pumping.objects.get(pk=response.data["id"])
         self.assertEqual(str(obj.amount), data["amount"])
         self.assertEqual(obj.notes, data["notes"])
-        self.assertIsNone(obj.child)
+        # The child's only milk parent is filled in, and the child is kept.
+        self.assertEqual(obj.child_id, 1)
         self.assertEqual(obj.parent, self.parent)
 
     def test_patch(self):
@@ -321,9 +322,8 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
             self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
 
     def test_post_with_timer_with_child(self):
-        # Overridden: a pumping session belongs to a parent, so the child
-        # resolved from the timer ends up NULL, unlike other timer-backed
-        # models where the base test expects a stored child.
+        # Overridden: the timer's child is kept, and its milk parent is filled
+        # in.
         user = get_user_model().objects.first()
         child = models.Child.objects.first()
         start = timezone.now() - timezone.timedelta(minutes=10)
@@ -332,7 +332,7 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         response = self.client.post(self.endpoint, self.timer_test_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         obj = self.model.objects.get(pk=response.data["id"])
-        self.assertIsNone(obj.child)
+        self.assertEqual(obj.child, child)
         self.assertEqual(obj.parent, self.parent)
         self.assertEqual(obj.start, start)
         self.assertIsNotNone(obj.end)
@@ -348,7 +348,7 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertIsNone(obj.parent)
         self.assertEqual(obj.child_id, 1)
 
-    def test_update_ignores_child_sent_on_parent_owned_row(self):
+    def test_update_keeps_a_child_sent_on_parent_owned_row(self):
         response = self.client.post(
             self.endpoint,
             {
@@ -367,15 +367,15 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         endpoint = "{}{}/".format(self.endpoint, pk)
         response = self.client.patch(endpoint, {"child": other_child.id}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertIsNone(response.data["child"])
+        self.assertEqual(response.data["child"], other_child.id)
         obj = models.Pumping.objects.get(pk=pk)
-        self.assertIsNone(obj.child)
+        self.assertEqual(obj.child, other_child)
         self.assertEqual(obj.parent_id, self.parent.id)
 
-    def test_update_via_timer_does_not_resurrect_child_on_parent_owned_row(self):
+    def test_update_via_timer_takes_the_timers_child(self):
         # CoreModelWithDurationSerializer.validate() sets attrs["child"] from
-        # a supplied timer's child; a parent-owned row must still end up with
-        # child=None even when it arrives this way rather than directly.
+        # a supplied timer's child; like a child sent directly, it is kept and
+        # the parent stays.
         response = self.client.post(
             self.endpoint,
             {
@@ -401,9 +401,9 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
             endpoint, {"timer": timer.id, "amount": 55}, format="json"
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-        self.assertIsNone(response.data["child"])
+        self.assertEqual(response.data["child"], other_child.id)
         obj = models.Pumping.objects.get(pk=pk)
-        self.assertIsNone(obj.child)
+        self.assertEqual(obj.child, other_child)
         self.assertEqual(obj.parent_id, self.parent.id)
 
     def test_amount_change_follows_full_stash(self):
@@ -715,17 +715,73 @@ class StashAPITestCase(APITestCase):
         self.assertEqual(r.status_code, 201, r.data)
         self.assertEqual(
             (r.data["parent"], r.data["child"], r.data["stash_amount"]),
-            (self.robin.id, None, 100.0),
+            (self.robin.id, self.child.id, 100.0),
         )
 
     def test_child_only_resolves_parent(self):
         r = self.pumping(9, child=self.child.id)
         self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(
+            (r.data["parent"], r.data["child"]), (self.robin.id, self.child.id)
+        )
+        # A client listing pumping per child finds it.
+        r = self.client.get(reverse("api:pumping-list"), {"child": self.child.id})
+        self.assertIn(9, [int(p["start"][11:13]) for p in r.data["results"]])
+
+    def test_child_without_a_linked_parent_gets_the_only_milk_parent(self):
+        other = models.Child.objects.create(
+            first_name="Other", birth_date=self.child.birth_date
+        )
+        r = self.pumping(14, child=other.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data["parent"], r.data["child"]), (self.robin.id, other.id))
+
+    def test_deleting_a_child_keeps_the_parents_pumping(self):
+        r = self.pumping(15, parent=self.robin.id)
+        shared = r.data["id"]
+        other = models.Child.objects.create(
+            first_name="Other", birth_date=self.child.birth_date
+        )
+        own = models.Pumping.objects.create(
+            child=other,
+            amount=20,
+            start=timezone.now() - timezone.timedelta(hours=1),
+            end=timezone.now(),
+        )
+        self.child.delete()
+        entry = models.Pumping.objects.get(pk=shared)
+        self.assertEqual((entry.parent, entry.child), (self.robin, None))
+        other.delete()
+        self.assertFalse(models.Pumping.objects.filter(pk=own.pk).exists())
+
+    def test_child_with_two_parents_stays_on_the_child(self):
+        models.Parent.objects.create(first_name="Casey").children.add(self.child)
+        r = self.pumping(10, child=self.child.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data["parent"], r.data["child"]), (None, self.child.id))
+
+    def test_child_without_any_parent_stays_on_the_child(self):
+        # A server that was just upgraded has no parents yet; a client that
+        # logs pumping per child keeps working as before.
+        models.Parent.objects.all().delete()
+        r = self.pumping(11, child=self.child.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data["parent"], r.data["child"]), (None, self.child.id))
+
+    def test_parent_of_two_children_leaves_the_child_empty(self):
+        second = models.Child.objects.create(
+            first_name="Second", birth_date=self.child.birth_date
+        )
+        self.robin.children.add(second)
+        r = self.pumping(12, parent=self.robin.id)
+        self.assertEqual(r.status_code, 201, r.data)
         self.assertEqual((r.data["parent"], r.data["child"]), (self.robin.id, None))
 
-    def test_child_with_two_parents_is_400(self):
-        models.Parent.objects.create(first_name="Casey").children.add(self.child)
-        self.assertEqual(self.pumping(10, child=self.child.id).status_code, 400)
+    def test_neither_parent_nor_child_is_400(self):
+        models.Parent.objects.create(first_name="Casey")
+        r = self.pumping(13)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("parent", r.data)
 
     def test_timer_to_pumping_resolves_parent(self):
         timer = models.Timer.objects.create(

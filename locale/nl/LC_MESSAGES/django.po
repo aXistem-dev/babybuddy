@@ -3070,10 +3070,6 @@ msgstr "WHO-gewichtspercentielen voor meisjes (kg)"
 #~ msgid "<b>Feeding Pattern</b>"
 #~ msgstr "<b>Voedingspatroon</b>"
 
-#: api/serializers.py:213
-msgid "This child has no single linked parent; send `parent`."
-msgstr "Dit kind heeft geen eenduidige gekoppelde ouder; stuur `parent` mee."
-
 #: api/serializers.py:339
 msgid "Discarding milk needs milk taken from the stash."
 msgstr "Melk weggooien vereist dat er melk uit de voorraad is gehaald."
@@ -3260,9 +3256,12 @@ msgid "Must be more than zero and at most the amount fed."
 msgstr "Moet meer dan nul zijn en niet meer dan de gevoede hoeveelheid."
 
 #: core/models.py:663
-msgid "Legacy: pumping belongs to a parent. Kept for older entries and apps."
+msgid ""
+"The child this pumping is for, when there is one. Kept for apps that log "
+"pumping per child."
 msgstr ""
-"Verouderd: kolven hoort bij een ouder. Behouden voor oudere gegevens en apps."
+"Het kind voor wie deze kolfsessie is, als er één is. Behouden voor apps die "
+"kolven per kind registreren."
 
 #: core/models.py:695
 msgid "Amount stored"

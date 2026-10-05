@@ -160,7 +160,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def _add_pumping_entry(self):
         """
-        Add a Pumping entry, owned by the fake parent (not the child). This
+        Add a Pumping entry, owned by the fake parent. This
         assumes a weekly interval.
         :returns:
         """

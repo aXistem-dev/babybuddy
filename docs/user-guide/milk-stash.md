@@ -195,29 +195,38 @@ apps use to show and change them):
 
 ## Existing (older) pumping data
 
-Pumping entries created before parents existed are still linked to a child.
+Pumping entries created before parents existed are linked to a child only.
 They keep working, and a banner appears on the pumping list while any
-unassigned entries remain. Editing such an entry and choosing a parent moves
-it onto that parent. To move them all at once, run:
+entries without a parent remain. Editing such an entry and choosing a parent
+links it to that parent; it keeps its child. To link them all at once, run:
 
 ```shell
 python manage.py link_pumping_to_parents --parent <parent-slug>
 ```
 
-Add `--child <child-slug>` (repeatable) to move only specific children's
-entries, and `--dry-run` to see what would be moved without changing
-anything. The command also reports how many moved entries overlap another
+Add `--child <child-slug>` (repeatable) to link only specific children's
+entries, and `--dry-run` to see what would be linked without changing
+anything. The command also reports how many linked entries overlap another
 pumping entry of that parent (for example, one session that was logged once
 per child), so duplicates can be cleaned up.
 
 ## Client compatibility
 
-Older API clients that only know about child-based pumping keep working: a
-pumping entry created with a `child` but no `parent` resolves the parent
-automatically (as long as the child has exactly one linked parent who produces
-breast milk, or only one parent produces breast milk at all) and is
-stored against that parent, with `child` left empty. This means such a
-pumping entry no longer shows up in that client's per-child pumping views,
-since the stored entry now belongs to the parent, not the child. A client
-that supports parents directly can detect that support through the API root
-(see [API](../api.md)).
+Older API clients that only know about child-based pumping keep working, with
+or without parents set up:
+
+- A pumping entry created with a `child` but no `parent` gets the child's
+  parent filled in when it's clear who that is (the child has exactly one
+  linked parent who produces breast milk, or only one parent produces breast
+  milk at all). Otherwise it's stored on the child alone, as before.
+- The `child` is always kept, so the entry stays in that client's per-child
+  views.
+- Pumping logged on a parent who has exactly one linked child is also linked
+  to that child when it's saved, so those clients see it too. With several
+  children, it's linked to the parent only, unless it was added from a child's
+  page or a timer of that child.
+- Deleting a child deletes the pumping entries that only that child had, but
+  keeps a parent's entries; they just lose the link to the child.
+
+A client that supports parents directly can detect that support through the
+API root (see [API](../api.md)).
