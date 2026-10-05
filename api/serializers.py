@@ -230,6 +230,16 @@ class PumpingSerializer(
         return attrs
 
     def reconcile_stash_amount(self, attrs):
+        if (
+            not self.instance.amount
+            and self.instance.stash_amount is None
+            and attrs.get("amount")
+        ):
+            # The real amount replaces a placeholder (e.g. 0 from a button):
+            # the stash default applies as it would have on creation.
+            if stash.settings().pumping_to_stash_default:
+                attrs["stash_amount"] = attrs["amount"]
+            return attrs
         return self._follow_or_clamp_stash_amount(attrs)
 
 

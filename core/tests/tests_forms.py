@@ -1055,6 +1055,20 @@ class PumpingFormsTestCase(FormsTestCaseBase):
         )
         self.assertIsNone(models.Pumping.objects.get(notes="off").stash_amount)
 
+    def test_placeholder_amount_switch_starts_as_on_a_new_entry(self):
+        start = timezone.localtime() - timezone.timedelta(days=1, hours=3)
+        entry = models.Pumping.objects.create(
+            parent=self.robin,
+            amount=0,
+            start=start,
+            end=start + timezone.timedelta(minutes=15),
+        )
+        form = self.c.get("/pumping/{}/".format(entry.id)).context["form"]
+        self.assertTrue(form.initial["to_stash"])
+        self.edit(entry, amount="120")
+        entry.refresh_from_db()
+        self.assertEqual((entry.amount, entry.stash_amount), (120.0, 120.0))
+
     def test_child_link_preselects_parent_not_child(self):
         page = self.c.get("/pumping/add/?child={}".format(self.child.slug))
         form = page.context["form"]

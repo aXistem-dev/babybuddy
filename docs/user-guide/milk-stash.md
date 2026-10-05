@@ -42,7 +42,8 @@ The pumping form has a **Store in stash** switch. When it's on, the full
 pumped amount is added to the stash; an "Amount stored" field (under
 "Advanced") lets you store only part of a session. Whether the switch starts
 on or off is controlled by a site setting (see [Settings](#reports-and-settings)
-below).
+below). A session saved without its real amount yet (0 ml, for example from a
+button) gets the same starting switch when you edit it to fill in the amount.
 
 ## Breastfeeding and the parent
 
