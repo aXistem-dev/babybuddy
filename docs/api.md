@@ -341,6 +341,14 @@ bottle, parent fed or self fed. Filters: `stash_amount__isnull` finds feedings t
 draw from the stash; `parent` finds feedings (breastfeeding sessions) by
 parent.
 
+A request that leaves out `stash_amount` gets a default. On a `POST` that
+includes an `amount`, a breast milk bottle is taken from the stash when
+`bottle_from_stash` (see [`/api/stash`](#apistash)) is on. The same applies to
+the first `PATCH` that fills in the `amount` of a feeding that has neither an
+amount nor a stash amount (e.g. one created from a timer). After that, a changed `amount` keeps a fully stashed
+bottle in step and leaves the rest alone. Sending `stash_amount` (or `null`)
+always decides.
+
 ### `/api/stash-adjustments/`
 
 New endpoint for every stash movement that isn't pumping or a feeding:
