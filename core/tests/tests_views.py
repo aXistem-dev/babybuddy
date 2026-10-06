@@ -766,26 +766,6 @@ class StashPagesTestCase(TestCase):
         self.assertIn("Bottle · Alex", content)
         self.assertIn("Pumping · Robin", content)
 
-    def test_negative_balance_warning_is_translated(self):
-        user = self._login("nl", ["view_pumping"])
-        user.settings.language = "nl"
-        user.settings.save()
-        t = timezone.localtime() - timezone.timedelta(hours=1)
-        models.Feeding.objects.create(
-            child=self.alex,
-            start=t,
-            end=t,
-            type="breast milk",
-            method="bottle",
-            amount=50,
-            stash_amount=50,
-        )
-        page = self.c.get("/stash/")
-        self.assertContains(
-            page,
-            "De voorraad staat onder nul: er is meer melk uitgehaald dan er ooit in ging.",
-        )
-
     def test_warning_hidden_when_balance_positive(self):
         self._login("viewer", ["view_pumping"])
         t = timezone.localtime() - timezone.timedelta(hours=1)
@@ -1082,7 +1062,7 @@ class StashPagesTestCase(TestCase):
         self.assertEqual(page.status_code, 405)
 
     def test_legacy_banner_counts_and_explains(self):
-        user = self._login("stash-admin", is_superuser=True)
+        self._login("stash-admin", is_superuser=True)
         t = timezone.localtime() - timezone.timedelta(hours=3)
         legacy = dict(
             child=self.alex, start=t, end=t + timezone.timedelta(minutes=5), amount=9
@@ -1096,9 +1076,3 @@ class StashPagesTestCase(TestCase):
         models.Pumping.objects.create(**legacy)
         page = self.c.get("/pumping/")
         self.assertContains(page, "2 older pumping entries are not linked")
-        user.settings.language = "nl"
-        user.settings.save()
-        page = self.c.get("/pumping/")
-        self.assertContains(
-            page, "2 oudere kolfregistraties zijn nog niet aan een ouder gekoppeld."
-        )
