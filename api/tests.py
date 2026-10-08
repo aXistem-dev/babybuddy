@@ -314,6 +314,522 @@ class DiaperChangeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertEqual(response.data, entry)
 
 
+class EventAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
+    endpoint = reverse("api:event-list")
+    model = models.Event
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(
+            response.data["results"][0],
+            {
+                "id": 1,
+                "child": 1,
+                "type": "tooth-brushing",
+                "time": "2017-11-17T20:30:00-05:00",
+                "notes": "Soft brush.",
+                "tags": [],
+            },
+        )
+
+    def test_get_with_filters(self):
+        cases = (
+            ({"type": "nail-trim"}, [2]),
+            ({"type": "tooth-brushing"}, [1]),
+            ({"child": 1}, [1, 2]),
+            ({"date_min": "2017-11-17T00:00:00-05:00"}, [1]),
+            ({"date_max": "2017-11-17T00:00:00-05:00"}, [2]),
+            ({"date": "2017-11-16T09:00:00-05:00"}, [2]),
+        )
+        for params, ids in cases:
+            with self.subTest(params=params):
+                response = self.client.get(self.endpoint, params)
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual([e["id"] for e in response.data["results"]], ids)
+
+    def test_get_with_tags_filter(self):
+        models.Event.objects.get(pk=2).tags.add("hands")
+        response = self.client.get(self.endpoint, {"tags": "hands"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual([e["id"] for e in response.data["results"]], [2])
+
+    def test_post(self):
+        data = {
+            "child": 1,
+            "type": "nail-trim",
+            "time": "2017-11-18T10:00:00-05:00",
+            "notes": "Both hands.",
+            "tags": ["hands"],
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["type"], "nail-trim")
+        obj = models.Event.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.type.slug, "nail-trim")
+        self.assertEqual(obj.notes, data["notes"])
+        self.assertEqual(list(obj.tags.names()), ["hands"])
+
+    def test_post_child_and_type_only(self):
+        # Only a child and a type: no time means now.
+        before = timezone.now()
+        response = self.client.post(
+            self.endpoint, {"child": 1, "type": "tooth-brushing"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = models.Event.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.child_id, 1)
+        self.assertEqual(obj.type.slug, "tooth-brushing")
+        self.assertGreaterEqual(obj.time, before)
+        self.assertLessEqual(obj.time, timezone.now())
+
+    def test_post_unknown_type(self):
+        response = self.client.post(
+            self.endpoint, {"child": 1, "type": "swim"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("type", response.data)
+
+    def test_post_type_id_is_not_accepted(self):
+        response = self.client.post(
+            self.endpoint, {"child": 1, "type": 1}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("type", response.data)
+
+    def test_post_future_time(self):
+        time = timezone.localtime() + timezone.timedelta(days=1)
+        response = self.client.post(
+            self.endpoint,
+            {"child": 1, "type": "tooth-brushing", "time": time.isoformat()},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("time", response.data)
+
+    def test_patch(self):
+        endpoint = "{}{}/".format(self.endpoint, 1)
+        response = self.client.get(endpoint)
+        entry = response.data
+        entry["type"] = "nail-trim"
+        response = self.client.patch(endpoint, {"type": entry["type"]})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, entry)
+
+
+class EventTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
+    endpoint = reverse("api:eventtype-list")
+    model = models.EventType
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [dict(r) for r in response.data["results"]],
+            [
+                {"id": 2, "name": "Nail trim", "slug": "nail-trim", "emoji": "✂️"},
+                {
+                    "id": 1,
+                    "name": "Tooth brushing",
+                    "slug": "tooth-brushing",
+                    "emoji": "🪥",
+                },
+            ],
+        )
+
+    def test_get_by_slug(self):
+        response = self.client.get("{}nail-trim/".format(self.endpoint))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], 2)
+
+    def test_post(self):
+        response = self.client.post(self.endpoint, {"name": "Sunscreen"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["slug"], "sunscreen")
+        self.assertTrue(models.EventType.objects.filter(slug="sunscreen").exists())
+
+    def test_post_ignores_slug(self):
+        response = self.client.post(
+            self.endpoint, {"name": "Sunscreen", "slug": "other"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["slug"], "sunscreen")
+
+    def test_post_duplicate(self):
+        for name in ("Tooth brushing", "TOOTH BRUSHING"):
+            with self.subTest(name=name):
+                response = self.client.post(
+                    self.endpoint, {"name": name}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("name", response.data)
+
+    def test_get_by_id(self):
+        response = self.client.get(self.endpoint, {"id": 2})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [dict(r) for r in response.data["results"]],
+            [{"id": 2, "name": "Nail trim", "slug": "nail-trim", "emoji": "✂️"}],
+        )
+
+    def test_post_long_name(self):
+        response = self.client.post(self.endpoint, {"name": "x" * 101}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("name", response.data)
+        response = self.client.post(self.endpoint, {"name": "x" * 100}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["slug"], "x" * 100)
+
+    def test_patch(self):
+        endpoint = "{}nail-trim/".format(self.endpoint)
+        response = self.client.patch(endpoint, {"name": "Nail trim (hands)"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Nail trim (hands)")
+        self.assertEqual(response.data["slug"], "nail-trim")
+
+    def test_patch_keeps_the_slug_for_new_events(self):
+        response = self.client.patch(
+            "{}tooth-brushing/".format(self.endpoint),
+            {"name": "Brushing teeth"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["slug"], "tooth-brushing")
+
+        response = self.client.get("{}tooth-brushing/".format(self.endpoint))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "Brushing teeth")
+
+        response = self.client.post(
+            reverse("api:event-list"),
+            {"child": 1, "type": "tooth-brushing"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["type"], "tooth-brushing")
+        event = models.Event.objects.get(pk=response.data["id"])
+        self.assertEqual(event.type.name, "Brushing teeth")
+
+    def test_patch_name_with_a_taken_slug(self):
+        # The slug does not change, so a name that would slugify to another
+        # type's slug is fine on a rename.
+        response = self.client.patch(
+            "{}nail-trim/".format(self.endpoint),
+            {"name": "tooth brushing!"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["slug"], "nail-trim")
+
+    def test_delete(self):
+        endpoint = "{}{}/".format(self.endpoint, "nail-trim")
+        models.Event.objects.filter(type__slug="nail-trim").delete()
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_in_use(self):
+        endpoint = "{}{}/".format(self.endpoint, "tooth-brushing")
+        count = models.Event.objects.filter(type__slug="tooth-brushing").count()
+        self.assertGreater(count, 0)
+        for params in ("", "?delete_events=false", "?delete_events=0"):
+            with self.subTest(params=params):
+                response = self.client.delete(endpoint + params)
+                self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+                self.assertIn("detail", response.data)
+                self.assertEqual(response.data["event_count"], count)
+        self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+        self.assertEqual(
+            models.Event.objects.filter(type__slug="tooth-brushing").count(), count
+        )
+
+    def test_delete_with_events(self):
+        endpoint = "{}{}/".format(self.endpoint, "tooth-brushing")
+        other_events = models.Event.objects.exclude(type__slug="tooth-brushing")
+        other_ids = set(other_events.values_list("id", flat=True))
+        self.assertTrue(other_ids)
+        response = self.client.delete(endpoint + "?delete_events=true")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(
+            models.EventType.objects.filter(slug="tooth-brushing").exists()
+        )
+        self.assertFalse(models.Event.objects.filter(type__slug="tooth-brushing"))
+        self.assertEqual(
+            set(models.Event.objects.values_list("id", flat=True)), other_ids
+        )
+
+    def test_delete_with_events_for_an_unused_type(self):
+        models.Event.objects.filter(type__slug="nail-trim").delete()
+        response = self.client.delete(
+            "{}nail-trim/?delete_events=1".format(self.endpoint)
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(models.EventType.objects.filter(slug="nail-trim").exists())
+
+    def test_delete_events_invalid_value(self):
+        response = self.client.delete(
+            "{}tooth-brushing/?delete_events=maybe".format(self.endpoint)
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("delete_events", response.data)
+        self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+
+    def test_delete_with_events_needs_permission_to_delete_events(self):
+        user = get_user_model().objects.create_user(
+            username="types", password="types", is_active=True
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core",
+                codename__in=["view_eventtype", "delete_eventtype"],
+            )
+        )
+        self.client.force_authenticate(user)
+        count = models.Event.objects.filter(type__slug="tooth-brushing").count()
+        response = self.client.delete(
+            "{}tooth-brushing/?delete_events=true".format(self.endpoint)
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("detail", response.data)
+        self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+        self.assertEqual(
+            models.Event.objects.filter(type__slug="tooth-brushing").count(), count
+        )
+
+    def test_delete_with_events_is_one_transaction(self):
+        count = models.Event.objects.filter(type__slug="tooth-brushing").count()
+        with patch.object(
+            models.EventType, "delete", side_effect=RuntimeError("delete failed")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.delete(
+                    "{}tooth-brushing/?delete_events=true".format(self.endpoint)
+                )
+        # The events were deleted before the type failed, and came back with
+        # the rollback.
+        self.assertTrue(models.EventType.objects.filter(slug="tooth-brushing").exists())
+        self.assertEqual(
+            models.Event.objects.filter(type__slug="tooth-brushing").count(), count
+        )
+
+    def test_delete_with_events_is_announced_to_webhooks(self):
+        endpoint = WebhookEndpoint.objects.create(
+            name="Listener", url="http://listener.test/hook", secret="secret"
+        )
+        event_type = models.EventType.objects.get(slug="tooth-brushing")
+        event_ids = sorted(
+            str(pk) for pk in event_type.events.values_list("id", flat=True)
+        )
+        self.assertTrue(event_ids)
+        response = self.client.delete(
+            "{}tooth-brushing/?delete_events=true".format(self.endpoint)
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        announced = list(
+            endpoint.events.order_by("id").values_list("type", "object_id")
+        )
+        self.assertEqual(
+            sorted(object_id for kind, object_id in announced[:-1]), event_ids
+        )
+        self.assertTrue(all(kind == "event.deleted" for kind, _ in announced[:-1]))
+        self.assertEqual(announced[-1], ("eventtype.deleted", str(event_type.pk)))
+
+    def test_post_with_emoji(self):
+        response = self.client.post(
+            self.endpoint, {"name": "Sunscreen", "emoji": "\U0001f9f4"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["emoji"], "\U0001f9f4")
+        self.assertEqual(
+            models.EventType.objects.get(slug="sunscreen").emoji, "\U0001f9f4"
+        )
+        response = self.client.get("{}sunscreen/".format(self.endpoint))
+        self.assertEqual(response.data["emoji"], "\U0001f9f4")
+
+    def test_post_without_emoji(self):
+        response = self.client.post(self.endpoint, {"name": "Sunscreen"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["emoji"], "")
+
+    def test_post_invalid_emoji(self):
+        for emoji in ("x", "\U0001f9f4\U0001faa5", "\U0001f642" * 17):
+            with self.subTest(emoji=emoji):
+                response = self.client.post(
+                    self.endpoint, {"name": "Sunscreen", "emoji": emoji}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("emoji", response.data)
+        self.assertFalse(models.EventType.objects.filter(slug="sunscreen").exists())
+
+    def test_post_emoji_whitespace_is_stripped(self):
+        response = self.client.post(
+            self.endpoint, {"name": "Sunscreen", "emoji": " \U0001f9f4 "}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["emoji"], "\U0001f9f4")
+        response = self.client.patch(
+            "{}sunscreen/".format(self.endpoint), {"emoji": "   "}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["emoji"], "")
+        self.assertEqual(models.EventType.objects.get(slug="sunscreen").emoji, "")
+
+    def test_patch_emoji(self):
+        endpoint = "{}tooth-brushing/".format(self.endpoint)
+        response = self.client.patch(endpoint, {"emoji": "\U0001f601"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["emoji"], "\U0001f601")
+        response = self.client.patch(endpoint, {"emoji": "two words"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("emoji", response.data)
+        response = self.client.patch(endpoint, {"emoji": ""}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(models.EventType.objects.get(slug="tooth-brushing").emoji, "")
+
+
+class EventTypePermissionsAPITestCase(APITestCase):
+    """
+    The event type list tells clients which management actions the user may
+    take.
+    """
+
+    fixtures = ["tests.json"]
+    endpoint = reverse("api:eventtype-list")
+
+    def create_user(self, username, permissions=(), groups=()):
+        user = get_user_model().objects.create_user(
+            username=username, password=username, is_active=True
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core", codename__in=permissions
+            )
+        )
+        user.groups.add(*Group.objects.filter(name__in=groups))
+        self.client.login(username=username, password=username)
+        return user
+
+    def get_permissions(self, params=None):
+        response = self.client.get(self.endpoint, params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            list(response.data.keys()),
+            ["count", "next", "previous", "permissions", "results"],
+        )
+        return response.data["permissions"]
+
+    def test_admin(self):
+        self.client.login(username="admin", password="admin")
+        self.assertEqual(
+            self.get_permissions(),
+            {"add": True, "change": True, "delete": True, "delete_with_events": True},
+        )
+
+    def test_caregiver(self):
+        self.create_user(
+            "caregiver", groups=[settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"]]
+        )
+        self.assertEqual(
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": False,
+                "delete": False,
+                "delete_with_events": False,
+            },
+        )
+
+    def test_change_without_delete(self):
+        self.create_user("editor", permissions=["view_eventtype", "change_eventtype"])
+        self.assertEqual(
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": True,
+                "delete": False,
+                "delete_with_events": False,
+            },
+        )
+
+    def test_delete_types_without_deleting_events(self):
+        self.create_user("types", permissions=["view_eventtype", "delete_eventtype"])
+        self.assertEqual(
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": False,
+                "delete": True,
+                "delete_with_events": False,
+            },
+        )
+
+    def test_delete_events_without_deleting_types(self):
+        self.create_user("events", permissions=["view_eventtype", "delete_event"])
+        self.assertFalse(self.get_permissions()["delete_with_events"])
+
+    def test_every_page(self):
+        self.client.login(username="admin", password="admin")
+        expected = {
+            "add": True,
+            "change": True,
+            "delete": True,
+            "delete_with_events": True,
+        }
+        for offset in (0, 1, 2):
+            with self.subTest(offset=offset):
+                self.assertEqual(
+                    self.get_permissions({"limit": 1, "offset": offset}), expected
+                )
+        response = self.client.get(self.endpoint, {"limit": 1, "offset": 1})
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIsNotNone(response.data["previous"])
+
+    def test_without_pagination(self):
+        self.client.login(username="admin", password="admin")
+        with patch("api.pagination.EventTypePagination.default_limit", new=None):
+            permissions = self.get_permissions()
+            response = self.client.get(self.endpoint)
+        self.assertEqual(
+            permissions,
+            {"add": True, "change": True, "delete": True, "delete_with_events": True},
+        )
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["next"], None)
+        self.assertEqual(len(response.data["results"]), 2)
+
+    def test_detail_is_unchanged(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get("{}nail-trim/".format(self.endpoint))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("permissions", response.data)
+        self.assertEqual(set(response.data.keys()), {"id", "name", "slug", "emoji"})
+
+    def test_schema(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get(reverse("api:openapi-schema"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        schema = response.data["paths"]["/api/event-types/"]["get"]["responses"]
+        schema = schema["200"]["content"]["application/json"]["schema"]
+        self.assertIn("permissions", schema["required"])
+        self.assertEqual(
+            set(schema["properties"]["permissions"]["properties"]),
+            {"add", "change", "delete", "delete_with_events"},
+        )
+        operation = response.data["paths"]["/api/event-types/{slug}/"]["delete"]
+        self.assertIn("409", operation["responses"])
+        self.assertIn(
+            "delete_events",
+            [parameter["name"] for parameter in operation["parameters"]],
+        )
+        # Other lists keep the standard pagination.
+        schema = response.data["paths"]["/api/events/"]["get"]["responses"]
+        schema = schema["200"]["content"]["application/json"]["schema"]
+        self.assertNotIn("permissions", schema["properties"])
+
+
 class FeedingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
     endpoint = reverse("api:feeding-list")
     model = models.Feeding
@@ -1115,6 +1631,20 @@ class CaregiverAPITestCase(APITestCase):
             response = self.client.post(endpoint, data, format="json")
             self.assertEqual(response.status_code, status.HTTP_201_CREATED, endpoint)
 
+    def test_caregiver_can_add_event(self):
+        response = self.client.get(reverse("api:eventtype-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.post(
+            reverse("api:event-list"),
+            {"child": 1, "type": "tooth-brushing"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.post(
+            reverse("api:eventtype-list"), {"name": "Swim"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_caregiver_can_add_weight(self):
         response = self.client.post(
             reverse("api:weight-list"),
@@ -1395,6 +1925,7 @@ class CaregiverWebTestCase(APITestCase):
             "/changes/add/",
             "/sleep/add/",
             "/timers/add/",
+            "/events/add/",
             "/dashboard/",
             # Personal preferences stay available to every logged-in user.
             "/user/settings/",
@@ -1713,3 +2244,14 @@ class TestSchemaAPITestCase(APITestCase):
         names = [parameter["name"] for parameter in parameters]
         for name in ("child", "start", "start_min", "end", "end_max", "tags"):
             self.assertIn(name, names)
+
+        parameters = response.data["paths"]["/api/events/"]["get"]["parameters"]
+        names = [parameter["name"] for parameter in parameters]
+        for name in ("child", "type", "date", "date_min", "date_max", "tags"):
+            self.assertIn(name, names)
+
+    def test_api_root_lists_events(self):
+        response = self.client.get("/api/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("events", response.data)
+        self.assertIn("event-types", response.data)

@@ -54,6 +54,76 @@ class ImportTestCase(TestCase):
     def test_diaperchange(self):
         self.import_data(models.DiaperChange, 75)
 
+    def test_event(self):
+        self.import_data(models.EventType, 3)
+        self.import_data(models.Event, 4)
+        self.assertEqual(
+            models.Event.objects.filter(type__slug="tooth-brushing").count(), 2
+        )
+        self.assertEqual(models.Event.objects.get(pk=2).type.name, "Nail trim")
+
+    def test_event_unknown_type(self):
+        dataset = self.get_dataset("event")
+        resource = admin.EventImportExportResource()
+        result = resource.import_data(dataset, dry_run=True)
+        self.assertTrue(result.has_errors() or result.has_validation_errors())
+
+    def test_eventtype(self):
+        self.import_data(models.EventType, 3)
+        # A slug in the file is kept, even when it no longer matches the name;
+        # a missing one is generated from the name.
+        self.assertEqual(
+            list(models.EventType.objects.values_list("name", "slug", "emoji")),
+            [
+                ("Brushing teeth", "tooth-brushing", "\U0001faa5"),
+                ("Nail trim", "nail-trim", "\u2702\ufe0f"),
+                ("Sunscreen", "sunscreen", ""),
+            ],
+        )
+
+    def test_eventtype_invalid_emoji(self):
+        dataset = tablib.Dataset(
+            ["1", "Nail trim", "", "\u2702\ufe0f"],
+            ["2", "Sunscreen", "", "abc"],
+            ["3", "Tooth brushing", "", "\U0001f9f4\U0001f9f4"],
+            headers=["id", "name", "slug", "emoji"],
+        )
+        result = admin.EventTypeImportExportResource().import_data(
+            dataset, dry_run=False
+        )
+        self.assertTrue(result.has_validation_errors())
+        self.assertEqual(
+            [row.number for row in result.invalid_rows],
+            [2, 3],
+        )
+        for row in result.invalid_rows:
+            self.assertEqual(row.error_dict, {"emoji": ["Enter a single emoji."]})
+        # The rows with an invalid emoji are not saved. (The admin's import
+        # stops at the preview when a row is invalid, so it saves nothing.)
+        self.assertEqual(
+            list(models.EventType.objects.values_list("name", flat=True)),
+            ["Nail trim"],
+        )
+
+    def test_eventtype_export_includes_the_slug_and_emoji(self):
+        event_type = models.EventType.objects.create(
+            name="Tooth brushing", emoji="\U0001faa5"
+        )
+        event_type.name = "Brushing teeth"
+        event_type.save()
+        dataset = admin.EventTypeImportExportResource().export()
+        self.assertEqual(
+            dataset.dict,
+            [
+                {
+                    "id": str(event_type.pk),
+                    "name": "Brushing teeth",
+                    "slug": "tooth-brushing",
+                    "emoji": "\U0001faa5",
+                }
+            ],
+        )
+
     def test_feeding(self):
         self.import_data(models.Feeding, 40)
 

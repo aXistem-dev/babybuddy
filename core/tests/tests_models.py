@@ -3,8 +3,10 @@ import datetime
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.test import TestCase
+from django.db.models import ProtectedError
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from core import models
@@ -150,6 +152,232 @@ class DiaperChangeTestCase(TestCase):
         self.assertEqual(
             models.DiaperChange.objects.filter(child=child).count(), len(colors)
         )
+
+
+class EventTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+        self.child = models.Child.objects.create(
+            first_name="First", last_name="Last", birth_date=timezone.localdate()
+        )
+        self.event_type = models.EventType.objects.create(name="Tooth brushing")
+
+    def test_event_create(self):
+        event = models.Event.objects.create(
+            child=self.child,
+            type=self.event_type,
+            time=timezone.localtime() - timezone.timedelta(hours=1),
+            notes="Soft brush.",
+        )
+        self.assertEqual(event, models.Event.objects.first())
+        self.assertEqual(str(event), "Event")
+        self.assertEqual(event.child, self.child)
+        self.assertEqual(event.type, self.event_type)
+        self.assertEqual(list(self.child.events.all()), [event])
+        self.assertEqual(list(self.event_type.events.all()), [event])
+
+    def test_event_time_defaults_to_now(self):
+        before = timezone.now()
+        event = models.Event.objects.create(child=self.child, type=self.event_type)
+        self.assertGreaterEqual(event.time, before)
+        self.assertLessEqual(event.time, timezone.now())
+
+    def test_event_time_can_not_be_in_the_future(self):
+        event = models.Event(
+            child=self.child,
+            type=self.event_type,
+            time=timezone.localtime() + timezone.timedelta(hours=1),
+        )
+        with self.assertRaises(ValidationError) as context:
+            event.clean()
+        self.assertIn("time", context.exception.message_dict)
+
+    def test_event_type_in_use_is_protected(self):
+        models.Event.objects.create(child=self.child, type=self.event_type)
+        with self.assertRaises(ProtectedError):
+            self.event_type.delete()
+        self.assertTrue(models.EventType.objects.filter(pk=self.event_type.pk).exists())
+
+    def test_events_are_deleted_with_their_child(self):
+        models.Event.objects.create(child=self.child, type=self.event_type)
+        self.child.delete()
+        self.assertEqual(models.Event.objects.count(), 0)
+        self.assertTrue(models.EventType.objects.filter(pk=self.event_type.pk).exists())
+
+
+class EventTypeTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+
+    def test_event_type_create(self):
+        event_type = models.EventType.objects.create(name="Sunscreen")
+        self.assertEqual(event_type, models.EventType.objects.first())
+        self.assertEqual(str(event_type), "Sunscreen")
+        self.assertEqual(event_type.slug, "sunscreen")
+
+    def test_event_type_slug_is_kept_on_rename(self):
+        event_type = models.EventType.objects.create(name="Nail trim")
+        event_type.name = "Nail trim (hands)"
+        event_type.full_clean()
+        event_type.save()
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.name, "Nail trim (hands)")
+        self.assertEqual(event_type.slug, "nail-trim")
+
+    def test_event_type_slug_is_kept_on_rename_to_a_taken_slug(self):
+        models.EventType.objects.create(name="Tooth brushing")
+        event_type = models.EventType.objects.create(name="Shower")
+        # "Tooth brushing!" would slugify to the slug of "Tooth brushing", but
+        # the slug does not change on a rename, so there is no conflict.
+        event_type.name = "Tooth brushing!"
+        event_type.full_clean()
+        event_type.save()
+        self.assertEqual(event_type.slug, "shower")
+
+    def test_event_type_name_max_length(self):
+        event_type = models.EventType(name="x" * 101)
+        with self.assertRaises(ValidationError) as context:
+            event_type.full_clean()
+        self.assertIn("name", context.exception.message_dict)
+
+    def test_event_type_slug_fits_its_field(self):
+        # NFKC normalization can make a slug longer than the name.
+        event_type = models.EventType(name="\ufb00" * 100)
+        event_type.full_clean()
+        event_type.save()
+        self.assertEqual(event_type.slug, "ff" * 50)
+
+    def test_event_type_ordering(self):
+        models.EventType.objects.create(name="Tooth brushing")
+        models.EventType.objects.create(name="nail trim")
+        models.EventType.objects.create(name="Sunscreen")
+        self.assertEqual(
+            list(models.EventType.objects.values_list("name", flat=True)),
+            ["nail trim", "Sunscreen", "Tooth brushing"],
+        )
+
+    def test_event_type_clean_rejects_a_conflicting_slug(self):
+        models.EventType.objects.create(name="Tooth brushing")
+        with self.assertRaises(ValidationError) as context:
+            models.EventType(name="tooth brushing!").clean()
+        self.assertIn("name", context.exception.message_dict)
+
+    def test_event_type_clean_rejects_an_empty_slug(self):
+        with self.assertRaises(ValidationError) as context:
+            models.EventType(name="!!!").clean()
+        self.assertIn("name", context.exception.message_dict)
+
+    def test_event_type_clean_accepts_its_own_slug(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        event_type.name = "TOOTH BRUSHING"
+        try:
+            event_type.full_clean()
+        except ValidationError as error:
+            self.fail("clean() rejected an unchanged slug: {}".format(error))
+        event_type.save()
+        self.assertEqual(event_type.slug, "tooth-brushing")
+
+    def test_event_type_emoji(self):
+        event_type = models.EventType.objects.create(name="Nail trim")
+        self.assertEqual(event_type.emoji, "")
+        self.assertEqual(event_type.display_name, "Nail trim")
+        event_type.emoji = "\u2702\ufe0f"
+        event_type.full_clean()
+        event_type.save()
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.emoji, "\u2702\ufe0f")
+        self.assertEqual(event_type.display_name, "\u2702\ufe0f Nail trim")
+        # The name alone is still what a type is shown as elsewhere.
+        self.assertEqual(str(event_type), "Nail trim")
+
+    def test_event_type_invalid_emoji(self):
+        for emoji in ("nail", "\u2702\ufe0f\U0001faa5", "\U0001f642" * 17):
+            with self.subTest(emoji=emoji):
+                event_type = models.EventType(name="Nail trim", emoji=emoji)
+                with self.assertRaises(ValidationError) as context:
+                    event_type.full_clean()
+                self.assertIn("emoji", context.exception.message_dict)
+
+
+class ValidateEmojiTestCase(SimpleTestCase):
+    def assertValid(self, value):
+        try:
+            models.validate_emoji(value)
+        except ValidationError as error:
+            self.fail("{!r} was rejected: {}".format(value, error))
+
+    def assertInvalid(self, value):
+        with self.assertRaises(ValidationError) as context:
+            models.validate_emoji(value)
+        self.assertEqual(context.exception.messages, ["Enter a single emoji."])
+
+    def test_accepted(self):
+        cases = {
+            "empty": "",
+            "plain": "\U0001f642",
+            "plain (newer)": "\U0001faa5",
+            "variation selector": "\u2702\ufe0f",
+            "text style": "\u2702",
+            "skin tone": "\U0001f44d\U0001f3fd",
+            "family": "\U0001f468\u200d\U0001f469\u200d\U0001f467\u200d\U0001f466",
+            "profession with skin tone": "\U0001f9d1\U0001f3fd\u200d\u2695\ufe0f",
+            "flag": "\U0001f1ea\U0001f1fa",
+            "keycap": "1\ufe0f\u20e3",
+            "keycap hash": "#\ufe0f\u20e3",
+            "subdivision flag": (
+                "\U0001f3f4\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074"
+                "\U000e007f"
+            ),
+            "copyright": "\u00a9\ufe0f",
+            "wavy dash": "\u3030",
+            "left right arrow": "\u2194\ufe0f",
+            "south west arrow": "\u2199\ufe0f",
+            "arrow curving left": "\u21a9\ufe0f",
+            "arrow curving right": "\u21aa",
+            "circled M": "\u24c2\ufe0f",
+            "small black square": "\u25aa\ufe0f",
+            "small white square": "\u25ab\ufe0f",
+            "play button": "\u25b6\ufe0f",
+            "reverse button": "\u25c0\ufe0f",
+            "white medium square": "\u25fb\ufe0f",
+            "black medium small square": "\u25fe",
+            "arrow curving up": "\u2934\ufe0f",
+            "arrow curving down": "\u2935\ufe0f",
+            "16 code points": "\u200d".join(["\U0001f468"] * 8) + "\ufe0f",
+        }
+        for name, value in cases.items():
+            with self.subTest(name):
+                self.assertValid(value)
+
+    def test_refused(self):
+        cases = {
+            "two emoji": "\U0001f642\U0001f642",
+            "two emoji with selectors": "\u2702\ufe0f\U0001faa5",
+            "two flags": "\U0001f1ea\U0001f1fa\U0001f1ef\U0001f1f5",
+            "letter": "a",
+            "arrow without emoji form": "\u2190",
+            "geometric shape without emoji form": "\u25a0",
+            "circled letter without emoji form": "\u24b6",
+            "text": "nail trim",
+            "digit": "1",
+            "keycap without selector": "1\u20e3",
+            "space": " ",
+            "emoji and space": "\U0001f642 ",
+            "space and emoji": " \U0001f642",
+            "newline": "\n",
+            "one regional indicator": "\U0001f1ea",
+            "lone skin tone": "\U0001f3fd",
+            "two skin tones": "\U0001f44d\U0001f3fd\U0001f3fd",
+            "two selectors": "\u2702\ufe0f\ufe0f",
+            "lone joiner": "\u200d",
+            "trailing joiner": "\U0001f642\u200d",
+            "joined text": "\U0001f642\u200da",
+            "unfinished tag sequence": "\U0001f3f4\U000e0067\U000e0062",
+            "over 16 code points": "\u200d".join(["\U0001f468"] * 9),
+        }
+        for name, value in cases.items():
+            with self.subTest(name):
+                self.assertInvalid(value)
 
 
 class FeedingTestCase(TestCase):

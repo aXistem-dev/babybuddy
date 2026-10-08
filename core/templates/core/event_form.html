@@ -1,0 +1,37 @@
+{% extends "babybuddy/page.html" %}
+{% load i18n %}
+{% block title %}
+    {% if request.resolver_match.url_name == "event-update" %}
+        {% trans "Update an Event" %}
+    {% else %}
+        {% trans "Add an Event" %}
+    {% endif %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'core:event-list' %}">{% trans "Events" %}</a>
+    </li>
+    {% if object %}
+        <li class="breadcrumb-item active" aria-current="page">{% trans "Update" %}</li>
+    {% else %}
+        <li class="breadcrumb-item active" aria-current="page">{% trans "Add" %}</li>
+    {% endif %}
+{% endblock %}
+{% block content %}
+    {% if object %}
+        <h1>
+            {% trans "Update" %} <span class="text-info">{{ object }}</span>
+        </h1>
+    {% else %}
+        <h1>{% trans "Add an Event" %}</h1>
+    {% endif %}
+    {% if not form.fields.type.queryset.exists %}
+        <div class="alert alert-info" role="alert">
+            {% trans "There are no event types yet." %}
+            {% if perms.core.add_eventtype %}
+                <a href="{% url 'core:eventtype-add' %}" class="alert-link">{% trans "Add an event type" %}</a>
+            {% endif %}
+        </div>
+    {% endif %}
+    {% include "babybuddy/form.html" %}
+{% endblock %}

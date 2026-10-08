@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from django.contrib import admin
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
-from import_export import fields, resources
+from import_export import fields, resources, widgets
 from import_export.admin import ImportExportMixin, ExportActionMixin
 
 from core import models
@@ -95,6 +96,56 @@ class DiaperChangeAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
         "child__last_name",
     )
     resource_class = DiaperChangeImportExportResource
+
+
+class EventImportExportResource(ImportExportResourceBase):
+    type = fields.Field(
+        attribute="type",
+        column_name="type",
+        widget=widgets.ForeignKeyWidget(models.EventType, field="slug"),
+    )
+
+    class Meta:
+        model = models.Event
+
+
+@admin.register(models.Event)
+class EventAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
+    list_display = ("time", "child", "type")
+    list_filter = ("child", "type", "tags")
+    search_fields = (
+        "child__first_name",
+        "child__last_name",
+        "type__name",
+    )
+    resource_class = EventImportExportResource
+
+
+class EventTypeImportExportResource(resources.ModelResource):
+    id = fields.Field(attribute="id")
+
+    class Meta:
+        model = models.EventType
+
+    def validate_instance(
+        self, instance, import_validation_errors=None, validate_unique=True
+    ):
+        # The model is not cleaned as a whole on import, because the slug of a
+        # row without one is only generated when the type is saved. The emoji
+        # is still checked, like on the form and in the API.
+        errors = dict(import_validation_errors or {})
+        try:
+            models.validate_emoji(instance.emoji)
+        except ValidationError as error:
+            errors["emoji"] = error
+        super().validate_instance(instance, errors, validate_unique)
+
+
+@admin.register(models.EventType)
+class EventTypeAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
+    list_display = ("name", "emoji", "slug")
+    search_fields = ("name", "slug")
+    resource_class = EventTypeImportExportResource
 
 
 class FeedingImportExportResource(ImportExportResourceBase):

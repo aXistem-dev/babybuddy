@@ -13,6 +13,37 @@ Diaper Change. If necessary, modify the child or time for the change. Select
 whether the diaper is wet, solid, or both, and if add any details such as color,
 amount, etc. When complete, select Submit.
 
+### Event
+
+Events are for everything else that happens at a moment and is worth keeping
+track of, such as a nail trim, tooth brushing or putting on sunscreen. Each
+event has a type, and the list of types is up to you.
+
+To set up the types, select Activities and then Events from the top navigation
+bar, and select Event Types. Select Add Event Type and enter a name, e.g. "Nail
+trim" or "Tooth brushing". A type can also have an emoji, e.g. ✂️ or 🪥, which
+is shown before its name wherever its events appear: in the event list, on the
+event form, in the timeline and on the child dashboard. The emoji is optional
+and must be a single emoji; use your device's emoji keyboard to enter it.
+Renaming a type keeps its slug (the short name in its address, e.g.
+`nail-trim`), so existing links and integrations aren't affected. Deleting a
+type that is in use by events deletes those events too: the delete page shows
+how many there are and asks you to confirm. This also needs permission to delete
+events; without it, a type that is in use can't be deleted.
+
+To add an event, select the plus sign in the top navigation bar and select
+Event. If necessary, modify the child or the time, and select the type of the
+event. Add any notes or tags and select Submit.
+
+The Last Events card on the child dashboard lists the child's five most recent
+events of any type, newest first, with how long ago each one was; its title
+shows how long ago the newest one was. The same type can appear more than once.
+If you can edit events, select one to edit it. The card follows the dashboard
+setting that hides older data: when the child only has older events, it shows
+"No recent events", or it is hidden when the "Hide Empty Dashboard Cards"
+setting is on. The card is not shown for a child without any events. The Events
+per Day report shows how often each type was recorded.
+
 ### Feeding
 
 <video style="max-width: 320px;" autoplay controls loop muted playsinline>

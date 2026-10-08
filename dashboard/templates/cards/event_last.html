@@ -1,0 +1,35 @@
+{% extends "cards/base.html" %}
+{% load duration i18n %}
+{% block header %}
+    <a href="{% url "core:event-list" %}">{% trans "Last Events" %}</a>
+{% endblock %}
+{% block title %}
+    {% if events %}
+        <div>
+            {% blocktrans trimmed with time_ago=events.0.time|deltasince|duration_string:'m' %}
+                {{ time_ago }} ago
+            {% endblocktrans %}
+        </div>
+        <small>{{ events.0.time|time }}</small>
+    {% else %}
+        {% trans "No recent events" %}
+    {% endif %}
+{% endblock %}
+{% block content %}
+    {% for event in events %}
+        <div class="d-flex justify-content-between py-1 border-bottom">
+            <span>
+                {% if can_change %}
+                    <a href="{% url "core:event-update" event.id %}">{{ event.type.display_name }}</a>
+                {% else %}
+                    {{ event.type.display_name }}
+                {% endif %}
+            </span>
+            <span>
+                {% blocktrans trimmed with time_ago=event.time|timesince %}
+                    {{ time_ago }} ago
+                {% endblocktrans %}
+            </span>
+        </div>
+    {% endfor %}
+{% endblock %}

@@ -3,6 +3,7 @@ from .diaperchange_amounts import diaperchange_amounts  # NOQA
 from .diaperchange_lifetimes import diaperchange_lifetimes  # NOQA
 from .diaperchange_types import diaperchange_types  # NOQA
 from .diaperchange_intervals import diaperchange_intervals  # NOQA
+from .event_types import event_types  # NOQA
 from .feeding_amounts import feeding_amounts  # NOQA
 from .feeding_duration import feeding_duration  # NOQA
 from .feeding_intervals import feeding_intervals  # NOQA

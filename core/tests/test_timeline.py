@@ -195,3 +195,38 @@ class TimelineTestCase(TestCase):
         feeding.delete()
         diaper.delete()
         sleep.delete()
+
+    def test_events_appear_with_type_name_and_edit_link(self):
+        day = timezone.make_aware(datetime.datetime(2023, 1, 1))
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        event = models.Event.objects.create(
+            child=self.child,
+            type=event_type,
+            time=day.replace(hour=19, minute=30),
+            notes="Soft brush.",
+        )
+
+        events = get_objects(date=day, child=self.child)
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["model_name"], "event")
+        self.assertEqual(events[0]["event"], "Tooth brushing for Test.")
+        self.assertEqual(events[0]["details"], ["Soft brush."])
+        self.assertEqual(events[0]["edit_link"], "/events/{}/".format(event.id))
+        self.assertEqual(events[0]["time"], event.time)
+        self.assertEqual(
+            get_objects(date=day + datetime.timedelta(days=1), child=self.child), []
+        )
+
+    def test_events_show_the_type_emoji(self):
+        day = timezone.make_aware(datetime.datetime(2023, 1, 1))
+        event_type = models.EventType.objects.create(
+            name="Nail trim", emoji="\u2702\ufe0f"
+        )
+        models.Event.objects.create(
+            child=self.child, type=event_type, time=day.replace(hour=10)
+        )
+
+        events = get_objects(date=day, child=self.child)
+
+        self.assertEqual(events[0]["event"], "\u2702\ufe0f Nail trim for Test.")

@@ -27,6 +27,12 @@ class DiaperChangeFilter(TagFilter):
         fields = ["child", "wet", "solid", "color"]
 
 
+class EventFilter(TagFilter):
+    class Meta:
+        model = models.Event
+        fields = ["child", "type"]
+
+
 class FeedingFilter(TagFilter):
     class Meta:
         model = models.Feeding

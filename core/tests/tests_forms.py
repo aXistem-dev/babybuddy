@@ -2,8 +2,10 @@
 import datetime
 import io
 import tempfile
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import TestCase, override_settings
@@ -14,6 +16,7 @@ from faker import Faker
 from PIL import Image
 
 from core import models
+from core.forms import EventTypeDeleteForm
 
 
 class FormsTestCaseBase(TestCase):
@@ -353,6 +356,367 @@ class DiaperChangeFormsTestCase(FormsTestCaseBase):
         page = self.c.post("/changes/{}/delete/".format(self.change.id), follow=True)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Diaper Change entry deleted")
+
+
+class EventFormsTestCase(FormsTestCaseBase):
+    @classmethod
+    def setUpClass(cls):
+        super(EventFormsTestCase, cls).setUpClass()
+        cls.tooth_brushing = models.EventType.objects.create(name="Tooth brushing")
+        cls.nail_trim = models.EventType.objects.create(
+            name="Nail trim", emoji="\u2702\ufe0f"
+        )
+        cls.event = models.Event.objects.create(
+            child=cls.child,
+            type=cls.tooth_brushing,
+            time=timezone.localtime() - timezone.timedelta(hours=3),
+        )
+
+    def test_add(self):
+        params = {
+            "child": self.child.id,
+            "type": self.nail_trim.id,
+            "time": self.localtime_string(),
+        }
+        page = self.c.post("/events/add/", params, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event entry for {} added".format(str(self.child)))
+        self.assertTrue(
+            models.Event.objects.filter(child=self.child, type=self.nail_trim).exists()
+        )
+
+    def test_add_requires_a_type(self):
+        params = {"child": self.child.id, "time": self.localtime_string()}
+        page = self.c.post("/events/add/", params)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("type", page.context["form"].errors)
+
+    def test_add_rejects_a_future_time(self):
+        params = {
+            "child": self.child.id,
+            "type": self.tooth_brushing.id,
+            "time": self.localtime_string(
+                timezone.localtime() + timezone.timedelta(days=1)
+            ),
+        }
+        page = self.c.post("/events/add/", params)
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("time", page.context["form"].errors)
+
+    def test_type_pills(self):
+        page = self.c.get("/events/add/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "pill-container")
+        # The emoji comes before the name, and a type without one shows only
+        # its name.
+        self.assertContains(page, "\u2702\ufe0f Nail trim")
+        self.assertContains(page, ">Tooth brushing<")
+
+    def test_list_shows_the_emoji(self):
+        models.Event.objects.create(child=self.child, type=self.nail_trim)
+        page = self.c.get("/events/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "<td>\u2702\ufe0f Nail trim</td>", html=True)
+        self.assertContains(page, "<td>Tooth brushing</td>", html=True)
+
+    def test_type_from_parameter(self):
+        page = self.c.get("/events/add/?type={}".format(self.nail_trim.slug))
+        self.assertEqual(page.context["form"].initial["type"], self.nail_trim)
+
+        page = self.c.get("/events/add/?type=unknown")
+        self.assertNotIn("type", page.context["form"].initial)
+
+        page = self.c.get(
+            "/events/add/?child={}&type={}".format(
+                self.child.slug, self.tooth_brushing.slug
+            )
+        )
+        self.assertEqual(page.context["form"].initial["child"], self.child)
+        self.assertEqual(page.context["form"].initial["type"], self.tooth_brushing)
+
+    def test_edit(self):
+        params = {
+            "child": self.event.child.id,
+            "type": self.nail_trim.id,
+            "time": self.localtime_string(self.event.time),
+            "notes": "Both hands.",
+        }
+        page = self.c.post("/events/{}/".format(self.event.id), params, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.type, self.nail_trim)
+        self.assertEqual(self.event.notes, params["notes"])
+        self.assertContains(
+            page, "Event entry for {} updated".format(str(self.event.child))
+        )
+
+    def test_delete(self):
+        event = models.Event.objects.create(child=self.child, type=self.tooth_brushing)
+        page = self.c.post("/events/{}/delete/".format(event.id), follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event entry deleted")
+        self.assertFalse(models.Event.objects.filter(pk=event.pk).exists())
+
+
+class EventTypeFormsTestCase(FormsTestCaseBase):
+    def test_add(self):
+        page = self.c.post("/event-types/add/", {"name": "Tooth brushing"}, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event Type entry added")
+        self.assertEqual(
+            models.EventType.objects.get(name="Tooth brushing").slug, "tooth-brushing"
+        )
+
+    def test_add_with_emoji(self):
+        page = self.c.post(
+            "/event-types/add/",
+            {"name": "Sunscreen", "emoji": "\U0001f9f4"},
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        event_type = models.EventType.objects.get(name="Sunscreen")
+        self.assertEqual(event_type.emoji, "\U0001f9f4")
+        self.assertContains(page, "\U0001f9f4 Sunscreen")
+
+    def test_emoji_field(self):
+        page = self.c.get("/event-types/add/")
+        self.assertEqual(page.status_code, 200)
+        field = page.context["form"].fields["emoji"]
+        self.assertFalse(field.required)
+        self.assertEqual(field.label, "Emoji")
+        self.assertEqual(
+            field.help_text, "A single emoji shown with this type's events"
+        )
+
+    def test_add_rejects_an_invalid_emoji(self):
+        for emoji in ("x", "\U0001f9f4\U0001faa5", "a\U0001f9f4"):
+            with self.subTest(emoji=emoji):
+                page = self.c.post(
+                    "/event-types/add/", {"name": "Sunscreen", "emoji": emoji}
+                )
+                self.assertEqual(page.status_code, 200)
+                self.assertEqual(
+                    page.context["form"].errors["emoji"], ["Enter a single emoji."]
+                )
+        self.assertFalse(models.EventType.objects.exists())
+
+    def test_emoji_whitespace_is_stripped(self):
+        page = self.c.post(
+            "/event-types/add/", {"name": "Sunscreen", "emoji": " \U0001f9f4 "}
+        )
+        self.assertEqual(page.status_code, 302)
+        self.assertEqual(models.EventType.objects.get().emoji, "\U0001f9f4")
+
+        page = self.c.post(
+            "/event-types/add/", {"name": "Tooth brushing", "emoji": "   "}
+        )
+        self.assertEqual(page.status_code, 302)
+        self.assertEqual(models.EventType.objects.get(name="Tooth brushing").emoji, "")
+
+    def test_edit_emoji(self):
+        event_type = models.EventType.objects.create(name="Sunscreen")
+        url = "/event-types/{}/".format(event_type.slug)
+        page = self.c.post(url, {"name": "Sunscreen", "emoji": "\U0001f9f4"})
+        self.assertEqual(page.status_code, 302)
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.emoji, "\U0001f9f4")
+
+        page = self.c.post(url, {"name": "Sunscreen", "emoji": ""})
+        self.assertEqual(page.status_code, 302)
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.emoji, "")
+
+    def test_add_rejects_duplicates(self):
+        models.EventType.objects.create(name="Tooth brushing")
+        for name in ("Tooth brushing", "tooth brushing!"):
+            with self.subTest(name=name):
+                page = self.c.post("/event-types/add/", {"name": name})
+                self.assertEqual(page.status_code, 200)
+                self.assertIn("name", page.context["form"].errors)
+        self.assertEqual(models.EventType.objects.count(), 1)
+
+    def test_edit(self):
+        event_type = models.EventType.objects.create(name="Sunscreen")
+        page = self.c.post(
+            "/event-types/{}/".format(event_type.slug),
+            {"name": "Sunscreen lotion"},
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.name, "Sunscreen lotion")
+        # The slug is fixed when the type is created.
+        self.assertEqual(event_type.slug, "sunscreen")
+
+    def test_edit_keeps_the_slug_for_new_events(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        page = self.c.post(
+            "/event-types/{}/".format(event_type.slug),
+            {"name": "Brushing teeth"},
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        event_type.refresh_from_db()
+        self.assertEqual(event_type.slug, "tooth-brushing")
+
+        page = self.c.get("/events/add/", {"type": "tooth-brushing"})
+        self.assertEqual(page.context["form"].initial["type"], event_type)
+        page = self.c.post(
+            "/events/add/",
+            {
+                "child": self.child.id,
+                "type": event_type.id,
+                "time": self.localtime_string(),
+            },
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(models.Event.objects.get().type, event_type)
+
+    def test_add_rejects_a_long_name(self):
+        page = self.c.post("/event-types/add/", {"name": "x" * 101})
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("name", page.context["form"].errors)
+        self.assertFalse(models.EventType.objects.exists())
+
+        page = self.c.post("/event-types/add/", {"name": "x" * 100}, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(models.EventType.objects.get().slug, "x" * 100)
+
+    def test_delete(self):
+        event_type = models.EventType.objects.create(name="Nail trim")
+        page = self.c.post(
+            "/event-types/{}/delete/".format(event_type.slug), follow=True
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event Type entry deleted")
+        self.assertFalse(models.EventType.objects.filter(pk=event_type.pk).exists())
+
+    def test_delete_in_use_asks_to_delete_the_events_too(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+
+        page = self.c.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "This will also delete 2 events of this type.")
+        self.assertContains(page, "This can't be undone.")
+        self.assertContains(page, 'name="delete_events"')
+        self.assertContains(page, 'name="event_count" value="2"')
+
+        # Not confirmed: nothing is deleted.
+        page = self.c.post(url, {"event_count": 2})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(
+            page, "Confirm that the events of this type will be deleted too."
+        )
+        self.assertEqual(event_type.events.count(), 2)
+
+        page = self.c.post(url, {"delete_events": "on", "event_count": 2}, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Event Type entry deleted")
+        self.assertFalse(models.EventType.objects.filter(pk=event_type.pk).exists())
+        self.assertFalse(models.Event.objects.filter(type_id=event_type.pk).exists())
+
+    def test_delete_in_use_after_the_events_changed(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+
+        # The page showed one event, and another one was added since.
+        models.Event.objects.create(child=self.child, type=event_type)
+        page = self.c.post(url, {"delete_events": "on", "event_count": 1})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "The number of events of this type has changed.")
+        self.assertContains(page, "This will also delete 2 events of this type.")
+        self.assertEqual(event_type.events.count(), 2)
+
+    def test_delete_in_use_without_permission_to_delete_events(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+        user = get_user_model().objects.create_user(username="types", password="types")
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core",
+                codename__in=["view_eventtype", "delete_eventtype"],
+            )
+        )
+        client = HttpClient()
+        client.login(username="types", password="types")
+
+        page = client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "There is 1 event of this type.")
+        self.assertNotContains(page, 'name="delete_events"')
+        self.assertNotContains(page, "Are you sure you want to delete")
+
+        page = client.post(url, {"delete_events": "on", "event_count": 1})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(
+            page, "Tooth brushing is still in use and can not be deleted."
+        )
+        self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
+        self.assertEqual(event_type.events.count(), 1)
+
+    def add_an_event_after_the_check(self, event_type):
+        original_clean = EventTypeDeleteForm.clean
+
+        def clean_then_add_an_event(form):
+            cleaned_data = original_clean(form)
+            models.Event.objects.create(child=self.child, type=event_type)
+            return cleaned_data
+
+        return patch.object(EventTypeDeleteForm, "clean", clean_then_add_an_event)
+
+    def test_delete_when_events_were_added_after_the_check(self):
+        # Asking to delete the events of a type that has none deletes nothing
+        # but the type, even when an event is added meanwhile.
+        for data in ({}, {"delete_events": "on", "event_count": 0}):
+            with self.subTest(data=data):
+                event_type = models.EventType.objects.create(name="Tooth brushing")
+                url = "/event-types/{}/delete/".format(event_type.slug)
+                with self.add_an_event_after_the_check(event_type):
+                    page = self.c.post(url, data, follow=True)
+                self.assertEqual(page.status_code, 200)
+                self.assertContains(
+                    page, "Tooth brushing is still in use and can not be deleted."
+                )
+                self.assertTrue(
+                    models.EventType.objects.filter(pk=event_type.pk).exists()
+                )
+                self.assertEqual(event_type.events.count(), 1)
+                event_type.events.all().delete()
+                event_type.delete()
+
+    def test_delete_with_events_when_events_were_added_after_the_check(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+        with self.add_an_event_after_the_check(event_type):
+            page = self.c.post(
+                url, {"delete_events": "on", "event_count": 1}, follow=True
+            )
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "The number of events of this type has changed.")
+        self.assertContains(page, "This will also delete 2 events of this type.")
+        self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
+        self.assertEqual(event_type.events.count(), 2)
+
+    def test_delete_with_events_is_one_transaction(self):
+        event_type = models.EventType.objects.create(name="Tooth brushing")
+        models.Event.objects.create(child=self.child, type=event_type)
+        url = "/event-types/{}/delete/".format(event_type.slug)
+        with patch.object(
+            models.EventType, "delete", side_effect=RuntimeError("delete failed")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.c.post(url, {"delete_events": "on", "event_count": 1})
+        # The event was deleted before the type failed, and came back with the
+        # rollback.
+        self.assertTrue(models.EventType.objects.filter(pk=event_type.pk).exists())
+        self.assertEqual(event_type.events.count(), 1)
 
 
 class FeedingFormsTestCase(FormsTestCaseBase):

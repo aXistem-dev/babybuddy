@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+import warnings
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.management import call_command
+from django.core.paginator import UnorderedObjectListWarning
 from django.test import TestCase
 from django.test import Client as HttpClient
 from django.utils import timezone
@@ -75,6 +78,71 @@ class ViewsTestCase(TestCase):
         self.assertEqual(page.status_code, 200)
         page = self.c.get("/changes/{}/delete/".format(entry.id))
         self.assertEqual(page.status_code, 200)
+
+    def test_event_views(self):
+        page = self.c.get("/events/")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "/event-types/")
+        page = self.c.get("/events/add/")
+        self.assertEqual(page.status_code, 200)
+
+        entry = models.Event.objects.first()
+        page = self.c.get("/events/{}/".format(entry.id))
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/events/{}/delete/".format(entry.id))
+        self.assertEqual(page.status_code, 200)
+
+    def test_event_list_filters(self):
+        child = models.Child.objects.first()
+        tooth_brushing = models.EventType.objects.create(name="Filter tooth brushing")
+        nail_trim = models.EventType.objects.create(name="Filter nail trim")
+        time = timezone.localtime() - timezone.timedelta(days=3)
+        models.Event.objects.create(child=child, type=tooth_brushing, time=time)
+        models.Event.objects.create(
+            child=child, type=nail_trim, time=time - timezone.timedelta(days=3)
+        )
+
+        page = self.c.get("/events/", {"type": tooth_brushing.id, "filtered": 1})
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(
+            [e.type for e in page.context["object_list"]], [tooth_brushing]
+        )
+
+        brushing_event = models.Event.objects.filter(type=tooth_brushing).get()
+        brushing_event.tags.add("filter-tag")
+        tag = models.Tag.objects.get(name="filter-tag")
+        page = self.c.get("/events/", {"tag": tag.pk, "filtered": 1})
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(list(page.context["object_list"]), [brushing_event])
+
+        # The web list filters on child, type and tags only; dates are an API
+        # filter.
+        self.assertEqual(
+            sorted(page.context["filter"].form.fields), ["child", "tag", "type"]
+        )
+
+    def test_eventtype_views(self):
+        page = self.c.get("/event-types/")
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/event-types/add/")
+        self.assertEqual(page.status_code, 200)
+
+        entry = models.EventType.objects.first()
+        page = self.c.get("/event-types/{}/".format(entry.slug))
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/event-types/{}/delete/".format(entry.slug))
+        self.assertEqual(page.status_code, 200)
+
+    def test_eventtype_list_is_sorted_by_name(self):
+        models.EventType.objects.create(name="brushing teeth")
+        models.EventType.objects.create(name="Vitamin drops")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", UnorderedObjectListWarning)
+            page = self.c.get("/event-types/")
+        self.assertEqual(page.status_code, 200)
+        names = [t.name for t in page.context["object_list"]]
+        self.assertIn("brushing teeth", names)
+        self.assertEqual(names, sorted(names, key=str.lower))
 
     def test_feeding_views(self):
         page = self.c.get("/feedings/")
@@ -304,6 +372,11 @@ class TimelinePermissionsTestCase(TestCase):
             child=self.child, note="Timeline private note", time=now
         )
         models.Temperature.objects.create(child=self.child, temperature=38.9, time=now)
+        models.Event.objects.create(
+            child=self.child,
+            type=models.EventType.objects.create(name="Timeline tooth brushing"),
+            time=now,
+        )
         models.TummyTime.objects.create(
             child=self.child, start=now, end=now + timezone.timedelta(minutes=5)
         )
@@ -351,12 +424,13 @@ class TimelinePermissionsTestCase(TestCase):
 
         model_names = self._model_names(page)
         self.assertIn("feeding", model_names)
-        for excluded in ["medication", "note", "temperature", "tummytime"]:
+        for excluded in ["event", "medication", "note", "temperature", "tummytime"]:
             self.assertNotIn(excluded, model_names)
 
         content = page.content.decode()
         self.assertNotIn("Timeline Medication", content)
         self.assertNotIn("Timeline private note", content)
+        self.assertNotIn("Timeline tooth brushing", content)
 
     def test_read_only_user_sees_the_whole_timeline(self):
         self._login("readonly", read_only=True)
@@ -367,7 +441,9 @@ class TimelinePermissionsTestCase(TestCase):
         self.assertIn("feeding", model_names)
         self.assertIn("medication", model_names)
         self.assertIn("note", model_names)
+        self.assertIn("event", model_names)
 
         content = page.content.decode()
         self.assertIn("Timeline Medication", content)
         self.assertIn("Timeline private note", content)
+        self.assertIn("Timeline tooth brushing", content)

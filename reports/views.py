@@ -126,6 +126,27 @@ class DiaperChangeIntervalsChildReport(PermissionRequiredMixin, DetailView):
         return context
 
 
+class EventTypesChildReport(PermissionRequiredMixin, DetailView):
+    """
+    Graph of the number of events per day, by event type.
+    """
+
+    model = models.Child
+    permission_required = (
+        "core.view_child",
+        "core.view_event",
+    )
+    template_name = "reports/event_types.html"
+
+    def get_context_data(self, **kwargs):
+        context = super(EventTypesChildReport, self).get_context_data(**kwargs)
+        child = context["object"]
+        instances = models.Event.objects.filter(child=child)
+        if instances:
+            context["html"], context["js"] = graphs.event_types(instances)
+        return context
+
+
 class FeedingAmountsChildReport(PermissionRequiredMixin, DetailView):
     """
     Graph of daily feeding amounts over time.

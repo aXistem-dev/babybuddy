@@ -14,6 +14,9 @@ from core.templatetags.misc import feeding_time_diff_base
 
 register = template.Library()
 
+# The number of events on the last events card.
+EVENT_LAST_COUNT = 5
+
 
 def _hide_empty(context):
     return context["request"].user.settings.dashboard_hide_empty
@@ -192,6 +195,32 @@ def card_breastfeeding(context, child, date=None):
         "total": len(instances),
         "empty": len(instances) == 0,
         "hide_empty": _hide_empty(context),
+    }
+
+
+@register.inclusion_tag("cards/event_last.html", takes_context=True)
+def card_event_last(context, child):
+    """
+    The child's most recent events of any type, newest first. The card is
+    hidden when the child has no events at all.
+    :param child: an instance of the Child model.
+    :returns: a dictionary with a list of up to five Event instances.
+    """
+    all_instances = models.Event.objects.filter(child=child)
+    instances = list(
+        all_instances.filter(**_filter_data_age(context, "time"))
+        .select_related("type")
+        .order_by("-time", "-id")[:EVENT_LAST_COUNT]
+    )
+    has_events = bool(instances) or all_instances.exists()
+
+    return {
+        "type": "event",
+        "icon": "tag",
+        "events": instances,
+        "can_change": context["request"].user.has_perm("core.change_event"),
+        "empty": not instances,
+        "hide_empty": _hide_empty(context) or not has_events,
     }
 
 

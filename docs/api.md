@@ -14,6 +14,8 @@ Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 - `/api/bmi/` (Body Mass Index)
 - `/api/children/`
 - `/api/changes/` (Diaper Changes)
+- `/api/event-types/`
+- `/api/events/`
 - `/api/feedings/`
 - `/api/head-circumference/`
 - `/api/height/`
@@ -127,6 +129,30 @@ Returns JSON data in the response body in the following format:
 - `next`: URL for the next set of results.
 - `previous`: URL for the previous set of results.
 - `results`: An array of the results of the request.
+
+The list of event types (`/api/event-types/`) has one more key on every page,
+`permissions`, which tells a client whether the user may add, change and delete
+event types, and whether they may delete a type together with its events
+(`delete_with_events`, see [`DELETE` Method](#delete-method)). A client can use
+it to decide which management options to show, instead of working out the
+user's permissions itself:
+
+```json
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "permissions": {
+    "add": true,
+    "change": true,
+    "delete": true,
+    "delete_with_events": false
+  },
+  "results": [{...}]
+}
+```
+
+A single event type does not include `permissions`.
 
 For single entries, returns JSON data in the response body keyed by model field
 names. This will vary between models.
@@ -252,6 +278,66 @@ Note that `child` and `start` match the timer values (and `end` is auto-populate
 
 Also note that the timer has been deleted.
 
+### Events
+
+Events record something that happened at a moment, of a type that is defined on
+the instance itself (e.g. "Nail trim" or "Tooth brushing"). The types are managed
+through `/api/event-types/`, where each type has an `id`, a `name`, a `slug` and
+an `emoji`. The slug is generated from the name when the type is created and is
+used to look a type up, e.g. `/api/event-types/nail-trim/`. The slug stays the
+same when the type is renamed, so anything that refers to a type by its slug
+keeps working. To find a type by its ID (webhooks send the ID), filter the list
+with `id`, e.g. `/api/event-types/?id=2`.
+
+The `emoji` of a type is optional and is an empty string when it is not set. It
+is shown with the type's events, so events themselves have no emoji field. It
+must be a single emoji (e.g. `"✂️"`, `"👍🏽"` or a flag); anything else, such as
+text or two emoji, is refused with `400 Bad Request`:
+
+```shell
+curl --location --request POST '[...]/api/event-types/' \
+--header 'Authorization: Token [...]' \
+--header 'Content-Type: application/json' \
+--data-raw '{"name": "Nail trim", "emoji": "✂️"}'
+```
+
+```json
+{
+  "id": 2,
+  "name": "Nail trim",
+  "slug": "nail-trim",
+  "emoji": "✂️"
+}
+```
+
+The `type` field of an event is the **slug** of its event type, not its ID. The
+`time` field is optional and defaults to the time the request is received, so
+logging an event that just happened takes one request with only the child and
+the type:
+
+```shell
+curl --location --request POST '[...]/api/events/' \
+--header 'Authorization: Token [...]' \
+--header 'Content-Type: application/json' \
+--data-raw '{"child": 1, "type": "nail-trim"}'
+```
+
+```json
+{
+  "id": 12,
+  "child": 1,
+  "type": "nail-trim",
+  "time": "2024-05-28T19:30:02.112233-04:00",
+  "notes": null,
+  "tags": []
+}
+```
+
+Events can be filtered by `child`, `type` (a slug), `tags` and time, like the
+other endpoints with a time field: `date` for an exact time, and `date_min` and
+`date_max` for a range (both inclusive). All three take an ISO 8601 date and
+time, e.g. `?date_min=2024-05-28T00:00:00-04:00`.
+
 ### Response
 
 Returns JSON data in the response body describing the added/updated instance or
@@ -296,6 +382,33 @@ endpoint to be deleted. For example, to delete a Diaper Change entry with ID
 ```shell
 curl -X DELETE https://[...]/api/changes/947/ -H 'Authorization: Token [...]'
 ```
+
+An event type that is still used by events is not deleted by a plain `DELETE`.
+The request is answered with `409 Conflict`, the type is kept, and the response
+says how many events use it:
+
+```json
+{
+  "detail": "This event type is used by events and can not be deleted.",
+  "event_count": 4
+}
+```
+
+To delete the type and all of its events, repeat the request with
+`delete_events=true`:
+
+```shell
+curl -X DELETE 'https://[...]/api/event-types/nail-trim/?delete_events=true' \
+    -H 'Authorization: Token [...]'
+```
+
+This needs permission to delete both event types and events (the
+`delete_with_events` flag in the list's `permissions`), otherwise it is answered
+with `403 Forbidden`. The events and the type are deleted in one transaction:
+either all of them are deleted or none are. Every event deleted this way is
+reported to webhooks as its own `event.deleted`, followed by
+`eventtype.deleted`. Any event of the type is deleted, including one added
+after the `409` was received, and this can't be undone.
 
 ### Response
 

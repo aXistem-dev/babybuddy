@@ -27,10 +27,10 @@ more.
 With the default group permissions, a caregiver can:
 
 - view children, timers, feedings, diaper changes, sleep entries, medication,
-  temperature, weight, notes and tummy time;
+  temperature, weight, notes, tummy time, events and event types;
 - add and edit feedings, diaper changes, sleep entries, timers, medication,
-  temperature, weight, notes and tummy time, through both the web interface and
-  the API;
+  temperature, weight, notes, tummy time and events, through both the web
+  interface and the API;
 - open the child dashboard, the timeline and the reports for those entry types.
 
 With those defaults, a caregiver cannot:
@@ -38,8 +38,8 @@ With those defaults, a caregiver cannot:
 - delete any entry, including a timer;
 - see or record pumping, height, BMI or head circumference, in lists, on the
   dashboard, in the timeline or in reports;
-- manage children, tags, users, change site settings or reach the database
-  admin area.
+- manage children, tags, event types or users, change site settings or reach
+  the database admin area.
 
 The group is a starting point, not a fixed role. A caregiver is an ordinary
 Django user, so the permissions can be extended per user afterwards — grant the
@@ -135,8 +135,8 @@ withdraw access, `PATCH` the account with `"is_active": false`, or set an
 A user's type can be:
 
 - Caregiver (can view the child dashboard and add/edit feedings, diaper
-  changes, sleep entries, timers, medication, temperature, weight, notes and
-  tummy time for every child on the instance. Intended for a babysitter or
+  changes, sleep entries, timers, medication, temperature, weight, notes,
+  tummy time and events for every child on the instance. Intended for a babysitter or
   other temporary carer; the default timer and tag restrictions above apply)
 - Read only (can access all data but not make new entries)
 - Standard (default, can access and make/edit any type of entry)
@@ -168,7 +168,8 @@ python manage.py createuser --username <username> --password <password> --read-o
 ```
 
 - To create a caregiver who can log feedings, diaper changes, sleep, timers,
-  medication, temperature, weight, notes and tummy time, pass `--caregiver`.
+  medication, temperature, weight, notes, tummy time and events, pass
+  `--caregiver`.
   It cannot be combined with `--read-only` or `--is-staff`:
 
 ```shell
