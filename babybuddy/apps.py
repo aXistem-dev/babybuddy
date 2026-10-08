@@ -45,6 +45,10 @@ def set_default_site_settings(sender, **kwargs):
     defaults = (
         ("Sleep", "nap_start_min", nap_start_min),
         ("Sleep", "nap_start_max", nap_start_max),
+        ("Pumping", "pumping_to_stash_default", True),
+        ("Pumping", "bottle_from_stash_default", True),
+        ("Pumping", "stash_warn_age_hours", 48),
+        ("Pumping", "stash_max_age_hours", 72),
     )
     for class_name, attribute_name, value in defaults:
         if not setting_in_db("core.models", class_name, attribute_name):

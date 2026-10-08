@@ -9,14 +9,14 @@ from django.http import HttpResponseRedirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.translation import gettext as _
-from django.views.generic.base import RedirectView, TemplateView
+from django.views.generic.base import RedirectView, TemplateView, View
 from django.views.generic.detail import DetailView
 from django.views.generic.edit import CreateView, UpdateView, DeleteView, FormView
 from django.views.generic.list import ListView
 
 from babybuddy.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from babybuddy.views import BabyBuddyFilterView, BabyBuddyPaginatedView
-from core import filters, forms, models, timeline
+from core import filters, forms, models, stash, timeline
 
 
 def _prepare_timeline_context_data(context, date, child=None, user=None):
@@ -50,7 +50,7 @@ class CoreAddView(
 ):
     def get_success_message(self, cleaned_data):
         cleaned_data["model"] = self.model._meta.verbose_name.title()
-        if "child" in cleaned_data:
+        if cleaned_data.get("child"):
             self.success_message = _("%(model)s entry for %(child)s added!")
         else:
             self.success_message = _("%(model)s entry added!")
@@ -58,9 +58,14 @@ class CoreAddView(
 
     def get_form_kwargs(self):
         """
-        Check for and add "child" and "timer" from request query parameters.
+        Check for and add "child", "timer", "parent", "kind", "amount" and
+        "reason" from request query parameters.
           - "child" may provide a slug for a Child instance.
           - "timer" may provided an ID for a Timer instance.
+          - "parent" may provide a slug for a Parent instance.
+          - "kind" may provide a StashAdjustment kind.
+          - "amount" may provide a StashAdjustment amount.
+          - "reason" may provide a StashAdjustment reason.
 
         These arguments are used in some add views to pre-fill initial data in
         the form fields.
@@ -69,7 +74,7 @@ class CoreAddView(
         """
         kwargs = super(CoreAddView, self).get_form_kwargs()
         if issubclass(self.get_form_class(), forms.CoreModelForm):
-            for parameter in ["child", "timer"]:
+            for parameter in ["child", "timer", "parent", "kind", "amount", "reason"]:
                 if parameter in self.request.GET:
                     kwargs[parameter] = self.request.GET[parameter]
         return kwargs
@@ -328,6 +333,7 @@ class FeedingList(PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilt
     template_name = "core/feeding_list.html"
     permission_required = ("core.view_feeding",)
     filterset_class = filters.FeedingFilter
+    queryset = models.Feeding.objects.select_related("child", "parent")
 
 
 class FeedingAdd(CoreAddView):
@@ -472,11 +478,101 @@ class NoteDelete(CoreDeleteView):
     success_url = reverse_lazy("core:note-list")
 
 
+class ParentList(PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView):
+    model = models.Parent
+    template_name = "core/parent_list.html"
+    permission_required = ("core.view_parent",)
+    filterset_fields = ("first_name", "last_name")
+
+
+class ParentAdd(CoreAddView):
+    model = models.Parent
+    permission_required = ("core.add_parent",)
+    form_class = forms.ParentForm
+    success_url = reverse_lazy("core:parent-list")
+
+
+class ParentDetail(PermissionRequiredMixin, DetailView):
+    model = models.Parent
+    permission_required = ("core.view_parent",)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["pumping"] = self.object.pumping.order_by("-start")[:20]
+        context["adjustments"] = self.object.stash_adjustments.order_by("-time")[:20]
+        context["breastfeeding"] = self._breastfeeding_summary()
+        return context
+
+    def _breastfeeding_summary(self):
+        feedings = self.object.breastfeedings.order_by("-start")
+        today_start = timezone.localtime().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        week_start = today_start - timezone.timedelta(days=7)
+
+        def totals(queryset):
+            # Every feeding is a session, but overlapping feedings (e.g. two
+            # babies fed together) count their shared time only once.
+            count = 0
+            seconds = 0
+            covered_until = None
+            for feeding in queryset.order_by("start"):
+                count += 1
+                start = feeding.start
+                if covered_until is not None:
+                    start = max(start, covered_until)
+                if feeding.end > start:
+                    seconds += (feeding.end - start).total_seconds()
+                if covered_until is None or feeding.end > covered_until:
+                    covered_until = feeding.end
+            return {"count": count, "minutes": round(seconds / 60)}
+
+        last = feedings.first()
+        return {
+            "today": totals(feedings.filter(start__gte=today_start)),
+            "week": totals(feedings.filter(start__gte=week_start)),
+            "last_method": last.get_method_display() if last else None,
+        }
+
+
+class ParentUpdate(CoreUpdateView):
+    model = models.Parent
+    permission_required = ("core.change_parent",)
+    form_class = forms.ParentForm
+    success_url = reverse_lazy("core:parent-list")
+
+
+class ParentDelete(CoreDeleteView):
+    model = models.Parent
+    permission_required = ("core.delete_parent",)
+    success_url = reverse_lazy("core:parent-list")
+
+    def form_valid(self, form):
+        if self.object.pumping.exists() or self.object.stash_adjustments.exists():
+            messages.error(
+                self.request,
+                _(
+                    "%(name)s still has pumping or stash entries; "
+                    "move or delete them first."
+                )
+                % {"name": self.object},
+            )
+            return HttpResponseRedirect(reverse("core:parent", args=[self.object.slug]))
+        return super().form_valid(form)
+
+
 class PumpingList(PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView):
     model = models.Pumping
     template_name = "core/pumping_list.html"
     permission_required = ("core.view_pumping",)
     filterset_class = filters.PumpingFilter
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["unassigned"] = models.Pumping.objects.filter(
+            parent__isnull=True
+        ).count()
+        return context
 
 
 class PumpingAdd(CoreAddView):
@@ -499,6 +595,116 @@ class PumpingDelete(CoreDeleteView):
     model = models.Pumping
     permission_required = ("core.delete_pumping",)
     success_url = reverse_lazy("core:pumping-list")
+
+
+# Holds the `negative_since` of the dip below zero whose warning this browser
+# dismissed, so the warning returns for the next dip.
+STASH_WARNING_COOKIE = "stash_negative_warning_dismissed"
+
+
+def _stash_warning_token(summary):
+    since = summary["negative_since"]
+    return since.isoformat() if since else None
+
+
+class StashView(PermissionRequiredMixin, TemplateView):
+    template_name = "core/stash.html"
+    permission_required = ("core.view_pumping",)
+
+    def get(self, request, *args, **kwargs):
+        response = super().get(request, *args, **kwargs)
+        summary = response.context_data["summary"]
+        if (
+            summary["negative_since"] is None
+            and STASH_WARNING_COOKIE in request.COOKIES
+        ):
+            # Back at or above zero: forget the dismissal.
+            response.delete_cookie(STASH_WARNING_COOKIE)
+        return response
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["summary"] = stash.stash_summary()
+        parents = {p.id: p for p in models.Parent.objects.all()}
+        for lot in context["summary"]["lots"]:
+            # Whose milk each lot is, and the slug a "Throw away" link passes
+            # so the discard takes exactly that lot.
+            parent = parents.get(lot["parent"])
+            lot["parent_name"] = str(parent) if parent else ""
+            lot["parent_slug"] = parent.slug if parent else ""
+        token = _stash_warning_token(context["summary"])
+        context["show_negative_warning"] = bool(token) and (
+            self.request.COOKIES.get(STASH_WARNING_COOKIE) != token
+        )
+        context["expired_amount"] = stash.expired_amount(context["summary"])
+        context["throw_away_reason"] = stash.throw_away_reason(context["summary"])
+        context["children"] = models.Child.objects.order_by("first_name")
+
+        events = stash.stash_events()
+        selected_child = None
+        child_slug = self.request.GET.get("child")
+        if child_slug:
+            selected_child = context["children"].filter(slug=child_slug).first()
+            # An unknown slug is not an error: it just shows every movement.
+            if selected_child:
+                events = [
+                    e
+                    for e in events
+                    if e.kind == "feeding" and e.obj.child_id == selected_child.id
+                ]
+        context["selected_child"] = selected_child
+        context["events"] = list(reversed(events))[:30]
+        return context
+
+
+class StashWarningDismiss(LoginRequiredMixin, View):
+    """
+    Hides the negative-stash warning in this browser until the stash is back
+    at or above zero. GET is not supported.
+    """
+
+    def post(self, request, *args, **kwargs):
+        response = HttpResponseRedirect(reverse("core:stash"))
+        token = _stash_warning_token(stash.stash_summary())
+        if token:
+            response.set_cookie(
+                STASH_WARNING_COOKIE,
+                token,
+                max_age=365 * 24 * 60 * 60,
+                secure=request.is_secure(),
+                httponly=True,
+                samesite="Lax",
+            )
+        return response
+
+
+class StashAdjustmentList(
+    PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView
+):
+    model = models.StashAdjustment
+    template_name = "core/stashadjustment_list.html"
+    permission_required = ("core.view_stashadjustment",)
+    filterset_fields = ("kind", "parent")
+
+
+class StashAdjustmentAdd(CoreAddView):
+    model = models.StashAdjustment
+    permission_required = ("core.add_stashadjustment",)
+    form_class = forms.StashAdjustmentForm
+    success_url = reverse_lazy("core:stashadjustment-list")
+
+
+class StashAdjustmentUpdate(CoreUpdateView):
+    model = models.StashAdjustment
+    permission_required = ("core.change_stashadjustment",)
+    form_class = forms.StashAdjustmentForm
+    success_url = reverse_lazy("core:stashadjustment-list")
+
+
+class StashAdjustmentDelete(CoreDeleteView):
+    model = models.StashAdjustment
+    permission_required = ("core.delete_stashadjustment",)
+    success_url = reverse_lazy("core:stashadjustment-list")
 
 
 class SleepList(PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView):

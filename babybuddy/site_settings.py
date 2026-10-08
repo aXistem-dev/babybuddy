@@ -52,3 +52,40 @@ class FeedingSettings(dbsettings.Group):
         ),
         widget=CheckboxInput,
     )
+
+
+class StashBooleanValue(dbsettings.BooleanValue):
+    field = BooleanField
+
+
+class StashSettings(dbsettings.Group):
+    pumping_to_stash_default = StashBooleanValue(
+        required=False,
+        default=True,
+        widget=CheckboxInput,
+        description=_("Store pumped milk in the stash by default"),
+        help_text=_(
+            "On by default for new pumping, including pumping added through the "
+            "API without a stash amount."
+        ),
+    )
+    bottle_from_stash_default = StashBooleanValue(
+        required=False,
+        default=True,
+        widget=CheckboxInput,
+        description=_("Take breast milk bottles from the stash by default"),
+        help_text=_(
+            "On by default for new breast-milk bottles once the stash is in use, "
+            "including bottles added through the API without a stash amount."
+        ),
+    )
+    stash_warn_age_hours = dbsettings.PositiveIntegerValue(
+        default=48,
+        description=_("Expiring soon after (hours)"),
+        help_text=_("Milk this old is marked as expiring soon."),
+    )
+    stash_max_age_hours = dbsettings.PositiveIntegerValue(
+        default=72,
+        description=_("Expires after (hours)"),
+        help_text=_("Milk this old has expired and should be thrown away."),
+    )

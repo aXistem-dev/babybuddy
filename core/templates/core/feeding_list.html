@@ -7,6 +7,7 @@
     <li class="breadcrumb-item active" aria-current="page">{% trans "Feedings" %}</li>
 {% endblock %}
 {% block content %}
+    {% show_milk_parent as show_parent %}
     <h1>
         {% trans "Feedings" %}
         {% if perms.core.add_feeding %}
@@ -66,9 +67,27 @@
                                     <a href="{% url 'core:child' feeding.child.slug %}">{{ feeding.child }}</a>
                                 </td>
                             {% endif %}
-                            <td>{{ feeding.get_method_display }}</td>
+                            <td>
+                                {{ feeding.get_method_display }}
+                                {% if feeding.parent and show_parent %}
+                                    <br>
+                                    <small class="text-muted">
+                                        {% if perms.core.view_parent %}
+                                            <a href="{% url 'core:parent' feeding.parent.slug %}">{{ feeding.parent }}</a>
+                                        {% else %}
+                                            {{ feeding.parent }}
+                                        {% endif %}
+                                    </small>
+                                {% endif %}
+                            </td>
                             <td>{{ feeding.get_type_display }}</td>
-                            <td>{% if feeding.amount %}{{ feeding.amount }}{% endif %}</td>
+                            <td>
+                                {% if feeding.amount %}{{ feeding.amount }}{% endif %}
+                                {% if feeding.stash_amount %}
+                                    <span class="badge bg-info"
+                                          title="{% trans "From stash" %}">{{ feeding.stash_amount }}</span>
+                                {% endif %}
+                            </td>
                             <td>{{ feeding.duration|duration_string }}</td>
                             <td>
                                 {% if prev_feeding %}

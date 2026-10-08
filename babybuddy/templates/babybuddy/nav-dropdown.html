@@ -129,7 +129,7 @@
                            data-bs-toggle="dropdown"
                            aria-haspopup="true"
                            aria-expanded="false"><i class="icon-child" aria-hidden="true"></i>
-                            {% trans "Children" %}
+                            {% trans "Family" %}
                         </a>
                         <div class="dropdown-menu" aria-labelledby="nav-children-menu-link">
                             {% if perms.core.view_child %}
@@ -143,6 +143,19 @@
                                 <a class="dropdown-item ps-5{% if request.path == '/children/add/' %} active{% endif %}"
                                    href="{% url 'core:child-add' %}"><i class="icon-add" aria-hidden="true"></i>
                                     {% trans "Child" %}
+                                </a>
+                            {% endif %}
+                            {% if perms.core.view_parent %}
+                                <a class="dropdown-item{% if request.path == '/parents/' %} active{% endif %}"
+                                   href="{% url 'core:parent-list' %}">
+                                    <i class="icon-child" aria-hidden="true"></i>
+                                    {% trans "Parents" %}
+                                </a>
+                            {% endif %}
+                            {% if perms.core.add_parent %}
+                                <a class="dropdown-item ps-5{% if request.path == '/parents/add/' %} active{% endif %}"
+                                   href="{% url 'core:parent-add' %}"><i class="icon-add" aria-hidden="true"></i>
+                                    {% trans "Parent" %}
                                 </a>
                             {% endif %}
                             {% if perms.core.view_note %}
@@ -312,6 +325,19 @@
                                 <a class="dropdown-item ps-5{% if request.path == '/pumping/add/' %} active{% endif %}"
                                    href="{% url 'core:pumping-add' %}"><i class="icon-add" aria-hidden="true"></i>
                                     {% trans "Pumping entry" %}
+                                </a>
+                            {% endif %}
+                            {% if perms.core.view_pumping %}
+                                <a class="dropdown-item{% if request.path == '/stash/' or request.path == '/stash/adjustments/' %} active{% endif %}"
+                                   href="{% url 'core:stash' %}">
+                                    <i class="icon-pumping" aria-hidden="true"></i>
+                                    {% trans "Milk stash" %}
+                                </a>
+                            {% endif %}
+                            {% if perms.core.add_stashadjustment %}
+                                <a class="dropdown-item ps-5{% if request.path == '/stash/adjustments/add/' %} active{% endif %}"
+                                   href="{% url 'core:stashadjustment-add' %}"><i class="icon-add" aria-hidden="true"></i>
+                                    {% trans "Stash adjustment" %}
                                 </a>
                             {% endif %}
                             {% if perms.core.view_sleep %}

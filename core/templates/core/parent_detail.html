@@ -1,0 +1,125 @@
+{% extends "babybuddy/page.html" %}
+{% load cards i18n %}
+{% block title %}
+    {{ object }}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'core:parent-list' %}">{% trans "Parents" %}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{{ object }}</li>
+{% endblock %}
+{% block content %}
+    <h1>{{ object }}</h1>
+    <p class="text-muted">{{ object.children.all|join:", " }}</p>
+    <div class="btn-group mb-3" role="group">
+        {% if object.produces_milk and perms.core.add_pumping %}
+            <a class="btn btn-success"
+               href="{% url 'core:pumping-add' %}?parent={{ object.slug }}">
+                <i class="icon-pumping" aria-hidden="true"></i> {% trans "Add pumping" %}
+            </a>
+        {% endif %}
+        {% if object.produces_milk and perms.core.add_stashadjustment %}
+            <a class="btn btn-outline-success"
+               href="{% url 'core:stashadjustment-add' %}?parent={{ object.slug }}&kind=added">
+                {% trans "Add to stash" %}
+            </a>
+            <a class="btn btn-outline-danger"
+               href="{% url 'core:stashadjustment-add' %}?parent={{ object.slug }}&kind=discarded">
+                {% trans "Discard from stash" %}
+            </a>
+        {% endif %}
+        {% if perms.core.view_pumping %}
+            <a class="btn btn-outline-secondary"
+               href="{% url 'reports:report-pumping-amounts-parent' object.slug %}">{% trans "Pumping report" %}</a>
+        {% endif %}
+    </div>
+    {% if perms.core.view_pumping %}
+        <div class="row">
+            <div class="col-sm-6 col-lg-4">{% card_pumping_last object %}</div>
+            <div class="col-sm-6 col-lg-4">{% card_pumping_recent object %}</div>
+            <div class="col-sm-6 col-lg-4">{% card_stash %}</div>
+        </div>
+    {% endif %}
+    {% if perms.core.view_feeding %}
+        <div class="row">
+            <div class="col-sm-6 col-lg-4">
+                <div class="card card-dashboard card-feeding">
+                    <div class="card-header">
+                        <i class="icon-feeding pull-left" aria-hidden="true"></i>
+                        {% trans "Breastfeeding" %}
+                    </div>
+                    <div class="card-body">
+                        <span class="card-title">
+                            <strong>
+                                {% blocktrans trimmed count counter=breastfeeding.today.count with minutes=breastfeeding.today.minutes %}
+                                    {{ counter }} session, {{ minutes }} min today
+                                {% plural %}
+                                    {{ counter }} sessions, {{ minutes }} min today
+                                {% endblocktrans %}
+                            </strong>
+                        </span>
+                        <div class="card-text">
+                            {% blocktrans trimmed count counter=breastfeeding.week.count with minutes=breastfeeding.week.minutes %}
+                                {{ counter }} session, {{ minutes }} min in the last 7 days
+                            {% plural %}
+                                {{ counter }} sessions, {{ minutes }} min in the last 7 days
+                            {% endblocktrans %}
+                            {% if breastfeeding.last_method %}
+                                <div>
+                                    {% blocktrans trimmed with method=breastfeeding.last_method %}
+                                        Last: {{ method }}
+                                    {% endblocktrans %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    {% if perms.core.view_pumping %}
+        <h2 class="h5 mt-4">{% trans "Pumping" %}</h2>
+        <table class="table table-borderless table-striped align-middle">
+            <tbody>
+                {% for p in pumping %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'core:pumping-update' p.id %}">{{ p.start|date:"SHORT_DATETIME_FORMAT" }}</a>
+                        </td>
+                        <td>{{ p.amount }}</td>
+                        <td>
+                            {% if p.stash_amount %}
+                                {% trans "stored" %} {{ p.stash_amount }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td>{% trans "No pumping entries found." %}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+    {% if perms.core.view_stashadjustment %}
+        <h2 class="h5 mt-4">{% trans "Stash adjustments" %}</h2>
+        <table class="table table-borderless table-striped align-middle">
+            <tbody>
+                {% for adjustment in adjustments %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'core:stashadjustment-update' adjustment.id %}">{{ adjustment.time|date:"SHORT_DATETIME_FORMAT" }}</a>
+                        </td>
+                        <td>{{ adjustment.get_kind_display }}{% if adjustment.reason %} ({{ adjustment.reason }}){% endif %}</td>
+                        <td class="{% if adjustment.signed_amount < 0 %}text-danger{% endif %}">{{ adjustment.signed_amount }}</td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td>{% trans "No stash adjustments found." %}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+{% endblock %}

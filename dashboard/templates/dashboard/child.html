@@ -11,6 +11,10 @@
     <li class="breadcrumb-item active" aria-current="page">{% trans "Dashboard" %}</li>
 {% endblock %}
 {% block content %}
+    {% if perms.core.add_pumping %}
+        <a class="btn btn-sm btn-outline-primary"
+           href="{% url 'core:pumping-add' %}?child={{ object.slug }}">{% trans "Add pumping" %}</a>
+    {% endif %}
     <div id="dashboard-child"
          class="row"
          data-masonry='{"percentPosition": true }'>
@@ -20,6 +24,10 @@
         {% if perms.core.view_feeding %}
             <div class="col-sm-6 col-lg-4">{% card_feeding_last object %}</div>
         {% endif %}
+        {% if perms.core.view_pumping %}
+            <div class="col-sm-6 col-lg-4">{% card_stash %}</div>
+            <div class="col-sm-6 col-lg-4">{% card_stash_use object %}</div>
+        {% endif %}
         {% if perms.core.view_note %}
             <div class="col-sm-6 col-lg-4">{% card_notes_recent object %}</div>
         {% endif %}
@@ -28,10 +36,6 @@
         {% endif %}
         {% if perms.core.view_event %}
             <div class="col-sm-6 col-lg-4">{% card_event_last object %}</div>
-        {% endif %}
-        {% if perms.core.view_pumping %}
-            <div class="col-sm-6 col-lg-4">{% card_pumping_last object %}</div>
-            <div class="col-sm-6 col-lg-4">{% card_pumping_recent object %}</div>
         {% endif %}
         {% if perms.core.view_sleep %}
             <div class="col-sm-6 col-lg-4">{% card_sleep_last object %}</div>

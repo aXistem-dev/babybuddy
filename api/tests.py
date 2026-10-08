@@ -3,13 +3,16 @@ from unittest.mock import patch
 
 from babybuddy.models import get_user_model
 from api import serializers
-from core import models
+from core import models, stash
 from django.conf import settings
 from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import PermissionDenied
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
+from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.test import APIRequestFactory, APITestCase
 
@@ -191,6 +194,11 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
     model = models.Pumping
     timer_test_data = {"amount": 2}
 
+    def setUp(self):
+        super().setUp()
+        self.parent = models.Parent.objects.create(first_name="Alex")
+        self.parent.children.add(models.Child.objects.get(pk=1))
+
     def test_get(self):
         response = self.client.get(self.endpoint)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -199,7 +207,9 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
             {
                 "id": 2,
                 "child": 1,
+                "parent": None,
                 "amount": 9.0,
+                "stash_amount": None,
                 "start": "2017-11-17T15:03:00-05:00",
                 "end": "2017-11-17T15:22:00-05:00",
                 "duration": "00:19:00",
@@ -207,6 +217,58 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 "tags": [],
             },
         )
+
+    def test_post_with_timer(self):
+        # Overridden: with a single milk-producing parent, a timer without a
+        # child still gets that parent; with two, the parent must be sent.
+        user = get_user_model().objects.first()
+        start = timezone.now() - timezone.timedelta(minutes=10)
+        timer = models.Timer.objects.create(user=user, start=start)
+        response = self.client.post(
+            self.endpoint, {"amount": 2, "timer": timer.id}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["parent"], self.parent.id)
+
+        models.Parent.objects.create(first_name="Casey")
+        timer = models.Timer.objects.create(user=user, start=start)
+        response = self.client.post(
+            self.endpoint, {"amount": 2, "timer": timer.id}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_parent_who_doesnt_produce_milk_is_refused(self):
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        data = {
+            "parent": sam.id,
+            "amount": "21.0",
+            "start": "2017-11-20T22:52:00-05:00",
+            "end": "2017-11-20T23:05:00-05:00",
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("parent", response.data)
+
+    def test_existing_non_milk_parent_can_stay(self):
+        start = timezone.now() - timezone.timedelta(hours=2)
+        pumping = models.Pumping.objects.create(
+            parent=self.parent,
+            amount=20,
+            start=start,
+            end=start + timezone.timedelta(minutes=15),
+        )
+        self.parent.produces_milk = False
+        self.parent.save()
+        endpoint = "{}{}/".format(self.endpoint, pumping.id)
+        response = self.client.patch(
+            endpoint, {"parent": self.parent.id, "amount": 25}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["parent"], self.parent.id)
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        response = self.client.patch(endpoint, {"parent": sam.id}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("parent", response.data)
 
     def test_post(self):
         data = {
@@ -221,6 +283,9 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         obj = models.Pumping.objects.get(pk=response.data["id"])
         self.assertEqual(str(obj.amount), data["amount"])
         self.assertEqual(obj.notes, data["notes"])
+        # The child's only milk parent is filled in, and the child is kept.
+        self.assertEqual(obj.child_id, 1)
+        self.assertEqual(obj.parent, self.parent)
 
     def test_patch(self):
         endpoint = "{}{}/".format(self.endpoint, 1)
@@ -235,6 +300,196 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, entry)
+
+    def test_patch_legacy_rows_of_different_children_at_the_same_time(self):
+        start = timezone.now() - timezone.timedelta(hours=3)
+        end = start + timezone.timedelta(minutes=15)
+        rows = [
+            models.Pumping.objects.create(
+                child=models.Child.objects.create(
+                    first_name=name, birth_date=timezone.localdate()
+                ),
+                start=start,
+                end=end,
+                amount=40,
+            )
+            for name in ("Casey", "Jamie")
+        ]
+        for row in rows:
+            response = self.client.patch(
+                "{}{}/".format(self.endpoint, row.id), {"notes": "checked"}
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+    def test_post_with_timer_with_child(self):
+        # Overridden: the timer's child is kept, and its milk parent is filled
+        # in.
+        user = get_user_model().objects.first()
+        child = models.Child.objects.first()
+        start = timezone.now() - timezone.timedelta(minutes=10)
+        timer = models.Timer.objects.create(user=user, child=child, start=start)
+        self.timer_test_data["timer"] = timer.id
+        response = self.client.post(self.endpoint, self.timer_test_data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = self.model.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.child, child)
+        self.assertEqual(obj.parent, self.parent)
+        self.assertEqual(obj.start, start)
+        self.assertIsNotNone(obj.end)
+
+    def test_legacy_row_patch_without_parent_succeeds(self):
+        # pk=1 is a fixture row that predates parent tracking (child set,
+        # parent NULL). Editing an unrelated field must not force a parent.
+        endpoint = "{}{}/".format(self.endpoint, 1)
+        response = self.client.patch(endpoint, {"notes": "x"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        obj = models.Pumping.objects.get(pk=1)
+        self.assertEqual(obj.notes, "x")
+        self.assertIsNone(obj.parent)
+        self.assertEqual(obj.child_id, 1)
+
+    def test_update_keeps_a_child_sent_on_parent_owned_row(self):
+        response = self.client.post(
+            self.endpoint,
+            {
+                "parent": self.parent.id,
+                "amount": 50,
+                "start": "2017-11-21T08:00:00-05:00",
+                "end": "2017-11-21T08:20:00-05:00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        pk = response.data["id"]
+        other_child = models.Child.objects.create(
+            first_name="Other", last_name="Kid", birth_date="2018-01-01"
+        )
+        endpoint = "{}{}/".format(self.endpoint, pk)
+        response = self.client.patch(endpoint, {"child": other_child.id}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["child"], other_child.id)
+        obj = models.Pumping.objects.get(pk=pk)
+        self.assertEqual(obj.child, other_child)
+        self.assertEqual(obj.parent_id, self.parent.id)
+
+    def test_update_via_timer_takes_the_timers_child(self):
+        # CoreModelWithDurationSerializer.validate() sets attrs["child"] from
+        # a supplied timer's child; like a child sent directly, it is kept and
+        # the parent stays.
+        response = self.client.post(
+            self.endpoint,
+            {
+                "parent": self.parent.id,
+                "amount": 50,
+                "start": "2017-11-21T08:30:00-05:00",
+                "end": "2017-11-21T08:50:00-05:00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        pk = response.data["id"]
+        other_child = models.Child.objects.create(
+            first_name="Other", last_name="Kid", birth_date="2018-01-01"
+        )
+        timer = models.Timer.objects.create(
+            user=get_user_model().objects.first(),
+            child=other_child,
+            start=timezone.now() - timezone.timedelta(minutes=5),
+        )
+        endpoint = "{}{}/".format(self.endpoint, pk)
+        response = self.client.patch(
+            endpoint, {"timer": timer.id, "amount": 55}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["child"], other_child.id)
+        obj = models.Pumping.objects.get(pk=pk)
+        self.assertEqual(obj.child, other_child)
+        self.assertEqual(obj.parent_id, self.parent.id)
+
+    def test_amount_change_follows_full_stash(self):
+        response = self.client.post(
+            self.endpoint,
+            {
+                "parent": self.parent.id,
+                "amount": 100,
+                "start": "2017-11-21T09:00:00-05:00",
+                "end": "2017-11-21T09:20:00-05:00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["stash_amount"], 100.0)
+        endpoint = "{}{}/".format(self.endpoint, response.data["id"])
+        response = self.client.patch(endpoint, {"amount": 90}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["stash_amount"], 90.0)
+
+    def test_amount_change_leaves_partial_stash_that_still_fits(self):
+        response = self.client.post(
+            self.endpoint,
+            {
+                "parent": self.parent.id,
+                "amount": 100,
+                "stash_amount": 40,
+                "start": "2017-11-21T10:00:00-05:00",
+                "end": "2017-11-21T10:20:00-05:00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        endpoint = "{}{}/".format(self.endpoint, response.data["id"])
+        response = self.client.patch(endpoint, {"amount": 120}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["stash_amount"], 40.0)
+
+    def test_amount_change_clamps_partial_stash_that_would_exceed(self):
+        response = self.client.post(
+            self.endpoint,
+            {
+                "parent": self.parent.id,
+                "amount": 100,
+                "stash_amount": 40,
+                "start": "2017-11-21T11:00:00-05:00",
+                "end": "2017-11-21T11:20:00-05:00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        endpoint = "{}{}/".format(self.endpoint, response.data["id"])
+        response = self.client.patch(endpoint, {"amount": 30}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["stash_amount"], 30.0)
+
+    def test_filter_by_parent(self):
+        other_parent = models.Parent.objects.create(first_name="Casey")
+        mine = models.Pumping.objects.create(
+            parent=self.parent, amount=10, start=timezone.now(), end=timezone.now()
+        )
+        theirs = models.Pumping.objects.create(
+            parent=other_parent, amount=20, start=timezone.now(), end=timezone.now()
+        )
+        response = self.client.get(self.endpoint, {"parent": self.parent.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertIn(mine.id, ids)
+        self.assertNotIn(theirs.id, ids)
+
+    def test_filter_by_stash_amount_isnull(self):
+        with_stash = models.Pumping.objects.create(
+            parent=self.parent,
+            amount=10,
+            stash_amount=10,
+            start=timezone.now(),
+            end=timezone.now(),
+        )
+        without_stash = models.Pumping.objects.create(
+            parent=self.parent, amount=10, start=timezone.now(), end=timezone.now()
+        )
+        response = self.client.get(self.endpoint, {"stash_amount__isnull": "false"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = [row["id"] for row in response.data["results"]]
+        self.assertIn(with_stash.id, ids)
+        self.assertNotIn(without_stash.id, ids)
 
 
 class DiaperChangeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
@@ -843,12 +1098,16 @@ class FeedingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
             {
                 "id": 3,
                 "child": 1,
+                "parent": None,
                 "start": "2017-11-18T09:00:00-05:00",
                 "end": "2017-11-18T09:15:00-05:00",
                 "duration": "00:15:00",
                 "type": "formula",
                 "method": "bottle",
                 "amount": 2.5,
+                "stash_amount": None,
+                "stash_discarded": None,
+                "stash_discard_reason": "",
                 "notes": "forgot vitamins :(",
                 "tags": [],
             },
@@ -882,6 +1141,34 @@ class FeedingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertEqual(obj.type, data["type"])
         self.assertEqual(obj.notes, data["notes"])
 
+    def test_non_milk_parent_is_refused_unless_existing(self):
+        robin = models.Parent.objects.create(first_name="Robin")
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        data = {
+            "child": 1,
+            "start": "2017-11-19T14:00:00-05:00",
+            "end": "2017-11-19T14:15:00-05:00",
+            "type": "breast milk",
+            "method": "left breast",
+            "parent": sam.id,
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("parent", response.data)
+
+        response = self.client.post(
+            self.endpoint, {**data, "parent": robin.id}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        robin.produces_milk = False
+        robin.save()
+        endpoint = "{}{}/".format(self.endpoint, response.data["id"])
+        response = self.client.patch(
+            endpoint, {"parent": robin.id, "notes": "kept"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["parent"], robin.id)
+
     def test_post_solid_food_from_the_breast_is_refused(self):
         data = {
             "child": 1,
@@ -911,6 +1198,771 @@ class FeedingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, entry)
+
+
+class StashAPITestCase(APITestCase):
+    """Cross-cutting stash behaviour spanning pumping, feeding, adjustments
+    and the /api/stash summary: not tied to a single endpoint, so this is
+    based directly on APITestCase rather than the single-endpoint TestBase
+    (whose generic options/delete/timer checks assume one)."""
+
+    fixtures = ["tests.json"]
+
+    def setUp(self):
+        self.client.login(username="admin", password="admin")
+        self.child = models.Child.objects.get(pk=1)
+        self.robin = models.Parent.objects.create(first_name="Robin")
+        self.robin.children.add(self.child)
+
+    def post(self, name, data):
+        return self.client.post(reverse(name), data, format="json")
+
+    def pumping(self, hour, **kwargs):
+        data = {
+            "amount": 100,
+            "start": "2017-11-18T%02d:00:00-05:00" % hour,
+            "end": "2017-11-18T%02d:20:00-05:00" % hour,
+        }
+        data.update(kwargs)
+        return self.post("api:pumping-list", data)
+
+    def test_parent_pumping_defaults_to_stored(self):
+        r = self.pumping(8, parent=self.robin.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(
+            (r.data["parent"], r.data["child"], r.data["stash_amount"]),
+            (self.robin.id, self.child.id, 100.0),
+        )
+
+    def test_child_only_resolves_parent(self):
+        r = self.pumping(9, child=self.child.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(
+            (r.data["parent"], r.data["child"]), (self.robin.id, self.child.id)
+        )
+        # A client listing pumping per child finds it.
+        r = self.client.get(reverse("api:pumping-list"), {"child": self.child.id})
+        self.assertIn(9, [int(p["start"][11:13]) for p in r.data["results"]])
+
+    def test_child_without_a_linked_parent_gets_the_only_milk_parent(self):
+        other = models.Child.objects.create(
+            first_name="Other", birth_date=self.child.birth_date
+        )
+        r = self.pumping(14, child=other.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data["parent"], r.data["child"]), (self.robin.id, other.id))
+
+    def test_deleting_a_child_keeps_the_parents_pumping(self):
+        r = self.pumping(15, parent=self.robin.id)
+        shared = r.data["id"]
+        other = models.Child.objects.create(
+            first_name="Other", birth_date=self.child.birth_date
+        )
+        own = models.Pumping.objects.create(
+            child=other,
+            amount=20,
+            start=timezone.now() - timezone.timedelta(hours=1),
+            end=timezone.now(),
+        )
+        self.child.delete()
+        entry = models.Pumping.objects.get(pk=shared)
+        self.assertEqual((entry.parent, entry.child), (self.robin, None))
+        other.delete()
+        self.assertFalse(models.Pumping.objects.filter(pk=own.pk).exists())
+
+    def test_child_with_two_parents_stays_on_the_child(self):
+        models.Parent.objects.create(first_name="Casey").children.add(self.child)
+        r = self.pumping(10, child=self.child.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data["parent"], r.data["child"]), (None, self.child.id))
+
+    def test_child_without_any_parent_stays_on_the_child(self):
+        # A server that was just upgraded has no parents yet; a client that
+        # logs pumping per child keeps working as before.
+        models.Parent.objects.all().delete()
+        r = self.pumping(11, child=self.child.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data["parent"], r.data["child"]), (None, self.child.id))
+
+    def test_parent_of_two_children_leaves_the_child_empty(self):
+        second = models.Child.objects.create(
+            first_name="Second", birth_date=self.child.birth_date
+        )
+        self.robin.children.add(second)
+        r = self.pumping(12, parent=self.robin.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual((r.data["parent"], r.data["child"]), (self.robin.id, None))
+
+    def test_neither_parent_nor_child_is_400(self):
+        models.Parent.objects.create(first_name="Casey")
+        r = self.pumping(13)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("parent", r.data)
+
+    def test_timer_to_pumping_resolves_parent(self):
+        timer = models.Timer.objects.create(
+            user=get_user_model().objects.first(),
+            child=self.child,
+            start=timezone.now() - timezone.timedelta(minutes=15),
+        )
+        r = self.post("api:pumping-list", {"timer": timer.id, "amount": 80})
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["parent"], self.robin.id)
+
+    def test_explicit_null_opts_out(self):
+        r = self.pumping(11, parent=self.robin.id, stash_amount=None)
+        self.assertIsNone(r.data["stash_amount"])
+
+    def bottle(self, hour, **kwargs):
+        data = {
+            "child": 1,
+            "type": "breast milk",
+            "method": "bottle",
+            "amount": 60,
+            "start": "2017-11-19T%02d:00:00-05:00" % hour,
+            "end": "2017-11-19T%02d:00:00-05:00" % hour,
+        }
+        data.update(kwargs)
+        return self.post("api:feeding-list", data)
+
+    def breastfeed(self, hour, **kwargs):
+        data = {
+            "child": self.child.id,
+            "type": "breast milk",
+            "method": "left breast",
+            "start": "2017-11-19T%02d:00:00-05:00" % hour,
+            "end": "2017-11-19T%02d:15:00-05:00" % hour,
+        }
+        data.update(kwargs)
+        return self.post("api:feeding-list", data)
+
+    def test_api_breastfeed_resolves_parent(self):
+        r = self.breastfeed(6)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["parent"], self.robin.id)
+
+    def test_api_breastfeed_explicit_null_opts_out(self):
+        # Unlike an omitted `parent`, an explicit `"parent": null` is a
+        # deliberate choice and must not be auto-filled, same as
+        # `stash_amount` in StashDefaultsMixin.
+        r = self.breastfeed(20, parent=None)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertIsNone(r.data["parent"])
+
+    def test_api_breastfeed_child_with_two_parents_is_not_an_error(self):
+        models.Parent.objects.create(first_name="Casey").children.add(self.child)
+        r = self.breastfeed(21)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertIsNone(r.data["parent"])
+
+    def test_timer_to_breastfeed_resolves_parent(self):
+        timer = models.Timer.objects.create(
+            user=get_user_model().objects.first(),
+            child=self.child,
+            start=timezone.now() - timezone.timedelta(minutes=10),
+        )
+        r = self.post(
+            "api:feeding-list",
+            {"timer": timer.id, "type": "breast milk", "method": "left breast"},
+        )
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["parent"], self.robin.id)
+
+    def test_api_parent_rejected_for_bottle(self):
+        r = self.bottle(7, parent=self.robin.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertIsNone(r.data["parent"])
+        obj = models.Feeding.objects.get(pk=r.data["id"])
+        self.assertIsNone(obj.parent)
+
+    def test_feeding_create_default_skipped_without_activity(self):
+        self.assertIsNone(self.bottle(8).data["stash_amount"])
+
+    def test_feeding_create_default_applies(self):
+        models.StashAdjustment.objects.create(
+            time=timezone.now() - timezone.timedelta(days=1),
+            amount=200,
+            kind="added",
+        )
+        self.assertEqual(self.bottle(9).data["stash_amount"], 60.0)
+        self.assertIsNone(self.bottle(10, type="formula").data["stash_amount"])
+
+    def test_feeding_discard_reason_free_text(self):
+        r = self.bottle(
+            11, stash_amount=60, stash_discarded=10, stash_discard_reason="Spilled"
+        )
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(
+            (r.data["stash_discarded"], r.data["stash_discard_reason"]),
+            (10.0, "Spilled"),
+        )
+        f = models.Feeding.objects.get(pk=r.data["id"])
+        self.assertEqual(f.linked_discard().reason, "Spilled")
+        r = self.client.get(reverse("api:feeding-detail", args=[f.id]))
+        self.assertEqual(r.data["stash_discard_reason"], "Spilled")
+        r = self.client.patch(
+            reverse("api:feeding-detail", args=[f.id]),
+            {"stash_discard_reason": "Baby fell asleep"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["stash_discard_reason"], "Baby fell asleep")
+        self.assertEqual(f.linked_discard().reason, "Baby fell asleep")
+        r = self.client.patch(
+            reverse("api:feeding-detail", args=[f.id]),
+            {"stash_discard_reason": "x" * 256},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("stash_discard_reason", r.data)
+
+    def test_discard_reason_round_trip(self):
+        r = self.bottle(
+            11, stash_amount=60, stash_discarded=10, stash_discard_reason="Spilled"
+        )
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(
+            (r.data["stash_discarded"], r.data["stash_discard_reason"]),
+            (10.0, "Spilled"),
+        )
+        f = models.Feeding.objects.get(pk=r.data["id"])
+        self.assertEqual(f.stash_adjustments.count(), 1)
+        r = self.client.patch(
+            reverse("api:feeding-detail", args=[f.id]),
+            {"stash_discarded": None},
+            format="json",
+        )
+        self.assertIsNone(r.data["stash_discarded"])
+        self.assertEqual(f.stash_adjustments.count(), 0)
+
+    def test_discard_without_stash_is_400(self):
+        response = self.bottle(12, stash_amount=None, stash_discarded=10)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("stash_discarded", response.data)
+
+    def test_discard_reason_only_without_existing_discard_is_400(self):
+        r = self.bottle(15, stash_amount=60)
+        self.assertEqual(r.status_code, 201, r.data)
+        f = models.Feeding.objects.get(pk=r.data["id"])
+        response = self.client.patch(
+            reverse("api:feeding-detail", args=[f.id]),
+            {"stash_discard_reason": "Spilled"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("stash_discard_reason", response.data)
+        self.assertFalse(f.stash_adjustments.exists())
+
+    def test_discard_reason_only_with_existing_discard_updates_it(self):
+        r = self.bottle(
+            16, stash_amount=60, stash_discarded=10, stash_discard_reason="Spilled"
+        )
+        self.assertEqual(r.status_code, 201, r.data)
+        f = models.Feeding.objects.get(pk=r.data["id"])
+        response = self.client.patch(
+            reverse("api:feeding-detail", args=[f.id]),
+            {"stash_discard_reason": "Left over"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["stash_discard_reason"], "Left over")
+        self.assertEqual(response.data["stash_discarded"], 10.0)
+        discard = f.linked_discard()
+        self.assertEqual((discard.amount, discard.reason), (10.0, "Left over"))
+
+    def test_discard_reason_with_stash_cleared_removes_discard(self):
+        for hour, change in (
+            (17, {"method": "left breast"}),
+            (18, {"stash_amount": None}),
+        ):
+            with self.subTest(change=change):
+                r = self.bottle(
+                    hour,
+                    stash_amount=60,
+                    stash_discarded=10,
+                    stash_discard_reason="Spilled",
+                )
+                self.assertEqual(r.status_code, 201, r.data)
+                f = models.Feeding.objects.get(pk=r.data["id"])
+                response = self.client.patch(
+                    reverse("api:feeding-detail", args=[f.id]),
+                    {**change, "stash_discard_reason": "Other"},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 200, response.data)
+                self.assertIsNone(response.data["stash_amount"])
+                self.assertIsNone(response.data["stash_discarded"])
+                self.assertFalse(f.stash_adjustments.exists())
+
+    def test_start_change_moves_linked_discard(self):
+        r = self.bottle(19, stash_amount=60, stash_discarded=10)
+        self.assertEqual(r.status_code, 201, r.data)
+        f = models.Feeding.objects.get(pk=r.data["id"])
+        response = self.client.patch(
+            reverse("api:feeding-detail", args=[f.id]),
+            {"start": "2017-11-19T18:40:00-05:00"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        f.refresh_from_db()
+        self.assertEqual(f.linked_discard().time, f.start)
+
+    def test_parent_fed_and_self_fed_can_come_from_the_stash(self):
+        for hour, method in ((20, "parent fed"), (21, "self fed")):
+            with self.subTest(method=method):
+                r = self.bottle(hour, method=method, stash_amount=60, stash_discarded=5)
+                self.assertEqual(r.status_code, 201, r.data)
+                self.assertEqual(
+                    (r.data["stash_amount"], r.data["stash_discarded"]), (60.0, 5.0)
+                )
+
+    def test_bottle_amount_change_follows_full_stash(self):
+        r = self.bottle(13, stash_amount=60)
+        self.assertEqual(r.status_code, 201, r.data)
+        endpoint = reverse("api:feeding-detail", args=[r.data["id"]])
+        r = self.client.patch(endpoint, {"amount": 50}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["stash_amount"], 50.0)
+
+    def test_bottle_type_change_wipes_stash_and_linked_rows(self):
+        r = self.bottle(14, stash_amount=60, stash_discarded=10)
+        self.assertEqual(r.status_code, 201, r.data)
+        f = models.Feeding.objects.get(pk=r.data["id"])
+        self.assertEqual(f.stash_adjustments.count(), 1)
+        endpoint = reverse("api:feeding-detail", args=[f.id])
+        r = self.client.patch(endpoint, {"type": "formula"}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertIsNone(r.data["stash_amount"])
+        self.assertEqual(models.StashAdjustment.objects.filter(feeding=f).count(), 0)
+
+    def test_feeding_list_stash_fields_do_not_scale_with_row_count(self):
+        # stash_discarded/stash_discard_reason read stash_adjustments for
+        # every row; this counts only the queries touching that table, so it
+        # stays focused on the prefetch fix regardless of unrelated per-row
+        # queries (e.g. tags) the list view may also issue.
+        def make_bottle(hour):
+            r = self.bottle(hour, stash_amount=10, stash_discarded=2)
+            self.assertEqual(r.status_code, 201, r.data)
+
+        def stash_adjustment_query_count():
+            with CaptureQueriesContext(connection) as ctx:
+                response = self.client.get(reverse("api:feeding-list"))
+            self.assertEqual(response.status_code, 200)
+            return sum(
+                1 for q in ctx.captured_queries if "core_stashadjustment" in q["sql"]
+            )
+
+        make_bottle(15)
+        one_row_count = stash_adjustment_query_count()
+
+        make_bottle(16)
+        make_bottle(17)
+        make_bottle(18)
+        four_row_count = stash_adjustment_query_count()
+
+        self.assertEqual(one_row_count, 1)
+        self.assertEqual(one_row_count, four_row_count)
+
+    def test_adjustments_and_summary(self):
+        r = self.post(
+            "api:stashadjustment-list",
+            {
+                "time": "2017-11-18T07:00:00-05:00",
+                "amount": 300,
+                "kind": "added",
+                "parent": self.robin.id,
+            },
+        )
+        self.assertEqual(r.status_code, 201, r.data)
+        summary = self.client.get("/api/stash").data
+        for key in (
+            "balance",
+            "status",
+            "warn_age_hours",
+            "max_age_hours",
+            "lots",
+            "defaults",
+        ):
+            self.assertIn(key, summary)
+
+    def test_parents_endpoint(self):
+        r = self.client.get(reverse("api:parent-list"))
+        self.assertEqual(r.data["results"][0]["children"], [1])
+
+    def test_api_root_advertises_stash(self):
+        root = self.client.get("/api/").data
+        for key in ("parents", "stash-adjustments", "stash"):
+            self.assertIn(key, root)
+
+    def test_stash_defaults_values(self):
+        summary = self.client.get("/api/stash").data
+        # A new bottle only starts as taken from the stash once it is in use.
+        self.assertEqual(
+            summary["defaults"],
+            {"pumping_to_stash": True, "bottle_from_stash": False},
+        )
+        self.pumping(8, parent=self.robin.id)
+        summary = self.client.get("/api/stash").data
+        self.assertEqual(
+            summary["defaults"],
+            {"pumping_to_stash": True, "bottle_from_stash": True},
+        )
+        self.assertEqual(
+            (summary["warn_age_hours"], summary["max_age_hours"]), (48, 72)
+        )
+
+
+class ParentAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
+    endpoint = reverse("api:parent-list")
+    model = models.Parent
+
+    def setUp(self):
+        super().setUp()
+        self.parent = models.Parent.objects.create(first_name="Alex", last_name="Doe")
+        self.parent.children.add(models.Child.objects.get(pk=1))
+        self.delete_id = self.parent.slug
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["results"][0],
+            {
+                "id": self.parent.id,
+                "first_name": "Alex",
+                "last_name": "Doe",
+                "slug": self.parent.slug,
+                "picture": None,
+                "produces_milk": True,
+                "children": [1],
+            },
+        )
+
+    def test_post(self):
+        data = {"first_name": "Sam", "last_name": "Doe", "children": [1]}
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = models.Parent.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.first_name, data["first_name"])
+        self.assertEqual(list(obj.children.values_list("id", flat=True)), [1])
+
+    def test_patch(self):
+        endpoint = "{}{}/".format(self.endpoint, self.parent.slug)
+        response = self.client.patch(endpoint, {"last_name": "Smith"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["last_name"], "Smith")
+
+    def test_delete_parent_with_entries_is_refused(self):
+        start = timezone.now() - timezone.timedelta(hours=2)
+        models.Pumping.objects.create(
+            parent=self.parent,
+            start=start,
+            end=start + timezone.timedelta(minutes=10),
+            amount=50,
+        )
+        endpoint = "{}{}/".format(self.endpoint, self.parent.slug)
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["detail"],
+            "Alex Doe still has pumping or stash entries; move or delete them first.",
+        )
+        self.assertTrue(models.Parent.objects.filter(pk=self.parent.pk).exists())
+
+    def test_delete_parent_with_breastfeeding_succeeds(self):
+        # Feeding.parent is SET_NULL: unlike pumping and stash entries, a
+        # breastfeeding history must not block deleting the parent.
+        start = timezone.now() - timezone.timedelta(hours=1)
+        feeding = models.Feeding.objects.create(
+            child=models.Child.objects.get(pk=1),
+            parent=self.parent,
+            start=start,
+            end=start + timezone.timedelta(minutes=10),
+            type="breast milk",
+            method="left breast",
+        )
+        endpoint = "{}{}/".format(self.endpoint, self.parent.slug)
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(models.Parent.objects.filter(pk=self.parent.pk).exists())
+        feeding.refresh_from_db()
+        self.assertIsNone(feeding.parent)
+
+
+class StashSettingsAPITestCase(APITestCase):
+    fixtures = ["tests.json"]
+    endpoint = reverse("api:stash-settings")
+
+    def test_admin_reads_and_changes_the_settings(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data,
+            {
+                "pumping_to_stash": True,
+                "bottle_from_stash": True,
+                "warn_age_hours": 48,
+                "max_age_hours": 72,
+                "can_edit": True,
+            },
+        )
+        response = self.client.patch(
+            self.endpoint,
+            {"bottle_from_stash": False, "warn_age_hours": 24},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertFalse(response.data["bottle_from_stash"])
+        self.assertEqual(response.data["warn_age_hours"], 24)
+        self.assertFalse(stash.settings().bottle_from_stash_default)
+        self.assertEqual(stash.stash_summary()["warn_age_hours"], 24)
+
+    def test_warn_age_must_be_below_the_throw_away_age(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.patch(
+            self.endpoint, {"warn_age_hours": 72}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["warn_age_hours"],
+            ['"Expiring soon after" has to be less than "Expires after".'],
+        )
+
+    def test_patch_needs_the_settings_permission_not_change_pumping(self):
+        user = get_user_model().objects.create_user(
+            username="settings-editor", password="pw", is_staff=True
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core",
+                codename__in=["view_pumping", "can_edit_pumping_settings"],
+            )
+        )
+        self.client.login(username="settings-editor", password="pw")
+        response = self.client.patch(
+            self.endpoint, {"pumping_to_stash": False}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertTrue(response.data["can_edit"])
+        self.assertFalse(stash.settings().pumping_to_stash_default)
+
+    def test_switch_patch_ignores_ages_set_on_the_web(self):
+        self.client.login(username="admin", password="admin")
+        # The settings page doesn't check the ages against each other.
+        stash.settings().stash_warn_age_hours = 80
+        response = self.client.patch(
+            self.endpoint, {"bottle_from_stash": False}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        response = self.client.patch(
+            self.endpoint, {"max_age_hours": 96}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        response = self.client.patch(
+            self.endpoint, {"max_age_hours": 60}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        response = self.client.patch(
+            self.endpoint, {"warn_age_hours": 0}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        response = self.client.patch(
+            self.endpoint, {"warn_age_hours": -1}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_other_users_can_read_but_not_change(self):
+        user = get_user_model().objects.create_user(username="viewer", password="pw")
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core",
+                codename__in=["view_pumping", "change_pumping"],
+            )
+        )
+        self.client.login(username="viewer", password="pw")
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["can_edit"])
+        response = self.client.patch(
+            self.endpoint, {"pumping_to_stash": False}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(stash.settings().pumping_to_stash_default)
+
+
+class StashAdjustmentAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
+    endpoint = reverse("api:stashadjustment-list")
+    model = models.StashAdjustment
+
+    def setUp(self):
+        super().setUp()
+        self.adjustment = models.StashAdjustment.objects.create(
+            time="2017-11-18T07:00:00-05:00", amount=200, kind="added"
+        )
+        self.delete_id = self.adjustment.pk
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["results"][0],
+            {
+                "id": self.adjustment.id,
+                "time": "2017-11-18T07:00:00-05:00",
+                "amount": 200.0,
+                "kind": "added",
+                "reason": "",
+                "signed_amount": 200.0,
+                "parent": None,
+                "feeding": None,
+                "notes": None,
+                "tags": [],
+            },
+        )
+
+    def test_post(self):
+        data = {
+            "time": "2017-11-19T08:00:00-05:00",
+            "amount": 50,
+            "kind": "discarded",
+            "reason": "Older than 72 h",
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = models.StashAdjustment.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.kind, "discarded")
+        self.assertEqual(obj.reason, "Older than 72 h")
+        self.assertEqual(obj.signed_amount, -50.0)
+
+    def test_patch(self):
+        endpoint = "{}{}/".format(self.endpoint, self.adjustment.pk)
+        response = self.client.patch(endpoint, {"amount": 250}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["amount"], 250.0)
+
+    def test_signed_amount_is_a_float_field(self):
+        # A plain ReadOnlyField would type this as a string in the generated
+        # schema, even though the value is always numeric.
+        field = serializers.StashAdjustmentSerializer().fields["signed_amount"]
+        self.assertIsInstance(field, drf_serializers.FloatField)
+
+    def test_reason_free_text_both_kinds(self):
+        for kind, reason in (("added", "Donor milk"), ("discarded", "Spilled")):
+            with self.subTest(kind=kind):
+                response = self.client.post(
+                    self.endpoint,
+                    {
+                        "time": "2017-11-19T08:00:00-05:00",
+                        "amount": 50,
+                        "kind": kind,
+                        "reason": reason,
+                    },
+                    format="json",
+                )
+                self.assertEqual(response.status_code, 201, response.data)
+                self.assertEqual(response.data["reason"], reason)
+        response = self.client.post(
+            self.endpoint,
+            {
+                "time": "2017-11-19T08:00:00-05:00",
+                "amount": 50,
+                "kind": "added",
+                "reason": "x" * 256,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("reason", response.data)
+
+    def test_filter_adjustments_by_kind(self):
+        models.StashAdjustment.objects.create(
+            time="2017-11-19T08:00:00-05:00",
+            amount=10,
+            kind="discarded",
+            reason="Spilled",
+        )
+        models.StashAdjustment.objects.create(
+            time="2017-11-19T09:00:00-05:00",
+            amount=15,
+            kind="discarded",
+            reason="Left over",
+        )
+        response = self.client.get(self.endpoint, {"kind": "discarded"})
+        self.assertEqual(response.data["count"], 2)
+        response = self.client.get(self.endpoint, {"kind": "added"})
+        self.assertEqual(response.data["count"], 1)
+
+    def test_api_adjustment_parent_auto_fill(self):
+        data = {
+            "time": "2017-11-19T08:00:00-05:00",
+            "amount": 50,
+            "kind": "added",
+        }
+        robin = models.Parent.objects.create(first_name="Robin")
+
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["parent"], robin.id)
+
+        response = self.client.post(
+            self.endpoint, {**data, "parent": None}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data["parent"])
+
+        # An update never fills in a parent.
+        endpoint = "{}{}/".format(self.endpoint, response.data["id"])
+        response = self.client.patch(endpoint, {"amount": 60}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(response.data["parent"])
+
+        models.Parent.objects.create(first_name="Casey")
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data["parent"])
+
+    def test_api_discard_never_gets_the_single_parent(self):
+        robin = models.Parent.objects.create(first_name="Robin")
+        data = {
+            "time": "2017-11-19T08:00:00-05:00",
+            "amount": 50,
+            "kind": "discarded",
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data["parent"])
+        response = self.client.post(
+            self.endpoint, {**data, "parent": robin.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["parent"], robin.id)
+
+    def test_non_milk_parent_is_refused_unless_existing(self):
+        casey = models.Parent.objects.create(first_name="Casey")
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        data = {
+            "time": "2017-11-19T08:00:00-05:00",
+            "amount": 50,
+            "kind": "added",
+            "parent": sam.id,
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("parent", response.data)
+
+        response = self.client.post(
+            self.endpoint, {**data, "parent": casey.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        casey.produces_milk = False
+        casey.save()
+        endpoint = "{}{}/".format(self.endpoint, response.data["id"])
+        response = self.client.patch(
+            endpoint, {"parent": casey.id, "amount": 60}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["parent"], casey.id)
 
 
 class HeadCircumferenceAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
@@ -1546,6 +2598,8 @@ class CaregiverAPITestCase(APITestCase):
         # Re-fetch so group permissions are visible to the permission checks.
         self.caregiver = get_user_model().objects.get(username="caregiver")
         self.client.login(username="caregiver", password="caregiver")
+        self.parent = models.Parent.objects.create(first_name="Alex")
+        self.parent.children.add(models.Child.objects.get(pk=1))
 
     def test_caregiver_can_add_feeding(self):
         data = {
@@ -1898,6 +2952,12 @@ class CaregiverAPITestCase(APITestCase):
 
     def test_caregiver_cannot_tag_admin(self):
         response = self.client.get(reverse("api:tag-list"))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_caregiver_without_view_pumping_cannot_read_stash(self):
+        # The caregiver group grants ordinary care-log permissions (feeding,
+        # etc.) but not view_pumping, so the stash summary stays out of reach.
+        response = self.client.get("/api/stash")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 

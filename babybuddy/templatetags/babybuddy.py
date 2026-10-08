@@ -17,6 +17,21 @@ from core.models import Child
 register = template.Library()
 mark_safe_lazy = lazy(mark_safe, str)
 
+# Site settings page sections, by the model a settings group belongs to.
+SETTINGS_SECTIONS = {
+    "Sleep": _("Sleep"),
+    "Feeding": _("Feedings"),
+    "Pumping": _("Milk stash"),
+}
+
+
+@register.filter
+def settings_section(field_name):
+    """The Site Settings section a field belongs to, from its dbsettings name
+    (`<module>__<Model>__<attribute>`)."""
+    parts = field_name.split("__")
+    return SETTINGS_SECTIONS.get(parts[1], "") if len(parts) == 3 else ""
+
 
 @register.simple_tag
 def axes_lockout_message():

@@ -4,6 +4,7 @@ import io
 import tempfile
 from unittest.mock import patch
 
+from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -17,6 +18,7 @@ from PIL import Image
 
 from core import models
 from core.forms import EventTypeDeleteForm
+from core.widgets import ChildRadioSelect
 
 
 class FormsTestCaseBase(TestCase):
@@ -186,6 +188,19 @@ class InitialValuesTestCase(FormsTestCaseBase):
         page = self.c.get("/sleep/add/?timer=not-a-number")
         self.assertEqual(page.status_code, 200)
         self.assertNotIn("timer", page.context["form"].fields)
+
+    def test_auto_fill_single_parent_only(self):
+        robin = models.Parent.objects.create(first_name="Robin")
+        robin.children.add(self.child)
+
+        page = self.c.get("/feedings/add/?child={}".format(self.child.slug))
+        self.assertEqual(page.context["form"].initial["parent"], robin)
+
+        casey = models.Parent.objects.create(first_name="Casey")
+        casey.children.add(self.child)
+
+        page = self.c.get("/feedings/add/?child={}".format(self.child.slug))
+        self.assertNotIn("parent", page.context["form"].initial)
 
 
 class BMIFormsTestCase(FormsTestCaseBase):
@@ -813,6 +828,239 @@ class FeedingFormsTestCase(FormsTestCaseBase):
         self.assertContains(page, "Feeding entry for {} added".format(str(self.child)))
         self.assertNotContains(page, "intersects the specified time period")
 
+    def test_parent_cleared_for_non_breast_method(self):
+        robin = models.Parent.objects.create(first_name="Robin")
+        self.feeding.parent = robin
+        self.feeding.save()
+        params = {
+            "child": self.feeding.child.id,
+            "start": self.localtime_string(self.feeding.start),
+            "end": self.localtime_string(self.feeding.end),
+            "type": "formula",
+            "method": "bottle",
+            "amount": 4,
+            "parent": robin.id,
+        }
+        page = self.c.post("/feedings/{}/".format(self.feeding.id), params, follow=True)
+        self.assertEqual(page.status_code, 200)
+        self.feeding.refresh_from_db()
+        self.assertIsNone(self.feeding.parent)
+
+    def test_breastfeed_without_parent_gets_the_linked_parent(self):
+        child_two = models.Child.objects.create(
+            first_name="Child", last_name="Two", birth_date=timezone.localdate()
+        )
+        robin = models.Parent.objects.create(first_name="Robin")
+        robin.children.add(self.child, child_two)
+        page = self.c.get("/feedings/add/")
+        # The only milk-producing parent: filled in, and the field hidden.
+        self.assertEqual(page.context["form"].initial["parent"], robin)
+        self.assertTrue(page.context["form"].fields["parent"].widget.is_hidden)
+        end = timezone.localtime() - timezone.timedelta(minutes=5)
+        params = {
+            "child": child_two.id,
+            "start": self.localtime_string(end - timezone.timedelta(minutes=15)),
+            "end": self.localtime_string(end),
+            "type": "breast milk",
+            "method": "left breast",
+        }
+        page = self.c.post("/feedings/add/", params, follow=True)
+        self.assertEqual(page.status_code, 200)
+        feeding = models.Feeding.objects.get(child=child_two)
+        self.assertEqual(feeding.parent, robin)
+
+    def test_parent_field_label(self):
+        form = self.c.get("/feedings/add/").context["form"]
+        self.assertEqual(form.fields["parent"].label, "Breastfed by")
+
+
+class FeedingStashFormsTestCase(FormsTestCaseBase):
+    def bottle(self, hours=5, **kwargs):
+        t = timezone.localtime() - timezone.timedelta(hours=hours)
+        params = {
+            "child": self.child.id,
+            "start": self.localtime_string(t),
+            "type": "breast milk",
+            "amount": "60",
+        }
+        params.update(kwargs)
+        return self.c.post("/feedings/bottle/add/", params, follow=True)
+
+    def latest(self):
+        return models.Feeding.objects.latest("start")
+
+    def edit(self, feeding, **kwargs):
+        params = {
+            "child": self.child.id,
+            "start": self.localtime_string(feeding.start),
+            "end": self.localtime_string(feeding.end),
+            "type": "breast milk",
+            "method": "bottle",
+            "amount": "60",
+            "from_stash": "on",
+        }
+        params.update(kwargs)
+        return self.c.post("/feedings/{}/".format(feeding.id), params, follow=True)
+
+    def test_switch_always_present_and_on_once_the_stash_is_used(self):
+        for path in ("/feedings/bottle/add/", "/feedings/add/"):
+            form = self.c.get(path).context["form"]
+            self.assertIn("from_stash", form.fields)
+            self.assertFalse(form.initial["from_stash"])
+        models.StashAdjustment.objects.create(
+            time=timezone.localtime() - timezone.timedelta(days=1),
+            amount=100,
+            kind="added",
+        )
+        for path in ("/feedings/bottle/add/", "/feedings/add/"):
+            form = self.c.get(path).context["form"]
+            self.assertTrue(form.initial["from_stash"])
+
+    def test_discarded_amount_label(self):
+        form = self.c.get("/feedings/bottle/add/").context["form"]
+        self.assertEqual(form.fields["discarded_amount"].label, "Amount discarded")
+
+    def test_from_stash_needs_an_amount(self):
+        for extra in ({}, {"discarded": "on", "discarded_amount": "5"}):
+            with self.subTest(extra=extra):
+                page = self.bottle(8, amount="", from_stash="on", **extra)
+                self.assertEqual(page.status_code, 200)
+                self.assertFormError(
+                    page.context["form"],
+                    "amount",
+                    "Enter the amount taken from the stash.",
+                )
+        self.assertFalse(models.Feeding.objects.exists())
+
+    def test_lowering_amount_follows_untouched_full_stash_amount(self):
+        self.bottle(9, from_stash="on")
+        f = self.latest()
+        self.edit(f, amount="40", stash_amount="60")
+        f.refresh_from_db()
+        self.assertEqual((f.amount, f.stash_amount), (40.0, 40.0))
+
+    def test_changing_amount_clamps_untouched_partial_stash_amount(self):
+        self.bottle(10, from_stash="on", stash_amount="50")
+        f = self.latest()
+        self.edit(f, amount="80", stash_amount="50")
+        f.refresh_from_db()
+        self.assertEqual((f.amount, f.stash_amount), (80.0, 50.0))
+        self.edit(f, amount="30", stash_amount="50")
+        f.refresh_from_db()
+        self.assertEqual((f.amount, f.stash_amount), (30.0, 30.0))
+
+    def test_edited_stash_amount_wins(self):
+        self.bottle(11, from_stash="on")
+        f = self.latest()
+        self.edit(f, amount="50", stash_amount="20")
+        f.refresh_from_db()
+        self.assertEqual((f.amount, f.stash_amount), (50.0, 20.0))
+
+    def test_from_stash_defaults_to_amount(self):
+        self.bottle(from_stash="on")
+        self.assertEqual(self.latest().stash_amount, 60.0)
+
+    def test_parent_fed_and_self_fed_can_come_from_the_stash(self):
+        self.bottle(from_stash="on")
+        f = self.latest()
+        for method in ("parent fed", "self fed"):
+            with self.subTest(method=method):
+                self.edit(f, method=method, stash_amount="50")
+                f.refresh_from_db()
+                self.assertEqual((f.method, f.stash_amount), (method, 50.0))
+        self.edit(f, method="left breast")
+        f.refresh_from_db()
+        self.assertIsNone(f.stash_amount)
+
+    def test_discard_amount_says_it_is_extra(self):
+        field = self.c.get("/feedings/add/").context["form"].fields["discarded_amount"]
+        self.assertEqual(field.help_text, "On top of the amount fed.")
+
+    def test_discard_creates_linked_adjustment(self):
+        self.bottle(4, from_stash="on", discarded="on", discarded_amount="10")
+        f = self.latest()
+        discard = f.linked_discard()
+        self.assertEqual((discard.amount, discard.reason), (10.0, ""))
+
+    def test_feeding_discard_reason_free_text(self):
+        for path in ("/feedings/bottle/add/", "/feedings/add/"):
+            with self.subTest(path=path):
+                field = self.c.get(path).context["form"].fields["discard_reason"]
+                self.assertIsInstance(field.widget, forms.TextInput)
+                self.assertEqual(field.max_length, 255)
+        self.bottle(
+            4,
+            from_stash="on",
+            discarded="on",
+            discarded_amount="10",
+            discard_reason="Spilled",
+        )
+        f = self.latest()
+        discard = f.linked_discard()
+        self.assertEqual((discard.amount, discard.reason), (10.0, "Spilled"))
+        self.edit(
+            f,
+            discarded="on",
+            discarded_amount="10",
+            discard_reason="Baby fell asleep",
+        )
+        discard.refresh_from_db()
+        self.assertEqual(discard.reason, "Baby fell asleep")
+        page = self.bottle(
+            5,
+            from_stash="on",
+            discarded="on",
+            discarded_amount="10",
+            discard_reason="x" * 256,
+        )
+        self.assertIn("discard_reason", page.context["form"].errors)
+
+    def test_discard_needs_amount(self):
+        page = self.bottle(3, from_stash="on", discarded="on")
+        self.assertFormError(
+            page.context["form"], "discarded_amount", "Enter how much was discarded."
+        )
+
+    def test_switching_type_clears_stash_and_discard(self):
+        self.bottle(
+            2, type="formula", from_stash="on", discarded="on", discarded_amount="5"
+        )
+        f = self.latest()
+        self.assertIsNone(f.stash_amount)
+        self.assertFalse(f.stash_adjustments.exists())
+
+    def test_edit_bottle_shows_linked_discard(self):
+        self.bottle(
+            6,
+            from_stash="on",
+            discarded="on",
+            discarded_amount="10",
+            discard_reason="Left over",
+        )
+        form = self.c.get("/feedings/{}/".format(self.latest().id)).context["form"]
+        self.assertTrue(form.initial["discarded"])
+        self.assertEqual(form.initial["discarded_amount"], 10.0)
+        self.assertEqual(form.initial["discard_reason"], "Left over")
+
+    def test_stash_off_removes_discard(self):
+        self.bottle(7, from_stash="on", discarded="on", discarded_amount="20")
+        f = self.latest()
+        self.c.post(
+            "/feedings/{}/".format(f.id),
+            {
+                "child": self.child.id,
+                "start": self.localtime_string(f.start),
+                "end": self.localtime_string(f.end),
+                "type": "breast milk",
+                "method": "bottle",
+                "amount": "60",
+            },
+            follow=True,
+        )
+        f.refresh_from_db()
+        self.assertIsNone(f.stash_amount)
+        self.assertFalse(f.stash_adjustments.exists())
+
 
 class HeadCircumferenceFormsTestCase(FormsTestCaseBase):
     @classmethod
@@ -983,24 +1231,72 @@ class NoteFormsTestCase(FormsTestCaseBase):
         self.assertContains(page, "Note entry deleted")
 
 
+class ParentFormsTestCase(FormsTestCaseBase):
+    def test_add_edit_detail(self):
+        page = self.c.post(
+            "/parents/add/",
+            {"first_name": "Robin", "children": [self.child.id]},
+            follow=True,
+        )
+        self.assertEqual(page.status_code, 200)
+        parent = models.Parent.objects.get(first_name="Robin")
+        self.assertEqual(list(parent.children.all()), [self.child])
+        self.c.post(
+            "/parents/{}/edit/".format(parent.slug),
+            {"first_name": "Robin", "last_name": "C", "children": [self.child.id]},
+            follow=True,
+        )
+        page = self.c.get("/parents/robin-c/")
+        self.assertContains(page, "Robin C")
+        self.assertContains(page, str(self.child))
+
+    def test_delete_parent_with_pumping_is_refused(self):
+        parent = models.Parent.objects.create(first_name="Casey")
+        start = timezone.localtime() - timezone.timedelta(hours=2)
+        models.Pumping.objects.create(
+            parent=parent,
+            start=start,
+            end=start + timezone.timedelta(minutes=10),
+            amount=80,
+        )
+        page = self.c.post("/parents/{}/delete/".format(parent.slug), follow=True)
+        self.assertTrue(models.Parent.objects.filter(pk=parent.pk).exists())
+        self.assertContains(page, "still has pumping or stash entries")
+
+
 class PumpingFormsTestCase(FormsTestCaseBase):
     @classmethod
     def setUpClass(cls):
         super(PumpingFormsTestCase, cls).setUpClass()
-        start = timezone.localtime() - timezone.timedelta(days=1)
+        cls.robin = models.Parent.objects.create(first_name="Robin")
+        cls.robin.children.add(cls.child)
+        # Older than every offset `params()` uses, so `latest("start")` in the
+        # stash tests below always finds the entry the test itself created.
+        start = timezone.localtime() - timezone.timedelta(days=5)
         end = start + timezone.timedelta(minutes=3)
         cls.bp = models.Pumping.objects.create(
-            child=cls.child,
+            parent=cls.robin,
             amount=50.0,
             start=start,
             end=end,
         )
 
+    def params(self, offset=0, **kwargs):
+        start = timezone.localtime() - timezone.timedelta(days=2, minutes=offset)
+        data = {
+            "parent": self.robin.id,
+            "amount": "100.0",
+            "start": self.localtime_string(start),
+            "end": self.localtime_string(start + timezone.timedelta(minutes=15)),
+        }
+        data.update(kwargs)
+        return data
+
     def test_add(self):
         start = timezone.localtime() - timezone.timedelta(days=3)
         end = start + timezone.timedelta(minutes=5)
         params = {
-            "child": self.child.id,
+            "parent": self.robin.id,
             "amount": "50.0",
             "start": self.localtime_string(start),
             "end": self.localtime_string(end),
@@ -1008,11 +1304,11 @@ class PumpingFormsTestCase(FormsTestCaseBase):
 
         page = self.c.post("/pumping/add/", params, follow=True)
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, "Pumping entry for {} added".format(str(self.child)))
+        self.assertContains(page, "Pumping entry added!")
 
     def test_edit(self):
         params = {
-            "child": self.bp.child.id,
+            "parent": self.bp.parent.id,
             "amount": self.bp.amount + 2,
             "start": self.localtime_string(self.bp.start),
             "end": self.localtime_string(self.bp.end + timezone.timedelta(minutes=15)),
@@ -1021,14 +1317,173 @@ class PumpingFormsTestCase(FormsTestCaseBase):
         self.assertEqual(page.status_code, 200)
         self.bp.refresh_from_db()
         self.assertEqual(self.bp.amount, params["amount"])
-        self.assertContains(
-            page, "Pumping entry for {} updated".format(str(self.bp.child))
-        )
+        self.assertContains(page, "Pumping entry updated.")
 
     def test_delete(self):
         page = self.c.post("/pumping/{}/delete/".format(self.bp.id), follow=True)
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Pumping entry deleted")
+
+    def test_add_stored_defaults_to_full_amount(self):
+        self.c.post("/pumping/add/", self.params(to_stash="on"), follow=True)
+        self.assertEqual(models.Pumping.objects.latest("start").stash_amount, 100.0)
+
+    def test_partial_store(self):
+        self.c.post(
+            "/pumping/add/",
+            self.params(60, to_stash="on", stash_amount="40"),
+            follow=True,
+        )
+        self.assertEqual(models.Pumping.objects.filter(stash_amount=40.0).count(), 1)
+
+    def test_switch_off_clears_stash_amount(self):
+        self.c.post(
+            "/pumping/add/",
+            self.params(120, stash_amount="40", notes="off"),
+            follow=True,
+        )
+        self.assertIsNone(models.Pumping.objects.get(notes="off").stash_amount)
+
+    def test_child_link_preselects_parent_not_child(self):
+        page = self.c.get("/pumping/add/?child={}".format(self.child.slug))
+        form = page.context["form"]
+        self.assertEqual(form.initial["parent"], self.robin)
+        self.assertNotIn("child", form.fields)
+
+    def edit(self, pumping, **kwargs):
+        params = {
+            "parent": self.robin.id,
+            "amount": str(pumping.amount),
+            "start": self.localtime_string(pumping.start),
+            "end": self.localtime_string(pumping.end),
+            "to_stash": "on",
+        }
+        params.update(kwargs)
+        return self.c.post("/pumping/{}/".format(pumping.id), params, follow=True)
+
+    def stored(self, days, amount, stash_amount):
+        start = timezone.localtime() - timezone.timedelta(days=days)
+        return models.Pumping.objects.create(
+            parent=self.robin,
+            amount=amount,
+            stash_amount=stash_amount,
+            start=start,
+            end=start + timezone.timedelta(minutes=10),
+        )
+
+    def test_lowering_amount_follows_untouched_full_stash_amount(self):
+        p = self.stored(6, 100, 100)
+        self.edit(p, amount="70", stash_amount="100.0")
+        p.refresh_from_db()
+        self.assertEqual((p.amount, p.stash_amount), (70.0, 70.0))
+
+    def test_changing_amount_clamps_untouched_partial_stash_amount(self):
+        p = self.stored(7, 100, 60)
+        self.edit(p, amount="150", stash_amount="60.0")
+        p.refresh_from_db()
+        self.assertEqual((p.amount, p.stash_amount), (150.0, 60.0))
+        self.edit(p, amount="40", stash_amount="60.0")
+        p.refresh_from_db()
+        self.assertEqual((p.amount, p.stash_amount), (40.0, 40.0))
+
+    def test_edit_legacy_entry_adds_the_parent_and_keeps_the_child(self):
+        sam = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+        start = timezone.localtime() - timezone.timedelta(days=8)
+        legacy = models.Pumping.objects.create(
+            child=sam,
+            amount=30.0,
+            start=start,
+            end=start + timezone.timedelta(minutes=5),
+        )
+        self.edit(legacy, to_stash="")
+        legacy.refresh_from_db()
+        self.assertEqual((legacy.parent, legacy.child), (self.robin, sam))
+        # Deleting the child leaves the parent's entry, without the child.
+        sam.delete()
+        legacy.refresh_from_db()
+        self.assertEqual((legacy.parent, legacy.child), (self.robin, None))
+
+    def add_second_child(self):
+        second = models.Child.objects.create(
+            first_name="Jamie", birth_date=timezone.localdate()
+        )
+        self.robin.children.add(second)
+        return second
+
+    def test_add_for_a_single_child_parent_fills_the_child(self):
+        page = self.c.post("/pumping/add/", self.params(offset=200), follow=True)
+        self.assertContains(page, "Pumping entry added!")
+        self.assertEqual(models.Pumping.objects.latest("id").child, self.child)
+
+    def test_add_from_a_childs_page_keeps_that_child(self):
+        second = self.add_second_child()
+        page = self.c.post(
+            "/pumping/add/?child={}".format(second.slug),
+            self.params(offset=210),
+            follow=True,
+        )
+        self.assertContains(page, "Pumping entry added!")
+        entry = models.Pumping.objects.latest("id")
+        self.assertEqual((entry.parent, entry.child), (self.robin, second))
+        # Without a child, a parent of two children leaves it empty.
+        self.c.post("/pumping/add/", self.params(offset=230), follow=True)
+        entry = models.Pumping.objects.latest("id")
+        self.assertEqual((entry.parent, entry.child), (self.robin, None))
+
+    def test_add_from_a_timer_keeps_the_timers_child(self):
+        second = self.add_second_child()
+        timer = models.Timer.objects.create(
+            user=self.user,
+            child=second,
+            start=timezone.localtime() - timezone.timedelta(minutes=20),
+        )
+        page = self.c.post(
+            "/pumping/add/?timer={}".format(timer.id),
+            self.params(offset=250),
+            follow=True,
+        )
+        self.assertContains(page, "Pumping entry added!")
+        self.assertEqual(models.Pumping.objects.latest("id").child, second)
+
+    def test_another_parent_does_not_keep_the_previous_parents_child(self):
+        casey = models.Parent.objects.create(first_name="Casey")
+        sam = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+        casey.children.add(sam)
+        self.c.post("/pumping/add/", self.params(offset=270), follow=True)
+        entry = models.Pumping.objects.latest("id")
+        self.assertEqual(entry.child, self.child)
+        self.edit(entry, parent=casey.id, to_stash="")
+        entry.refresh_from_db()
+        self.assertEqual((entry.parent, entry.child), (casey, sam))
+
+    def test_list_filters_by_parent(self):
+        page = self.c.get("/pumping/", {"parent": self.robin.id})
+        self.assertEqual(page.status_code, 200)
+        fields = page.context["filter"].form.fields
+        self.assertIn("parent", fields)
+        self.assertNotIn("child", fields)
+
+    def test_switch_initial_follows_setting_and_entry(self):
+        self.assertTrue(self.c.get("/pumping/add/").context["form"].initial["to_stash"])
+        page = self.c.get("/pumping/{}/".format(self.bp.id))
+        self.assertFalse(page.context["form"].initial["to_stash"])
+
+    def test_timer_shows_in_fieldsets_and_preselects_parent(self):
+        timer = models.Timer.objects.create(
+            user=self.user, child=self.child, name="Stopwatch"
+        )
+        page = self.c.get("/pumping/add/?timer={}".format(timer.id))
+        form = page.context["form"]
+        self.assertEqual(form.initial["parent"], self.robin)
+        required_fieldset_names = [
+            field.name for field in form.hydrated_fielsets[0]["fields"]
+        ]
+        self.assertIn("timer", required_fieldset_names)
+        self.assertContains(page, "Stopwatch")
 
 
 class SleepFormsTestCase(FormsTestCaseBase):
@@ -1420,17 +1875,17 @@ class ValidationsTestCase(FormsTestCaseBase):
             "milestone": "",
         }
 
-        for path in [
-            "/feedings/add/",
-            "/pumping/add/",
-            "/sleep/add/",
-            "/tummy-time/add/",
+        for path, field in [
+            ("/feedings/add/", "child"),
+            ("/pumping/add/", "parent"),
+            ("/sleep/add/", "child"),
+            ("/tummy-time/add/", "child"),
         ]:
             with self.subTest(path=path):
                 page = self.c.post(path, params, follow=True)
                 self.assertEqual(page.status_code, 200)
-                self.assertFormError(
-                    page.context["form"], "child", "This field is required."
+                self.assertIn(
+                    "This field is required.", page.context["form"].errors[field]
                 )
 
 
@@ -1631,3 +2086,186 @@ class MedicationFormsTestCase(FormsTestCaseBase):
         self.assertFormError(
             page.context["form"], "time", "Date/time can not be in the future."
         )
+
+
+class StashPageTestCase(FormsTestCaseBase):
+    def test_adjustment_lifecycle(self):
+        robin = models.Parent.objects.create(first_name="Robin")
+        form = self.c.get(
+            "/stash/adjustments/add/?parent=robin&kind=discarded"
+        ).context["form"]
+        self.assertEqual(
+            (form.initial["parent"], form.initial["kind"]), (robin, "discarded")
+        )
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        self.c.post(
+            "/stash/adjustments/add/",
+            {
+                "time": self.localtime_string(t),
+                "amount": "250",
+                "kind": "added",
+                "parent": robin.id,
+            },
+            follow=True,
+        )
+        adj = models.StashAdjustment.objects.get()
+        self.assertContains(self.c.get("/stash/"), "250")
+        self.assertContains(self.c.get("/stash/adjustments/"), "Added")
+        self.c.post(
+            "/stash/adjustments/{}/".format(adj.id),
+            {
+                "time": self.localtime_string(t),
+                "amount": "200",
+                "kind": "added",
+                "parent": robin.id,
+            },
+            follow=True,
+        )
+        adj.refresh_from_db()
+        self.assertEqual(adj.amount, 200)
+        self.c.post("/stash/adjustments/{}/delete/".format(adj.id), follow=True)
+        self.assertFalse(models.StashAdjustment.objects.exists())
+
+    def test_added_keeps_its_reason(self):
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        self.c.post(
+            "/stash/adjustments/add/",
+            {
+                "time": self.localtime_string(t),
+                "amount": "100",
+                "kind": "added",
+                "reason": "Donor milk",
+            },
+            follow=True,
+        )
+        adj = models.StashAdjustment.objects.get()
+        self.assertEqual(adj.reason, "Donor milk")
+
+    def test_throw_away_prefill(self):
+        page = self.c.get(
+            "/stash/adjustments/add/"
+            "?kind=discarded&amount=85&reason=Older%20than%2072%20h"
+        )
+        initial = page.context["form"].initial
+        self.assertEqual(
+            (initial["kind"], initial["amount"], initial["reason"]),
+            ("discarded", 85.0, "Older than 72 h"),
+        )
+        self.assertContains(page, 'value="Older than 72 h"')
+        for bad in ("-5", "0", "abc", "nan", "inf"):
+            with self.subTest(amount=bad):
+                page = self.c.get(
+                    "/stash/adjustments/add/?kind=discarded&amount=" + bad
+                )
+                self.assertNotIn("amount", page.context["form"].initial)
+        page = self.c.get("/stash/adjustments/add/?kind=bogus&reason=" + "x" * 300)
+        initial = page.context["form"].initial
+        self.assertNotIn("kind", initial)
+        self.assertEqual(initial["reason"], "x" * 255)
+
+    def test_throw_away_prefill_ignored_on_edit(self):
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        adj = models.StashAdjustment.objects.create(
+            time=t, amount=20, kind="added", reason="Donor milk"
+        )
+        form = self.c.get(
+            "/stash/adjustments/{}/?kind=discarded&amount=5&reason=Spilled".format(
+                adj.id
+            )
+        ).context["form"]
+        self.assertEqual(
+            (form.initial["kind"], form.initial["amount"], form.initial["reason"]),
+            ("added", 20.0, "Donor milk"),
+        )
+
+    def test_reason_can_be_cleared(self):
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        adj = models.StashAdjustment.objects.create(
+            time=t, amount=20, kind="discarded", reason="Spilled"
+        )
+        url = "/stash/adjustments/{}/".format(adj.id)
+        self.c.post(
+            url,
+            {
+                "time": self.localtime_string(t),
+                "amount": "20",
+                "kind": "discarded",
+                "reason": "",
+            },
+            follow=True,
+        )
+        adj.refresh_from_db()
+        self.assertEqual(adj.reason, "")
+
+    def test_parent_hidden_and_filled_with_single_parent(self):
+        robin = models.Parent.objects.create(first_name="Robin")
+        page = self.c.get("/stash/adjustments/add/?kind=added")
+        form = page.context["form"]
+        self.assertIsInstance(form.fields["parent"].widget, forms.HiddenInput)
+        # Filled in on save, for added milk only: a discard without a parent
+        # takes the oldest milk of anyone.
+        self.assertNotIn("parent", form.initial)
+        self.assertContains(
+            page,
+            '<input type="hidden" name="parent" id="id_parent">',
+            html=True,
+        )
+        self.assertNotContains(page, '<label for="id_parent"')
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        self.c.post(
+            "/stash/adjustments/add/",
+            {"time": self.localtime_string(t), "amount": "100", "kind": "added"},
+            follow=True,
+        )
+        self.assertEqual(models.StashAdjustment.objects.get().parent, robin)
+        self.c.post(
+            "/stash/adjustments/add/",
+            {"time": self.localtime_string(t), "amount": "40", "kind": "discarded"},
+            follow=True,
+        )
+        discard = models.StashAdjustment.objects.get(kind="discarded")
+        self.assertIsNone(discard.parent)
+        # An explicitly chosen parent is kept on a discard.
+        form = self.c.get(
+            "/stash/adjustments/add/?kind=discarded&parent=robin"
+        ).context["form"]
+        self.assertEqual(form.initial["parent"], robin)
+
+    def test_parent_hidden_with_zero_parents(self):
+        page = self.c.get("/stash/adjustments/add/?kind=added")
+        form = page.context["form"]
+        self.assertIsInstance(form.fields["parent"].widget, forms.HiddenInput)
+        self.assertNotContains(page, '<label for="id_parent"')
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        self.c.post(
+            "/stash/adjustments/add/",
+            {"time": self.localtime_string(t), "amount": "100", "kind": "added"},
+            follow=True,
+        )
+        self.assertIsNone(models.StashAdjustment.objects.get().parent)
+
+    def test_parent_visible_with_two_parents(self):
+        models.Parent.objects.create(first_name="Robin")
+        models.Parent.objects.create(first_name="Casey")
+        page = self.c.get("/stash/adjustments/add/?kind=added")
+        field = page.context["form"].fields["parent"]
+        self.assertNotIsInstance(field.widget, forms.HiddenInput)
+        self.assertIsInstance(field.widget, ChildRadioSelect)
+        self.assertFalse(field.required)
+        self.assertNotIn("parent", page.context["form"].initial)
+        self.assertContains(page, '<label for="id_parent"')
+        self.assertNotContains(page, 'type="hidden" name="parent"')
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        self.c.post(
+            "/stash/adjustments/add/",
+            {"time": self.localtime_string(t), "amount": "100", "kind": "added"},
+            follow=True,
+        )
+        self.assertIsNone(models.StashAdjustment.objects.get().parent)
+
+    def test_stash_page_lists_discarded_rows(self):
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        models.StashAdjustment.objects.create(
+            time=t, amount=20, kind="discarded", reason="Spilled"
+        )
+        self.assertContains(self.c.get("/stash/"), "Discarded (Spilled)")

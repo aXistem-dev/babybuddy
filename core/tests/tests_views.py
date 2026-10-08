@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
+import re
 import warnings
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.management import call_command
+from django.db import connection
 from django.core.paginator import UnorderedObjectListWarning
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.test import Client as HttpClient
 from django.utils import timezone
+from django.utils.formats import get_format
 
 from faker import Faker
 
-from core import models
+from core import models, stash, views
 
 
 class ViewsTestCase(TestCase):
@@ -78,6 +82,15 @@ class ViewsTestCase(TestCase):
         self.assertEqual(page.status_code, 200)
         page = self.c.get("/changes/{}/delete/".format(entry.id))
         self.assertEqual(page.status_code, 200)
+
+    def test_feeding_admin_shows_and_filters_by_parent(self):
+        admin = get_user_model().objects.create_superuser("feeding-admin")
+        client = HttpClient()
+        client.force_login(admin)
+        parent = models.Parent.objects.first()
+        page = client.get("/admin/core/feeding/?parent__id__exact={}".format(parent.id))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "column-parent")
 
     def test_event_views(self):
         page = self.c.get("/events/")
@@ -192,6 +205,12 @@ class ViewsTestCase(TestCase):
         page = self.c.get("/notes/{}/delete/".format(entry.id))
         self.assertEqual(page.status_code, 200)
 
+    def test_parent_views(self):
+        page = self.c.get("/parents/")
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/parents/add/")
+        self.assertEqual(page.status_code, 200)
+
     def test_pumping_views(self):
         page = self.c.get("/pumping/")
         self.assertEqual(page.status_code, 200)
@@ -202,6 +221,14 @@ class ViewsTestCase(TestCase):
         page = self.c.get("/pumping/{}/".format(entry.id))
         self.assertEqual(page.status_code, 200)
         page = self.c.get("/pumping/{}/delete/".format(entry.id))
+        self.assertEqual(page.status_code, 200)
+
+    def test_stash_views(self):
+        page = self.c.get("/stash/")
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/stash/adjustments/")
+        self.assertEqual(page.status_code, 200)
+        page = self.c.get("/stash/adjustments/add/")
         self.assertEqual(page.status_code, 200)
 
     def test_sleep_views(self):
@@ -447,3 +474,680 @@ class TimelinePermissionsTestCase(TestCase):
         self.assertIn("Timeline Medication", content)
         self.assertIn("Timeline private note", content)
         self.assertIn("Timeline tooth brushing", content)
+
+
+class ParentDetailPermissionsTestCase(TestCase):
+    """
+    The parent page only requires core.view_parent, but its pumping cards
+    and the shared stash card both render pumping data, so they stay hidden
+    without core.view_pumping too.
+    """
+
+    def setUp(self):
+        self.parent = models.Parent.objects.create(first_name="Robin")
+        self.c = HttpClient()
+        self.url = "/parents/{}/".format(self.parent.slug)
+
+    def _login(self, username, codenames):
+        user = get_user_model().objects.create_user(
+            username=username, password="password", is_active=True
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core", codename__in=codenames
+            )
+        )
+        self.c.login(username=username, password="password")
+        return user
+
+    def test_view_parent_without_view_pumping_hides_pumping_and_stash_cards(self):
+        self._login("viewer", ["view_parent"])
+        page = self.c.get(self.url)
+        self.assertEqual(page.status_code, 200)
+
+        content = page.content.decode()
+        self.assertNotIn("Last Pumping", content)
+        self.assertNotIn("Recent Pumpings", content)
+        self.assertNotIn("Milk stash", content)
+
+    def test_view_parent_with_view_pumping_shows_pumping_and_stash_cards(self):
+        self._login("viewer-with-pumping", ["view_parent", "view_pumping"])
+        page = self.c.get(self.url)
+        self.assertEqual(page.status_code, 200)
+
+        content = page.content.decode()
+        self.assertIn("Last Pumping", content)
+        self.assertIn("Recent Pumpings", content)
+        self.assertIn("Milk stash", content)
+
+    def test_milk_buttons_only_for_a_parent_who_produces_milk(self):
+        self._login("adder", ["view_parent", "add_pumping", "add_stashadjustment"])
+        buttons = ("Add pumping", "Add to stash", "Discard from stash")
+        content = self.c.get(self.url).content.decode()
+        for button in buttons:
+            self.assertIn(button, content)
+        self.parent.produces_milk = False
+        self.parent.save()
+        content = self.c.get(self.url).content.decode()
+        for button in buttons:
+            self.assertNotIn(button, content)
+
+    def test_tables_follow_their_own_view_permissions(self):
+        self._login("parent-only", ["view_parent"])
+        content = self.c.get(self.url).content.decode()
+        self.assertNotIn("No pumping entries found.", content)
+        self.assertNotIn("No stash adjustments found.", content)
+
+        self._login("pumping-only", ["view_parent", "view_pumping"])
+        content = self.c.get(self.url).content.decode()
+        self.assertIn("No pumping entries found.", content)
+        self.assertNotIn("No stash adjustments found.", content)
+
+        self._login("adjustments-only", ["view_parent", "view_stashadjustment"])
+        content = self.c.get(self.url).content.decode()
+        self.assertNotIn("No pumping entries found.", content)
+        self.assertIn("No stash adjustments found.", content)
+
+    def test_parent_page_breastfeeding_card(self):
+        child = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+        # A fixed time early today, so the test doesn't depend on the clock
+        # (just after midnight, "a few minutes ago" would be yesterday).
+        now = timezone.localtime().replace(hour=1, minute=0, second=0, microsecond=0)
+        for start, end in ((25, 15), (15, 0)):
+            models.Feeding.objects.create(
+                child=child,
+                parent=self.parent,
+                start=now - timezone.timedelta(minutes=start),
+                end=now - timezone.timedelta(minutes=end),
+                type="breast milk",
+                method="left breast",
+            )
+        self._login("breastfeeding-viewer", ["view_parent", "view_feeding"])
+        content = self.c.get(self.url).content.decode()
+        self.assertIn("2 sessions, 25 min today", content)
+        self.assertIn("2 sessions, 25 min in the last 7 days", content)
+
+    def test_parent_page_breastfeeding_card_counts_tandem_minutes_once(self):
+        now = timezone.localtime().replace(hour=1, minute=0, second=0, microsecond=0)
+        for name in ("Sam", "Casey"):
+            child = models.Child.objects.create(
+                first_name=name, birth_date=timezone.localdate()
+            )
+            models.Feeding.objects.create(
+                child=child,
+                parent=self.parent,
+                start=now - timezone.timedelta(minutes=15),
+                end=now,
+                type="breast milk",
+                method="both breasts",
+            )
+        self._login("tandem-viewer", ["view_parent", "view_feeding"])
+        content = self.c.get(self.url).content.decode()
+        self.assertIn("2 sessions, 15 min today", content)
+        self.assertIn("2 sessions, 15 min in the last 7 days", content)
+
+    def test_feeding_list_links_parent_only_with_view_parent(self):
+        # Names show only when there is a choice of milk-producing parent.
+        models.Parent.objects.create(first_name="Casey")
+        child = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+        now = timezone.localtime()
+        models.Feeding.objects.create(
+            child=child,
+            parent=self.parent,
+            start=now - timezone.timedelta(minutes=10),
+            end=now,
+            type="breast milk",
+            method="left breast",
+        )
+        self._login("feeding-viewer", ["view_feeding"])
+        content = self.c.get("/feedings/").content.decode()
+        self.assertIn("Robin", content)
+        self.assertNotIn('href="{}"'.format(self.url), content)
+
+        self._login("feeding-and-parent-viewer", ["view_feeding", "view_parent"])
+        content = self.c.get("/feedings/").content.decode()
+        self.assertIn('href="{}"'.format(self.url), content)
+
+    def test_view_parent_without_view_feeding_hides_breastfeeding_card(self):
+        child = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+        now = timezone.localtime()
+        models.Feeding.objects.create(
+            child=child,
+            parent=self.parent,
+            start=now - timezone.timedelta(minutes=10),
+            end=now,
+            type="breast milk",
+            method="left breast",
+        )
+        self._login("no-feeding-viewer", ["view_parent"])
+        content = self.c.get(self.url).content.decode()
+        self.assertNotIn("Breastfeeding", content)
+
+
+class StashPagesTestCase(TestCase):
+    def setUp(self):
+        self.robin = models.Parent.objects.create(first_name="Robin")
+        self.alex = models.Child.objects.create(
+            first_name="Alex", birth_date=timezone.localdate()
+        )
+        self.c = HttpClient()
+
+    def _login(self, username, codenames=(), **kwargs):
+        user = get_user_model().objects.create_user(
+            username=username, password="password", is_active=True, **kwargs
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core", codename__in=codenames
+            )
+        )
+        self.c.login(username=username, password="password")
+        return user
+
+    def test_adjustment_form_reason_is_a_text_input(self):
+        self._login("stash-admin", is_superuser=True)
+        content = self.c.get("/stash/adjustments/add/").content.decode()
+        self.assertRegex(
+            content, r'<input type="text" name="reason"[^>]*maxlength="255"'
+        )
+        self.assertNotIn("id_discard_reason", content)
+
+    def throw_away_links(self, content):
+        return re.findall(
+            r'<a href="/stash/adjustments/add/\?(kind=discarded&amount=[^"]*)"'
+            r"[^>]*>\s*([^<]*?)\s*</a>",
+            content,
+        )
+
+    def test_throw_away_links(self):
+        def added(hours_ago, amount):
+            models.StashAdjustment.objects.create(
+                time=timezone.localtime() - timezone.timedelta(hours=hours_ago),
+                amount=amount,
+                kind="added",
+            )
+
+        reason = "reason=Older%20than%2072%20h"
+        dashboard = "/children/{}/dashboard/".format(self.alex.slug)
+        self._login("stash-admin", is_superuser=True)
+        added(1, 40)
+        self.assertEqual(
+            self.throw_away_links(self.c.get("/stash/").content.decode()), []
+        )
+        self.assertNotIn(
+            "?kind=discarded&amount=", self.c.get(dashboard).content.decode()
+        )
+
+        added(100, 60)
+        links = self.throw_away_links(self.c.get("/stash/").content.decode())
+        self.assertEqual(
+            links,
+            [
+                ("kind=discarded&amount=60&" + reason, "Throw away all expired milk"),
+                ("kind=discarded&amount=60&" + reason, "Throw away"),
+            ],
+        )
+        self.assertEqual(
+            self.throw_away_links(self.c.get(dashboard).content.decode()),
+            [("kind=discarded&amount=60&" + reason, "Throw away")],
+        )
+
+        added(90, 25.5)
+        links = self.throw_away_links(self.c.get("/stash/").content.decode())
+        self.assertEqual(
+            links,
+            [
+                ("kind=discarded&amount=85.5&" + reason, "Throw away all expired milk"),
+                ("kind=discarded&amount=60&" + reason, "Throw away"),
+            ],
+        )
+
+        self._login("viewer", ["view_pumping", "view_child"])
+        for url in ("/stash/", dashboard):
+            with self.subTest(url=url):
+                content = self.c.get(url).content.decode()
+                self.assertIn("Milk stash", content)
+                self.assertNotIn("?kind=discarded&amount=", content)
+
+    def test_age_states_are_named_expiring_soon_and_expired(self):
+        dashboard = "/children/{}/dashboard/".format(self.alex.slug)
+        self._login("stash-admin", is_superuser=True)
+        models.StashAdjustment.objects.create(
+            time=timezone.localtime() - timezone.timedelta(hours=50),
+            amount=40,
+            kind="added",
+        )
+        page = self.c.get("/stash/")
+        self.assertContains(page, ">expiring soon</span>")
+        self.assertNotContains(page, ">expired</span>")
+        page = self.c.get(dashboard)
+        self.assertContains(page, "Some milk is expiring soon.")
+
+        models.StashAdjustment.objects.create(
+            time=timezone.localtime() - timezone.timedelta(hours=100),
+            amount=60,
+            kind="added",
+        )
+        page = self.c.get("/stash/")
+        self.assertContains(page, ">expiring soon</span>")
+        self.assertContains(page, ">expired</span>")
+        page = self.c.get(dashboard)
+        self.assertContains(page, "Some milk has expired: throw it away.")
+        self.assertNotContains(page, "Some milk is expiring soon.")
+
+    def add_movements(self, count, hours_ago):
+        for i in range(count):
+            t = timezone.localtime() - timezone.timedelta(hours=hours_ago + i)
+            models.Pumping.objects.create(
+                parent=self.robin,
+                start=t - timezone.timedelta(minutes=50),
+                end=t - timezone.timedelta(minutes=40),
+                amount=100,
+                stash_amount=100,
+            )
+            models.Feeding.objects.create(
+                child=self.alex,
+                start=t - timezone.timedelta(minutes=30),
+                end=t - timezone.timedelta(minutes=30),
+                type="breast milk",
+                method="bottle",
+                amount=50,
+                stash_amount=50,
+            )
+            models.StashAdjustment.objects.create(
+                time=t,
+                amount=10,
+                kind="discarded",
+                reason="Spilled",
+                parent=self.robin,
+            )
+
+    def test_movements_query_count_does_not_grow_with_rows(self):
+        self._login("stash-admin", is_superuser=True)
+        self.add_movements(1, 1)
+        self.c.get("/stash/")  # warm the settings and session caches
+        with CaptureQueriesContext(connection) as one:
+            self.c.get("/stash/")
+        self.add_movements(3, 10)
+        with CaptureQueriesContext(connection) as more:
+            self.c.get("/stash/")
+        self.assertEqual(len(one), len(more))
+
+    def test_movement_links_need_change_permission(self):
+        # Names show only when there is a choice of milk-producing parent.
+        models.Parent.objects.create(first_name="Casey")
+        self.add_movements(1, 1)
+        links = [
+            "/pumping/{}/".format(models.Pumping.objects.get().id),
+            "/feedings/{}/".format(models.Feeding.objects.get().id),
+            "/stash/adjustments/{}/".format(models.StashAdjustment.objects.get().id),
+        ]
+        self._login("viewer", ["view_pumping"])
+        content = self.c.get("/stash/").content.decode()
+        self.assertIn("Robin", content)
+        self.assertIn("Alex", content)
+        for link in links:
+            self.assertNotIn(link, content)
+
+        self._login(
+            "editor",
+            ["view_pumping", "change_pumping", "change_feeding"]
+            + ["change_stashadjustment"],
+        )
+        content = self.c.get("/stash/").content.decode()
+        for link in links:
+            self.assertIn(link, content)
+
+    def test_stash_page_child_filter(self):
+        # Names show only when there is a choice of milk-producing parent.
+        models.Parent.objects.create(first_name="Casey")
+        sam = models.Child.objects.create(
+            first_name="Sam", birth_date=timezone.localdate()
+        )
+        self.robin.children.add(sam)
+        self.add_movements(1, 1)  # pumping + Alex bottle + adjustment, all by Robin
+        models.Feeding.objects.create(
+            child=sam,
+            start=timezone.localtime() - timezone.timedelta(hours=2),
+            end=timezone.localtime() - timezone.timedelta(hours=2),
+            type="breast milk",
+            method="bottle",
+            amount=40,
+            stash_amount=40,
+        )
+        self._login("viewer", ["view_pumping"])
+
+        content = self.c.get("/stash/").content.decode()
+        self.assertIn('name="child"', content)
+
+        content = self.c.get("/stash/?child={}".format(sam.slug)).content.decode()
+        self.assertIn("Bottle · Sam", content)
+        self.assertNotIn("Bottle · Alex", content)
+        self.assertNotIn("Pumping · Robin", content)
+        self.assertNotIn("Discarded", content)
+
+        content = self.c.get("/stash/?child={}".format(self.alex.slug)).content.decode()
+        self.assertIn("Bottle · Alex", content)
+        self.assertNotIn("Bottle · Sam", content)
+
+        # An unknown slug is not an error: every movement is shown, unfiltered.
+        content = self.c.get("/stash/?child=does-not-exist").content.decode()
+        self.assertIn("Bottle · Alex", content)
+        self.assertIn("Pumping · Robin", content)
+
+    def test_warning_hidden_when_balance_positive(self):
+        self._login("viewer", ["view_pumping"])
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        models.StashAdjustment.objects.create(time=t, amount=50, kind="added")
+        page = self.c.get("/stash/")
+        self.assertNotContains(page, "core:stash-warning-dismiss")
+        self.assertNotContains(page, "/stash/warning/dismiss/")
+
+    def test_warning_shown_when_negative(self):
+        self._login("viewer", ["view_pumping"])
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        models.Feeding.objects.create(
+            child=self.alex,
+            start=t,
+            end=t,
+            type="breast milk",
+            method="bottle",
+            amount=50,
+            stash_amount=50,
+        )
+        page = self.c.get("/stash/")
+        self.assertContains(page, "/stash/warning/dismiss/")
+        self.assertContains(
+            page,
+            "The stash is below zero: more milk was taken out than was ever put in.",
+        )
+
+    def _bottle_from_stash(self, hours_ago, amount=50):
+        t = timezone.localtime() - timezone.timedelta(hours=hours_ago)
+        return models.Feeding.objects.create(
+            child=self.alex,
+            start=t,
+            end=t,
+            type="breast milk",
+            method="bottle",
+            amount=amount,
+            stash_amount=amount,
+        )
+
+    def _add_to_stash(self, hours_ago, amount):
+        t = timezone.localtime() - timezone.timedelta(hours=hours_ago)
+        return models.StashAdjustment.objects.create(
+            time=t, amount=amount, kind="added"
+        )
+
+    def test_dismiss_hides_in_this_browser_only(self):
+        self._login("viewer", ["view_pumping"])
+        self._bottle_from_stash(1)
+        page = self.c.post("/stash/warning/dismiss/", follow=True)
+        self.assertRedirects(page, "/stash/")
+        self.assertNotContains(page, "/stash/warning/dismiss/")
+        self.assertIn(views.STASH_WARNING_COOKIE, self.c.cookies)
+
+        other_browser = HttpClient()
+        other_browser.login(username="viewer", password="password")
+        page = other_browser.get("/stash/")
+        self.assertContains(page, "/stash/warning/dismiss/")
+
+    def test_dismissal_forgotten_once_back_at_zero(self):
+        self._login("viewer", ["view_pumping"])
+        self._bottle_from_stash(3)
+        self.c.post("/stash/warning/dismiss/")
+
+        self._add_to_stash(2, 50)  # back at zero
+        self.c.get("/stash/")
+        self.assertEqual(self.c.cookies[views.STASH_WARNING_COOKIE].value, "")
+
+        self._bottle_from_stash(1)  # below zero again
+        page = self.c.get("/stash/")
+        self.assertContains(page, "/stash/warning/dismiss/")
+
+    def test_next_dip_shows_again_without_a_visit_in_between(self):
+        self._login("viewer", ["view_pumping"])
+        self._bottle_from_stash(3)
+        self.c.post("/stash/warning/dismiss/")
+        self.assertNotContains(self.c.get("/stash/"), "/stash/warning/dismiss/")
+
+        self._add_to_stash(2, 50)
+        self._bottle_from_stash(1)
+        page = self.c.get("/stash/")
+        self.assertContains(page, "/stash/warning/dismiss/")
+
+    def test_parent_pickers_show_the_adult_placeholder(self):
+        self._login("stash-admin", is_superuser=True)
+        models.Parent.objects.create(first_name="Casey")
+        for path in ("/pumping/add/", "/stash/adjustments/add/"):
+            with self.subTest(path=path):
+                content = self.c.get(path).content.decode()
+                self.assertIn("parent-placeholder", content)
+                self.assertNotIn("child-placeholder", content)
+
+    def test_one_milk_parent_is_never_named(self):
+        self._login("stash-admin", is_superuser=True)
+        models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        t = timezone.localtime() - timezone.timedelta(hours=2)
+        models.Pumping.objects.create(
+            parent=self.robin, start=t, end=t, amount=60, stash_amount=60
+        )
+        content = self.c.get("/stash/").content.decode()
+        self.assertNotIn("Pumping · Robin", content)
+        self.assertNotIn("<td>Robin</td>", content)
+        form = self.c.get("/stash/adjustments/add/").context["form"]
+        self.assertTrue(form.fields["parent"].widget.is_hidden)
+        self.assertEqual(list(form.fields["parent"].queryset), [self.robin])
+
+    def test_lots_show_whose_milk_and_throw_away_takes_that_lot(self):
+        self._login("stash-admin", is_superuser=True)
+        robin = self.robin
+        casey = models.Parent.objects.create(first_name="Casey")
+        self._pumped(robin, 80, 60)
+        self._pumped(casey, 2, 100)
+        content = self.c.get("/stash/").content.decode()
+        self.assertIn("<td>Robin</td>", content)
+        self.assertIn("&parent={}".format(robin.slug), content)
+        (query, _), *_ = [
+            link for link in self.throw_away_links(content) if link[1] == "Throw away"
+        ]
+        adjustment = self._submit_throw_away(query)
+        self.assertEqual(adjustment.parent, robin)
+        self.assertEqual(self._lots(), [(casey.id, 100)])
+
+    def _when(self, value=None):
+        return timezone.localtime(value).strftime(
+            get_format("DATETIME_INPUT_FORMATS")[0]
+        )
+
+    def _pumped(self, parent, hours_ago, amount):
+        t = timezone.localtime() - timezone.timedelta(hours=hours_ago)
+        return models.Pumping.objects.create(
+            parent=parent, start=t, end=t, amount=amount, stash_amount=amount
+        )
+
+    def _lots(self):
+        return [(lot.parent_id, round(lot.amount, 2)) for lot in stash.stash_lots()]
+
+    def _submit_throw_away(self, query):
+        """Save a "Throw away" link's form as it opens, pre-filled."""
+        url = "/stash/adjustments/add/?" + query
+        form = self.c.get(url).context["form"]
+        data = {
+            "time": self._when(),
+            "kind": form.initial["kind"],
+            "amount": form.initial["amount"],
+            "reason": form.initial.get("reason", ""),
+        }
+        if form.initial.get("parent"):
+            data["parent"] = form.initial["parent"].pk
+        page = self.c.post(url, data)
+        self.assertEqual(page.status_code, 302)
+        return models.StashAdjustment.objects.latest("id")
+
+    def test_throw_away_leaves_the_single_parents_fresh_milk(self):
+        self._login("stash-admin", is_superuser=True)
+        self._add_to_stash(100, 100)  # expired starting stock, no parent
+        self._pumped(self.robin, 2, 60)
+        links = self.throw_away_links(self.c.get("/stash/").content.decode())
+        query = [q for q, text in links if text == "Throw away"][0]
+        self.assertNotIn("parent=", query)
+        adjustment = self._submit_throw_away(query)
+        self.assertIsNone(adjustment.parent)
+        self.assertEqual(self._lots(), [(self.robin.id, 60)])
+
+    def test_discard_form_leaves_the_single_parent_unset(self):
+        self._login("stash-admin", is_superuser=True)
+        form = self.c.get("/stash/adjustments/add/?kind=discarded").context["form"]
+        self.assertTrue(form.fields["parent"].widget.is_hidden)
+        self.assertNotIn("parent", form.initial)
+        for kind, parent in (("discarded", None), ("added", self.robin)):
+            with self.subTest(kind=kind):
+                self.c.post(
+                    "/stash/adjustments/add/",
+                    {"time": self._when(), "amount": "10", "kind": kind},
+                )
+                adjustment = models.StashAdjustment.objects.latest("id")
+                self.assertEqual((adjustment.kind, adjustment.parent), (kind, parent))
+
+    def test_former_milk_parents_lot_can_be_thrown_away(self):
+        self._login("stash-admin", is_superuser=True)
+        casey = models.Parent.objects.create(first_name="Casey")
+        self._pumped(casey, 80, 50)
+        casey.produces_milk = False
+        casey.save()
+        self._pumped(self.robin, 2, 60)
+        links = self.throw_away_links(self.c.get("/stash/").content.decode())
+        query = [q for q, text in links if text == "Throw away"][0]
+        self.assertIn("&parent={}".format(casey.slug), query)
+        form = self.c.get("/stash/adjustments/add/?" + query).context["form"]
+        self.assertTrue(form.fields["parent"].widget.is_hidden)
+        self.assertIn(casey, form.fields["parent"].queryset)
+        adjustment = self._submit_throw_away(query)
+        self.assertEqual(adjustment.parent, casey)
+        self.assertEqual(self._lots(), [(self.robin.id, 60)])
+
+    def test_hidden_parent_field_shows_its_error(self):
+        self._login("stash-admin", is_superuser=True)
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        page = self.c.post(
+            "/stash/adjustments/add/",
+            {"time": self._when(), "amount": "10", "kind": "added", "parent": sam.id},
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertTrue(page.context["form"].fields["parent"].widget.is_hidden)
+        self.assertIn("parent", page.context["form"].errors)
+        self.assertRegex(
+            page.content.decode(),
+            r'<div class="alert alert-danger" role="alert">\s*<strong>Parent</strong>:'
+            r"\s*Select a valid choice",
+        )
+        self.assertFalse(models.StashAdjustment.objects.exists())
+
+    def test_bottle_discard_takes_the_oldest_milk_like_the_bottle(self):
+        self._login("stash-admin", is_superuser=True)
+        casey = models.Parent.objects.create(first_name="Casey")
+        self.robin.children.add(self.alex)
+        self._pumped(casey, 10, 100)
+        self._pumped(self.robin, 5, 100)
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        page = self.c.post(
+            "/feedings/add/",
+            {
+                "child": self.alex.id,
+                "start": self._when(t),
+                "end": self._when(t),
+                "type": "breast milk",
+                "method": "bottle",
+                "amount": "50",
+                "from_stash": "on",
+                "discarded": "on",
+                "discarded_amount": "20",
+            },
+        )
+        self.assertEqual(page.status_code, 302)
+        feeding = models.Feeding.objects.get()
+        self.assertEqual(feeding.linked_discard().parent, self.robin)
+        self.assertEqual(self._lots(), [(casey.id, 30), (self.robin.id, 100)])
+
+    def test_pumping_form_without_milk_parents_shows_the_field_and_error(self):
+        self._login("stash-admin", is_superuser=True)
+        self.robin.produces_milk = False
+        self.robin.save()
+        page = self.c.get("/pumping/add/?parent={}".format(self.robin.slug))
+        form = page.context["form"]
+        self.assertFalse(form.fields["parent"].widget.is_hidden)
+        self.assertNotIn("parent", form.initial)
+        self.assertContains(page, '<label for="id_parent"')
+        t = timezone.localtime() - timezone.timedelta(hours=1)
+        page = self.c.post(
+            "/pumping/add/?parent={}".format(self.robin.slug),
+            {"start": self._when(t), "end": self._when(t), "amount": "50"},
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("parent", page.context["form"].errors)
+        self.assertContains(page, "This field is required.")
+        self.assertFalse(models.Pumping.objects.exists())
+
+    def test_existing_non_milk_parent_can_stay_on_edit(self):
+        self._login("stash-admin", is_superuser=True)
+        casey = models.Parent.objects.create(first_name="Casey")
+        pumping = self._pumped(casey, 3, 40)
+        casey.produces_milk = False
+        casey.save()
+        sam = models.Parent.objects.create(first_name="Sam", produces_milk=False)
+        data = {
+            "parent": casey.id,
+            "start": self._when(pumping.start),
+            "end": self._when(pumping.end),
+            "amount": "45",
+            "to_stash": "on",
+        }
+        page = self.c.post("/pumping/{}/".format(pumping.id), data)
+        self.assertEqual(page.status_code, 302)
+        pumping.refresh_from_db()
+        self.assertEqual((pumping.parent, pumping.amount), (casey, 45))
+        page = self.c.post(
+            "/pumping/{}/".format(pumping.id), {**data, "parent": sam.id}
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("parent", page.context["form"].errors)
+
+    def test_menu_has_one_stash_entry_and_page_links_the_list(self):
+        self._login("stash-admin", is_superuser=True)
+        content = self.c.get("/stash/").content.decode()
+        self.assertEqual(content.count('href="/stash/"'), 1)
+        self.assertIn('href="/stash/adjustments/"', content)
+        self.assertIn('href="/stash/adjustments/add/"', content)
+        # Children, parents and notes sit together under "Family".
+        self.assertRegex(
+            content, r'id="nav-children-menu-link"[^>]*>\s*<i[^>]*></i>\s*Family'
+        )
+
+    def test_dismiss_requires_post(self):
+        self._login("viewer", ["view_pumping"])
+        page = self.c.get("/stash/warning/dismiss/")
+        self.assertEqual(page.status_code, 405)
+
+    def test_legacy_banner_counts_and_explains(self):
+        self._login("stash-admin", is_superuser=True)
+        t = timezone.localtime() - timezone.timedelta(hours=3)
+        legacy = dict(
+            child=self.alex, start=t, end=t + timezone.timedelta(minutes=5), amount=9
+        )
+        models.Pumping.objects.create(**legacy)
+        page = self.c.get("/pumping/")
+        self.assertContains(page, "1 older pumping entry is not linked to a parent")
+        self.assertContains(page, "link_pumping_to_parents")
+        legacy["start"] -= timezone.timedelta(hours=1)
+        legacy["end"] -= timezone.timedelta(hours=1)
+        models.Pumping.objects.create(**legacy)
+        page = self.c.get("/pumping/")
+        self.assertContains(page, "2 older pumping entries are not linked")

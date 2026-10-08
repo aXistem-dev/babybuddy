@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from django import template
 
-from core.models import Feeding
+from core.models import Feeding, shows_milk_parent
 
 register = template.Library()
 
@@ -38,3 +38,9 @@ def feeding_time_diff_base(context, feeding):
         return feeding.end if Feeding.settings.feeding_diff_end else feeding.start
     else:
         return None
+
+
+@register.simple_tag
+def show_milk_parent():
+    """Whether pages should say whose milk it is (see core.models.shows_milk_parent)."""
+    return shows_milk_parent()

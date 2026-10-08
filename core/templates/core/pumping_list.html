@@ -7,6 +7,7 @@
     <li class="breadcrumb-item active" aria-current="page">{% trans "Pumping" %}</li>
 {% endblock %}
 {% block content %}
+    {% show_milk_parent as show_parent %}
     <h1>
         {% trans "Pumping" %}
         {% if perms.core.add_pumping %}
@@ -15,6 +16,11 @@
             </a>
         {% endif %}
     </h1>
+    {% if unassigned %}
+        <div class="alert alert-warning">
+            {% blocktrans count counter=unassigned %}{{ counter }} older pumping entry is not linked to a parent yet. Edit the entry and choose a parent, or run the link_pumping_to_parents management command.{% plural %}{{ counter }} older pumping entries are not linked to a parent yet. Edit each entry and choose a parent, or run the link_pumping_to_parents management command.{% endblocktrans %}
+        </div>
+    {% endif %}
     {% include "babybuddy/filter.html" %}
     <div class="table-responsive">
         <table class="table table-instances table-borderless table-striped table-hover align-middle">
@@ -22,10 +28,11 @@
                 <tr>
                     <th>{% trans "Actions" %}</th>
                     <th>{% trans "Date" %}</th>
-                    {% if not unique_child %}
-                        <th>{% trans "Child" %}</th>
+                    {% if show_parent %}
+                        <th>{% trans "Parent" %}</th>
                     {% endif %}
                     <th>{% trans "Amount" %}</th>
+                    <th>{% trans "Stored" %}</th>
                     <th>{% trans "Duration" %}</th>
                     <th>{% trans "Previous" %}</th>
                     <th>{% trans "Tags" %}</th>
@@ -54,12 +61,17 @@
                                 </div>
                             </td>
                             <th scope="row">{{ pumping.start|datetime_short }}</th>
-                            {% if not unique_child %}
+                            {% if show_parent %}
                                 <td>
-                                    <a href="{% url 'core:child' pumping.child.slug %}">{{ pumping.child }}</a>
+                                    {% if pumping.parent %}
+                                        <a href="{% url 'core:parent' pumping.parent.slug %}">{{ pumping.parent }}</a>
+                                    {% else %}
+                                        –
+                                    {% endif %}
                                 </td>
                             {% endif %}
                             <td>{{ pumping.amount }}</td>
+                            <td>{{ pumping.stash_amount|default_if_none:"–" }}</td>
                             <td>{{ pumping.duration|duration_string }}</td>
                             <td>
                                 {% if prev_pumping %}
@@ -72,7 +84,7 @@
                         </tr>
                         {% if pumping.notes %}
                             <tr class="{{ row_class }} row-details">
-                                <td colspan="6">
+                                <td colspan="8">
                                     <i class="icon-note me-2" aria-hidden="true"></i>{{ pumping.notes }}
                                 </td>
                             </tr>
@@ -80,7 +92,7 @@
                     {% endwith %}
                 {% empty %}
                     <tr>
-                        <th colspan="{% if not unique_child %}7{% else %}6{% endif %}">{% trans "No pumping entries found." %}</th>
+                        <th colspan="8">{% trans "No pumping entries found." %}</th>
                     </tr>
                 {% endfor %}
             </tbody>

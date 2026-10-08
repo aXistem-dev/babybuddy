@@ -83,9 +83,16 @@ class EventFilter(TimeFieldFilter, TagsFieldFilter):
 
 
 class FeedingFilter(StartEndFieldFilter, TagsFieldFilter):
+    stash_amount__isnull = filters.BooleanFilter(
+        field_name="stash_amount", lookup_expr="isnull"
+    )
+
     class Meta(StartEndFieldFilter.Meta):
         model = models.Feeding
-        fields = sorted(StartEndFieldFilter.Meta.fields + ["type", "method"])
+        fields = sorted(
+            StartEndFieldFilter.Meta.fields
+            + ["type", "method", "parent", "stash_amount__isnull"]
+        )
 
 
 class MedicationFilter(TimeFieldFilter, TagsFieldFilter):
@@ -100,8 +107,15 @@ class NoteFilter(TimeFieldFilter, TagsFieldFilter):
 
 
 class PumpingFilter(StartEndFieldFilter):
+    stash_amount__isnull = filters.BooleanFilter(
+        field_name="stash_amount", lookup_expr="isnull"
+    )
+
     class Meta(StartEndFieldFilter.Meta):
         model = models.Pumping
+        fields = sorted(
+            StartEndFieldFilter.Meta.fields + ["parent", "stash_amount__isnull"]
+        )
 
 
 class SleepFilter(StartEndFieldFilter, TagsFieldFilter):

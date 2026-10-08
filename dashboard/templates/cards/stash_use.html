@@ -1,0 +1,13 @@
+{% extends "cards/base.html" %}
+{% load i18n %}
+{% block header %}
+    <a href="{% url "core:stash" %}">{% trans "Milk from the stash" %}</a>
+{% endblock %}
+{% block title %}
+    {{ today }}
+{% endblock %}
+{% block content %}
+    {% blocktrans trimmed with week=week %}
+        {{ week }} in the last 7 days
+    {% endblocktrans %}
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "babybuddy/page.html" %}
+{% load i18n imagekit static widget_tweaks %}
+{% block title %}
+    {% trans "Parents" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Parents" %}</li>
+{% endblock %}
+{% block content %}
+    <h1>
+        {% trans "Parents" %}
+        {% if perms.core.add_parent %}
+            <a href="{% url 'core:parent-add' %}" class="btn btn-sm btn-success">
+                <i class="icon-child" aria-hidden="true"></i> {% trans "Add Parent" %}
+            </a>
+        {% endif %}
+    </h1>
+    {% include "babybuddy/filter.html" %}
+    <div class="table-responsive">
+        <table class="table table-borderless table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>
+                        <i class="icon-camera" aria-hidden="true"></i>
+                    </th>
+                    <th>{% trans "First Name" %}</th>
+                    <th>{% trans "Last Name" %}</th>
+                    <th>{% trans "Children" %}</th>
+                    <th>{% trans "Breast milk" %}</th>
+                    <th class="text-center">{% trans "Actions" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for parent in object_list %}
+                    <tr>
+                        <td>
+                            {% if parent.picture %}
+                                {% include "core/parent_thumbnail.html" %}
+                            {% else %}
+                                <img src="{% static 'babybuddy/img/core/parent-placeholder.png' %}"
+                                     width="40"
+                                     height="40"
+                                     class="img-fluid rounded-circle" />
+                            {% endif %}
+                        </td>
+                        <th scope="row">
+                            <a href="{% url 'core:parent' parent.slug %}">{{ parent.first_name }}</a>
+                        </th>
+                        <td>{{ parent.last_name }}</td>
+                        <td>{{ parent.children.all|join:", " }}</td>
+                        <td>{{ parent.produces_milk|yesno|capfirst }}</td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm"
+                                 role="group"
+                                 aria-label="{% trans "Actions" %}">
+                                {% if perms.core.change_parent %}
+                                    <a href="{% url 'core:parent-update' parent.slug %}"
+                                       class="btn btn-warning">
+                                        <i class="icon-update" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                                {% if perms.core.delete_parent %}
+                                    <a href="{% url 'core:parent-delete' parent.slug %}"
+                                       class="btn btn-danger">
+                                        <i class="icon-delete" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <th colspan="6">{% trans "No parents found." %}</th>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "babybuddy/paginator.html" %}
+{% endblock %}

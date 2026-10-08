@@ -33,6 +33,8 @@ class EntryPermissionsTestCase(TestCase):
         self.client.force_login(self.user)
         self.start = timezone.now() - timezone.timedelta(hours=2)
         self.end = self.start + timezone.timedelta(minutes=10)
+        self.parent = models.Parent.objects.create(first_name="Robin")
+        self.parent.children.add(self.child)
 
     def grant(self, *codenames):
         for codename in codenames:
@@ -51,6 +53,8 @@ class EntryPermissionsTestCase(TestCase):
         if path == "feedings":
             data.update(type="formula", method="bottle", amount="50")
         elif path == "pumping":
+            del data["child"]
+            data["parent"] = models.parent_for_child(self.child).pk
             data["amount"] = "50"
         return data
 
@@ -347,14 +351,16 @@ class EntryPermissionsTestCase(TestCase):
 
     def test_unauthorized_tag_editor_is_hidden_but_fieldsets_still_hydrate(self):
         for path, model in self.timer_entries:
-            entry = model.objects.create(
-                **{
-                    **self.entry_data(path),
-                    "child": self.child,
-                    "start": self.start,
-                    "end": self.end,
-                }
-            )
+            entry_kwargs = {
+                **self.entry_data(path),
+                "start": self.start,
+                "end": self.end,
+            }
+            if path == "pumping":
+                entry_kwargs["parent"] = self.parent
+            else:
+                entry_kwargs["child"] = self.child
+            entry = model.objects.create(**entry_kwargs)
             for url in (f"/{path}/add/", f"/{path}/{entry.pk}/"):
                 with self.subTest(url=url):
                     response = self.client.get(url)

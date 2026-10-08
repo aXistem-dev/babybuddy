@@ -1,0 +1,97 @@
+{% extends "babybuddy/page.html" %}
+{% load datetime i18n misc widget_tweaks %}
+{% block title %}
+    {% trans "Stash adjustments" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'core:stash' %}">{% trans "Milk stash" %}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Stash adjustments" %}</li>
+{% endblock %}
+{% block content %}
+    {% show_milk_parent as show_parent %}
+    <h1>
+        {% trans "Stash adjustments" %}
+        {% if perms.core.add_stashadjustment %}
+            <a href="{% url 'core:stashadjustment-add' %}"
+               class="btn btn-sm btn-success">
+                <i class="icon-add" aria-hidden="true"></i> {% trans "Add a Stash Adjustment" %}
+            </a>
+        {% endif %}
+    </h1>
+    {% include "babybuddy/filter.html" %}
+    <div class="table-responsive">
+        <table class="table table-instances table-borderless table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>{% trans "Actions" %}</th>
+                    <th>{% trans "Date" %}</th>
+                    <th>{% trans "Kind" %}</th>
+                    <th>{% trans "Amount" %}</th>
+                    {% if show_parent %}
+                        <th>{% trans "Parent" %}</th>
+                    {% endif %}
+                    <th>{% trans "Feeding" %}</th>
+                    <th>{% trans "Tags" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for adjustment in object_list %}
+                    <tr>
+                        <td>
+                            <div class="btn-group btn-group-sm"
+                                 role="group"
+                                 aria-label="{% trans "Actions" %}">
+                                {% if perms.core.change_stashadjustment %}
+                                    <a href="{% url 'core:stashadjustment-update' adjustment.id %}"
+                                       class="btn btn-primary">
+                                        <i class="icon-update" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                                {% if perms.core.delete_stashadjustment %}
+                                    <a href="{% url 'core:stashadjustment-delete' adjustment.id %}"
+                                       class="btn btn-danger">
+                                        <i class="icon-delete" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <th scope="row">{{ adjustment.time|datetime_short }}</th>
+                        <td>{{ adjustment.get_kind_display }}{% if adjustment.reason %} ({{ adjustment.reason }}){% endif %}</td>
+                        <td class="{% if adjustment.signed_amount < 0 %}text-danger{% endif %}">{{ adjustment.signed_amount }}</td>
+                        {% if show_parent %}
+                            <td>
+                                {% if adjustment.parent %}
+                                    <a href="{% url 'core:parent' adjustment.parent.slug %}">{{ adjustment.parent }}</a>
+                                {% else %}
+                                    –
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                        <td>
+                            {% if adjustment.feeding %}
+                                <a href="{% url 'core:feeding-update' adjustment.feeding.id %}">{{ adjustment.feeding }}</a>
+                            {% else %}
+                                –
+                            {% endif %}
+                        </td>
+                        <td>{% include "core/render_tag_list.html" with tags=adjustment.tags.all %}</td>
+                    </tr>
+                    {% if adjustment.notes %}
+                        <tr class="{{ row_class }} row-details">
+                            <td colspan="7">
+                                <i class="icon-note me-2" aria-hidden="true"></i>{{ adjustment.notes }}
+                            </td>
+                        </tr>
+                    {% endif %}
+                {% empty %}
+                    <tr>
+                        <th colspan="7">{% trans "No stash adjustments found." %}</th>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "babybuddy/paginator.html" %}
+{% endblock %}
