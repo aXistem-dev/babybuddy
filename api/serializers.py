@@ -153,6 +153,14 @@ class ActivityTypeSerializer(serializers.HyperlinkedModelSerializer):
         )
         extra_kwargs = {"slug": {"required": False, "read_only": True}}
 
+    def validate(self, attrs):
+        # Run the model's clean(), which refuses names without a usable slug.
+        instance = deepcopy(self.instance) if self.instance else self.Meta.model()
+        for attr, value in attrs.items():
+            setattr(instance, attr, value)
+        instance.clean()
+        return attrs
+
 
 class ActivitySerializer(CoreModelWithDurationSerializer, TaggableSerializer):
     type = serializers.PrimaryKeyRelatedField(

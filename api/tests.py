@@ -111,12 +111,22 @@ class ActivityTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertEqual(obj.name, "Walk")
         self.assertEqual(obj.slug, "walk")
 
-    def test_patch(self):
+    def test_patch_keeps_the_slug(self):
         endpoint = "{}{}/".format(self.endpoint, self.activity_type.id)
         response = self.client.patch(endpoint, {"name": "Bath Time"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.activity_type.refresh_from_db()
-        self.assertEqual(self.activity_type.slug, "bath-time")
+        self.assertEqual(self.activity_type.name, "Bath Time")
+        self.assertEqual(self.activity_type.slug, "bath")
+
+    def test_post_refuses_a_clashing_or_empty_slug(self):
+        for name in ("bath!", "🛁", "x" * 101):
+            with self.subTest(name=name):
+                response = self.client.post(
+                    self.endpoint, {"name": name}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("name", response.data)
 
 
 class ActivityAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
