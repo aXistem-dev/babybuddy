@@ -1,7 +1,7 @@
-{% extends 'babybuddy/page.html' %}
+{% extends "babybuddy/page.html" %}
 {% load i18n %}
 {% block title %}
-    {% if request.resolver_match.url_name == 'activity-update' %}
+    {% if request.resolver_match.url_name == "activity-update" %}
         {% trans "Update an Activity Entry" %}
     {% else %}
         {% trans "Add an Activity Entry" %}
@@ -26,7 +26,7 @@
         <h1>{% trans "Add an Activity Entry" %}</h1>
     {% endif %}
     {% if form.fields.type.queryset.exists %}
-        {% include 'babybuddy/form.html' %}
+        {% include "babybuddy/form.html" %}
     {% else %}
         <div class="alert alert-info" role="alert">
             {% trans "No activity types have been created yet." %}

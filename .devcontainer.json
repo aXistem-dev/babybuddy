@@ -5,7 +5,9 @@
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/node:1": {
       "version": "24"
-    }
+    },
+    "ghcr.io/devcontainers-extra/features/gulp-cli:2": {},
+    "ghcr.io/devcontainers-extra/features/pipenv:2": {}
   },
   "customizations": {
     "vscode": {
@@ -34,6 +36,6 @@
     "DJANGO_SETTINGS_MODULE": "babybuddy.settings.development",
     "PIPENV_VENV_IN_PROJECT": "1"
   },
-  "postCreateCommand": "npm install -g gulp-cli && pipenv install --dev && npm install --include=dev && gulp migrate",
-  "forwardPorts": [8000]
+  "postCreateCommand": "pipenv install --dev && npm install --include=dev && gulp migrate",
+  "appPort": [8000]
 }

@@ -1,9 +1,19 @@
 {
   "features": {
+    "ghcr.io/devcontainers-extra/features/gulp-cli:2": {
+      "version": "2.0.16",
+      "resolved": "ghcr.io/devcontainers-extra/features/gulp-cli@sha256:d11dcf333d70693f77c34a885cbf9cfd5e5cb5674ed8ddc9430a55322792ef7c",
+      "integrity": "sha256:d11dcf333d70693f77c34a885cbf9cfd5e5cb5674ed8ddc9430a55322792ef7c"
+    },
+    "ghcr.io/devcontainers-extra/features/pipenv:2": {
+      "version": "2.0.18",
+      "resolved": "ghcr.io/devcontainers-extra/features/pipenv@sha256:7547d7ca1a2d5d2dd6e89306a3079ecbf0f781c114f1413443501296261ed0ce",
+      "integrity": "sha256:7547d7ca1a2d5d2dd6e89306a3079ecbf0f781c114f1413443501296261ed0ce"
+    },
     "ghcr.io/devcontainers/features/github-cli:1": {
-      "version": "1.1.1",
-      "resolved": "ghcr.io/devcontainers/features/github-cli@sha256:94879eebb6a0e4e2f197de9f12db7427cb4a25b82d93c55239ce8c8fc394a1b4",
-      "integrity": "sha256:94879eebb6a0e4e2f197de9f12db7427cb4a25b82d93c55239ce8c8fc394a1b4"
+      "version": "1.1.2",
+      "resolved": "ghcr.io/devcontainers/features/github-cli@sha256:7c409bf6316ffd85f04fd92fba85a744282639e603417dd4796409866bdb6805",
+      "integrity": "sha256:7c409bf6316ffd85f04fd92fba85a744282639e603417dd4796409866bdb6805"
     },
     "ghcr.io/devcontainers/features/node:1": {
       "version": "1.7.1",

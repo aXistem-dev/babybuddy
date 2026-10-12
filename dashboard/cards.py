@@ -9,6 +9,7 @@ from core.models import ActivityType
 BUILT_IN_CARDS = [
     ("timer_list", _("Timers")),
     ("feeding_last", _("Last Feeding")),
+    ("notes_recent", _("Recent Notes")),
     ("diaperchange_last", _("Last Diaper Change")),
     ("pumping_last", _("Last Pumping")),
     ("pumping_recent", _("Recent Pumpings")),

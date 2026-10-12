@@ -361,6 +361,53 @@ class TemplateTagsTestCase(TestCase):
         self.assertFalse(data["empty"])
         self.assertFalse(data["hide_empty"])
 
+    def test_weight_change_weekly_same_date_returns_none(self):
+        models.Weight.objects.filter(child=self.child).delete()
+        day = timezone.localtime().date()
+        models.Weight.objects.create(child=self.child, weight=2490.0, date=day)
+        models.Weight.objects.create(child=self.child, weight=2420.0, date=day)
+
+        stats = cards._weight_statistics(self.child)
+        self.assertIsNotNone(stats)
+        self.assertIsNone(stats["change_weekly"])
+
+    def test_weight_change_weekly_single_entry_returns_none(self):
+        models.Weight.objects.filter(child=self.child).delete()
+        models.Weight.objects.create(
+            child=self.child,
+            weight=2490.0,
+            date=timezone.localtime().date(),
+        )
+
+        stats = cards._weight_statistics(self.child)
+        self.assertIsNotNone(stats)
+        self.assertIsNone(stats["change_weekly"])
+
+    def test_weight_change_weekly_requires_one_week_span(self):
+        """
+        Dashboard weekly change must not project a full week from a short
+        span between measurements (#587).
+        """
+        models.Weight.objects.filter(child=self.child).delete()
+        day = timezone.localtime().date()
+
+        models.Weight.objects.create(
+            child=self.child, weight=2490.0, date=day - timezone.timedelta(days=1)
+        )
+        models.Weight.objects.create(child=self.child, weight=2420.0, date=day)
+
+        stats = cards._weight_statistics(self.child)
+        self.assertIsNotNone(stats)
+        self.assertIsNone(stats["change_weekly"])
+
+        models.Weight.objects.create(
+            child=self.child, weight=2400.0, date=day + timezone.timedelta(days=7)
+        )
+        stats = cards._weight_statistics(self.child)
+        # oldest 2490 -> newest 2400 over 8 days = -90g / (8/7) week
+        self.assertIsNotNone(stats["change_weekly"])
+        self.assertAlmostEqual(stats["change_weekly"], -90 / (8 / 7))
+
     def test_card_timer_list(self):
         user = get_user_model().objects.first()
         child = models.Child.objects.first()
@@ -416,3 +463,25 @@ class TemplateTagsTestCase(TestCase):
         self.assertIsInstance(data["last"], models.TummyTime)
         stats = {"count": 3, "total": timezone.timedelta(0, 300)}
         self.assertEqual(data["stats"], stats)
+
+    def test_card_notes_recent(self):
+        data = cards.card_notes_recent(self.context, self.child)
+        self.assertEqual(data["type"], "note")
+        self.assertFalse(data["empty"])
+        self.assertFalse(data["hide_empty"])
+        self.assertIsInstance(data["notes"][0], models.Note)
+        self.assertEqual(data["notes"][0], models.Note.objects.first())
+
+    @mock.patch("dashboard.templatetags.cards.timezone")
+    def test_card_notes_recent_filter_age(self, mocked_timezone):
+        # The fixture note is dated 2017-11-18, so a "now" a week later leaves it
+        # outside the window the dashboard_hide_age setting asks for.
+        request = MockUserRequest(get_user_model().objects.first())
+        request.user.settings.dashboard_hide_age = timezone.timedelta(days=1)
+        context = {"request": request}
+        now = timezone.localtime().strptime("2017-11-25", "%Y-%m-%d")
+        mocked_timezone.localtime.return_value = timezone.make_aware(now)
+
+        data = cards.card_notes_recent(context, self.child)
+        self.assertTrue(data["empty"])
+        self.assertEqual(data["notes"], [])
