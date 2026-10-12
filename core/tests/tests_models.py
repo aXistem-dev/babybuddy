@@ -4,6 +4,7 @@ import datetime
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
+from django.db.models import ProtectedError
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
@@ -123,15 +124,16 @@ class ActivityTestCase(TestCase):
         self.assertEqual(activity.end, start)
         self.assertEqual(activity.duration, datetime.timedelta(0))
 
-    def test_activity_deleted_with_type(self):
+    def test_type_in_use_is_protected(self):
         models.Activity.objects.create(
             child=self.child,
             type=self.play,
             start=timezone.localtime(),
             end=timezone.localtime(),
         )
-        self.play.delete()
-        self.assertEqual(models.Activity.objects.count(), 0)
+        with self.assertRaises(ProtectedError):
+            self.play.delete()
+        self.assertEqual(models.Activity.objects.count(), 1)
 
 
 class BMITestCase(TestCase):

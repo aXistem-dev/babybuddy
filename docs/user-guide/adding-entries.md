@@ -24,6 +24,9 @@ _Activities > Activity Types_. Each activity type has:
   dashboards, but their existing entries are kept.
 - **Sort order** -- controls the order activity types appear in.
 
+An activity type that is in use can only be deleted together with its
+activities: the delete page shows how many there are and asks to confirm.
+
 Once an activity type exists, add entries for it from the plus sign in the top
 navigation bar (select Activity), from _Activities > Activity entry_, or from
 the activity's dashboard card.

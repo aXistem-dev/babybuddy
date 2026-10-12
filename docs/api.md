@@ -318,20 +318,32 @@ would give the same slug as another type's, or no slug at all, is refused.
 
 The list of activity types has one more key on every page, `permissions`,
 which tells a client whether the user may add, change and delete activity
-types. A client can use it to decide which management options to show,
-instead of working out the user's permissions itself:
+types, and delete a type together with its activities. A client can use it to
+decide which management options to show, instead of working out the user's
+permissions itself:
 
 ```json
 {
   "count": 3,
   "next": null,
   "previous": null,
-  "permissions": { "add": true, "change": true, "delete": false },
+  "permissions": {
+    "add": true,
+    "change": true,
+    "delete": false,
+    "delete_with_activities": false
+  },
   "results": [{...}]
 }
 ```
 
 A single activity type does not include `permissions`.
+
+An activity type that is used by activities is not deleted on its own: the
+`DELETE` request returns `409 Conflict` with the number of activities in
+`activity_count`. Adding `?delete_activities=true` deletes the type and all of
+its activities together, for a user who may delete activities (`403
+Forbidden` otherwise).
 
 An activity has `child`, `type` (the activity type's `id`), `start`, `end`,
 `duration`, `notes` and `tags`, and can be filtered by `child`, `type`, `tags`

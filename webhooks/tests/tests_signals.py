@@ -76,7 +76,7 @@ class WebhookSignalTestCase(TestCase):
                 ("activity.created", str(activity.pk)),
             ],
         )
-        # Deleting a type deletes its activities, and each one is announced.
+        activity.delete()
         activity_type.delete()
         self.assertEqual(
             list(

@@ -167,7 +167,13 @@ class ActivityTypePermissionsAPITestCase(APITestCase):
     def test_admin(self):
         self.client.login(username="admin", password="admin")
         self.assertEqual(
-            self.get_permissions(), {"add": True, "change": True, "delete": True}
+            self.get_permissions(),
+            {
+                "add": True,
+                "change": True,
+                "delete": True,
+                "delete_with_activities": True,
+            },
         )
 
     def test_caregiver(self):
@@ -175,7 +181,13 @@ class ActivityTypePermissionsAPITestCase(APITestCase):
             "caregiver", groups=[settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"]]
         )
         self.assertEqual(
-            self.get_permissions(), {"add": False, "change": False, "delete": False}
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": False,
+                "delete": False,
+                "delete_with_activities": False,
+            },
         )
 
     def test_change_without_delete(self):
@@ -183,12 +195,23 @@ class ActivityTypePermissionsAPITestCase(APITestCase):
             "editor", permissions=["view_activitytype", "change_activitytype"]
         )
         self.assertEqual(
-            self.get_permissions(), {"add": False, "change": True, "delete": False}
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": True,
+                "delete": False,
+                "delete_with_activities": False,
+            },
         )
 
     def test_every_page(self):
         self.client.login(username="admin", password="admin")
-        expected = {"add": True, "change": True, "delete": True}
+        expected = {
+            "add": True,
+            "change": True,
+            "delete": True,
+            "delete_with_activities": True,
+        }
         for offset in (0, 1, 2):
             with self.subTest(offset=offset):
                 self.assertEqual(
@@ -204,7 +227,15 @@ class ActivityTypePermissionsAPITestCase(APITestCase):
         with patch("api.pagination.ActivityTypePagination.default_limit", new=None):
             permissions = self.get_permissions()
             response = self.client.get(self.endpoint)
-        self.assertEqual(permissions, {"add": True, "change": True, "delete": True})
+        self.assertEqual(
+            permissions,
+            {
+                "add": True,
+                "change": True,
+                "delete": True,
+                "delete_with_activities": True,
+            },
+        )
         self.assertEqual(response.data["count"], 2)
         self.assertEqual(response.data["next"], None)
         self.assertEqual(len(response.data["results"]), 2)
@@ -224,12 +255,70 @@ class ActivityTypePermissionsAPITestCase(APITestCase):
         self.assertIn("permissions", schema["required"])
         self.assertEqual(
             set(schema["properties"]["permissions"]["properties"]),
-            {"add", "change", "delete"},
+            {"add", "change", "delete", "delete_with_activities"},
         )
         # Other lists keep the standard pagination.
         schema = response.data["paths"]["/api/activities/"]["get"]["responses"]
         schema = schema["200"]["content"]["application/json"]["schema"]
         self.assertNotIn("permissions", schema["properties"])
+
+
+class ActivityTypeDeleteAPITestCase(APITestCase):
+    """
+    An activity type that is used by activities is only deleted together with
+    them, on request and with permission to delete activities.
+    """
+
+    fixtures = ["tests.json"]
+
+    def setUp(self):
+        self.client.login(username="admin", password="admin")
+        self.activity_type = models.ActivityType.objects.create(name="Bath")
+        for hours in (1, 2):
+            models.Activity.objects.create(
+                child=models.Child.objects.first(),
+                type=self.activity_type,
+                start=timezone.localtime() - timezone.timedelta(hours=hours),
+            )
+        self.endpoint = reverse("api:activitytype-detail", args=[self.activity_type.id])
+
+    def test_in_use(self):
+        response = self.client.delete(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["activity_count"], 2)
+        self.assertTrue(models.ActivityType.objects.exists())
+
+    def test_with_activities(self):
+        response = self.client.delete(self.endpoint + "?delete_activities=true")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(models.ActivityType.objects.exists())
+        self.assertFalse(models.Activity.objects.exists())
+
+    def test_unused(self):
+        unused = models.ActivityType.objects.create(name="Walk")
+        response = self.client.delete(
+            reverse("api:activitytype-detail", args=[unused.id])
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_invalid_flag(self):
+        response = self.client.delete(self.endpoint + "?delete_activities=maybe")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("delete_activities", response.data)
+
+    def test_without_permission_to_delete_activities(self):
+        user = get_user_model().objects.create_user(
+            username="editor", password="editor"
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                codename__in=["view_activitytype", "delete_activitytype"]
+            )
+        )
+        self.client.login(username="editor", password="editor")
+        response = self.client.delete(self.endpoint + "?delete_activities=true")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(models.Activity.objects.count(), 2)
 
 
 class ActivityAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
