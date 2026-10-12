@@ -1,7 +1,16 @@
 # -*- coding: utf-8 -*-
 from rest_framework.pagination import LimitOffsetPagination
 
-ACTIVITY_TYPE_ACTIONS = ("add", "change", "delete")
+ACTIVITY_TYPE_ACTIONS = ("add", "change", "delete", "delete_with_activities")
+
+
+def can_delete_activity_type_with_activities(user):
+    """
+    Whether a user may delete an activity type together with its activities.
+    """
+    return user.has_perm("core.delete_activitytype") and user.has_perm(
+        "core.delete_activity"
+    )
 
 
 def activity_type_permissions(user):
@@ -9,10 +18,14 @@ def activity_type_permissions(user):
     The activity type management actions a user may take, so that clients can
     offer them without working out the permissions themselves.
     """
-    return {
+    permissions = {
         action: user.has_perm("core.{}_activitytype".format(action))
-        for action in ACTIVITY_TYPE_ACTIONS
+        for action in ("add", "change", "delete")
     }
+    permissions["delete_with_activities"] = can_delete_activity_type_with_activities(
+        user
+    )
+    return permissions
 
 
 def with_activity_type_permissions(data, user):
@@ -45,7 +58,7 @@ class ActivityTypePagination(LimitOffsetPagination):
         properties["permissions"] = {
             "type": "object",
             "description": "Whether the user may add, change and delete activity "
-            "types.",
+            "types, and delete a type together with its activities.",
             "required": list(ACTIVITY_TYPE_ACTIONS),
             "properties": {
                 action: {"type": "boolean", "example": True}

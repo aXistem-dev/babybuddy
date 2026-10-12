@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import ProtectedError
 from django.shortcuts import get_object_or_404
 
 from rest_framework import mixins, status, viewsets, views
@@ -13,7 +15,11 @@ from babybuddy import models as babybuddy_models
 from webhooks import models as webhooks_models
 
 from . import serializers, filters
-from .pagination import ActivityTypePagination, with_activity_type_permissions
+from .pagination import (
+    ActivityTypePagination,
+    can_delete_activity_type_with_activities,
+    with_activity_type_permissions,
+)
 
 
 class ActivityTypeViewSet(viewsets.ModelViewSet):
@@ -42,6 +48,60 @@ class ActivityTypeViewSet(viewsets.ModelViewSet):
                 request.user,
             )
         return response
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete an activity type. A type that is still used by activities is
+        only deleted with ?delete_activities=true, which deletes its activities
+        as well.
+        """
+        delete_activities = request.query_params.get(
+            "delete_activities", "false"
+        ).lower()
+        if delete_activities not in ("true", "false", "1", "0"):
+            return Response(
+                {"delete_activities": ["Must be true or false."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        instance = self.get_object()
+        if delete_activities in ("true", "1"):
+            if not can_delete_activity_type_with_activities(request.user):
+                return Response(
+                    {
+                        "detail": "You do not have permission to delete activities, "
+                        "so this activity type can not be deleted with its activities."
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            # One transaction: either the type and all of its activities are
+            # gone, or nothing is. Locking the type keeps activities from being
+            # added to it meanwhile, where the database supports it.
+            try:
+                with transaction.atomic():
+                    instance = models.ActivityType.objects.select_for_update().get(
+                        pk=instance.pk
+                    )
+                    instance.entries.all().delete()
+                    instance.delete()
+            except ProtectedError:
+                return self.in_use_response(instance)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        try:
+            instance.delete()
+        except ProtectedError:
+            return self.in_use_response(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @staticmethod
+    def in_use_response(instance):
+        return Response(
+            {
+                "detail": "This activity type is used by activities and can not be "
+                "deleted.",
+                "activity_count": instance.entries.count(),
+            },
+            status=status.HTTP_409_CONFLICT,
+        )
 
 
 class ActivityViewSet(viewsets.ModelViewSet):

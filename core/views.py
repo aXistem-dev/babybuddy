@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from django.contrib import messages
 from django.contrib.messages.views import SuccessMessageMixin
-from django.db.models import Count
+from django.db import transaction
+from django.db.models import Count, ProtectedError
 from django.db.models.functions import Lower
 from django.forms import Form, ValidationError
 from django.http import HttpResponseRedirect
@@ -132,14 +133,61 @@ class ActivityTypeUpdate(CoreUpdateView):
         return _("%(name)s updated.") % cleaned_data
 
 
+class ActivitiesChanged(Exception):
+    """The activities of a type changed after the user confirmed deleting them."""
+
+
 class ActivityTypeDelete(CoreDeleteView):
     model = models.ActivityType
+    form_class = forms.ActivityTypeDeleteForm
     template_name = "core/activitytype_confirm_delete.html"
     permission_required = ("core.delete_activitytype",)
     success_url = reverse_lazy("core:activitytype-list")
 
     def get_queryset(self):
         return super().get_queryset().annotate(Count("entries"))
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs.update({"activity_type": self.object, "user": self.request.user})
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_delete_activities"] = self.request.user.has_perm(
+            "core.delete_activity"
+        )
+        return context
+
+    def form_valid(self, form):
+        # The type goes together with the activities the user confirmed, or
+        # nothing goes. Locking the type keeps activities from being added to
+        # it meanwhile, where the database supports it.
+        message = _(
+            "The number of activities of this type has changed. Check it and "
+            "confirm again."
+        )
+        try:
+            with transaction.atomic():
+                activity_type = models.ActivityType.objects.select_for_update().get(
+                    pk=self.object.pk
+                )
+                if form.confirmed_activity_count:
+                    if activity_type.entries.count() != form.confirmed_activity_count:
+                        raise ActivitiesChanged
+                    activity_type.entries.all().delete()
+                return super().form_valid(form)
+        except ActivitiesChanged:
+            messages.error(self.request, message)
+            return HttpResponseRedirect(self.request.path)
+        except ProtectedError:
+            # Covers activities that were added after the form was checked.
+            messages.error(
+                self.request,
+                _("%(name)s is still in use and can not be deleted.")
+                % {"name": self.object},
+            )
+            return HttpResponseRedirect(self.request.path)
 
 
 class ActivityList(

@@ -292,6 +292,50 @@ class ActivityTypeForm(CoreModelForm):
         }
 
 
+class ActivityTypeDeleteForm(forms.Form):
+    """
+    Confirms deleting an activity type. A type that is used by activities is
+    only deleted with its activities, by a user who may delete activities,
+    after confirming the number of activities that was shown.
+    """
+
+    delete_activities = forms.BooleanField(
+        required=False, label=_("Delete the activities of this type too")
+    )
+    activity_count = forms.IntegerField(required=False, widget=forms.HiddenInput)
+
+    def __init__(self, *args, activity_type, user, **kwargs):
+        self.activity_type = activity_type
+        self.user = user
+        # The number of activities the user confirmed deleting, set by clean().
+        self.confirmed_activity_count = 0
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        count = self.activity_type.entries.count()
+        if count == 0:
+            return cleaned_data
+        if not self.user.has_perm("core.delete_activity"):
+            raise forms.ValidationError(
+                _("%(name)s is still in use and can not be deleted.")
+                % {"name": self.activity_type}
+            )
+        if not cleaned_data.get("delete_activities"):
+            raise forms.ValidationError(
+                _("Confirm that the activities of this type will be deleted too.")
+            )
+        if cleaned_data.get("activity_count") != count:
+            raise forms.ValidationError(
+                _(
+                    "The number of activities of this type has changed. Check it "
+                    "and confirm again."
+                )
+            )
+        self.confirmed_activity_count = count
+        return cleaned_data
+
+
 class ActivityForm(CoreModelForm, TaggableModelForm):
     fieldsets = [
         {"fields": ["child", "type", "start", "end"], "layout": "required"},

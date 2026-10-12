@@ -544,11 +544,12 @@ paths:
                     type: object
                     description:
                       Whether the user may add, change and delete activity
-                      types.
+                      types, and delete a type together with its activities.
                     required:
                       - add
                       - change
                       - delete
+                      - delete_with_activities
                     properties:
                       add:
                         type: boolean
@@ -557,6 +558,9 @@ paths:
                         type: boolean
                         example: true
                       delete:
+                        type: boolean
+                        example: true
+                      delete_with_activities:
                         type: boolean
                         example: true
                   results:
@@ -762,7 +766,13 @@ paths:
         - api
     delete:
       operationId: destroyActivityType
-      description: ""
+      description:
+        "Delete an activity type. A type that is still used by activities
+        is
+
+        only deleted with ?delete_activities=true, which deletes its activities
+
+        as well."
       parameters:
         - name: id
           in: path
