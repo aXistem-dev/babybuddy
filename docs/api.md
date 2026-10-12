@@ -11,6 +11,8 @@ authorization.
 Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 `POST` requests:
 
+- `/api/activities/`
+- `/api/activity-types/`
 - `/api/bmi/` (Body Mass Index)
 - `/api/children/`
 - `/api/changes/` (Diaper Changes)
@@ -302,3 +304,37 @@ curl -X DELETE https://[...]/api/changes/947/ -H 'Authorization: Token [...]'
 Returns an empty response with HTTP status code `204` on success, or a JSON
 encoded error detail if an error occurred (e.g. `{"detail":"Not found."}` if
 the requested ID does not exist).
+
+## Activities
+
+Custom activities have two endpoints: `/api/activity-types/` for the kinds of
+activity (e.g. "Bath") and `/api/activities/` for the entries.
+
+An activity type has `id`, `name` (up to 100 characters), `slug`, `icon`,
+`emoji` (empty or a single emoji), `color`, `has_duration`, `active` and
+`order`. The `slug` is set from the name when the type is created and stays
+the same when it is renamed, so it can be used to refer to a type. A name that
+would give the same slug as another type's, or no slug at all, is refused.
+
+The list of activity types has one more key on every page, `permissions`,
+which tells a client whether the user may add, change and delete activity
+types. A client can use it to decide which management options to show,
+instead of working out the user's permissions itself:
+
+```json
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "permissions": { "add": true, "change": true, "delete": false },
+  "results": [{...}]
+}
+```
+
+A single activity type does not include `permissions`.
+
+An activity has `child`, `type` (the activity type's `id`), `start`, `end`,
+`duration`, `notes` and `tags`, and can be filtered by `child`, `type`, `tags`
+and the same `start`/`end` filters as other entries with a duration. For a type
+without a duration, `end` may be left out and is set to `start`. Like sleep and
+tummy time, an activity can be created from a timer with the `timer` field.
