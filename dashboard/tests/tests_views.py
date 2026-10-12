@@ -168,6 +168,14 @@ class DashboardCardPermissionsTestCase(TestCase):
         self.assertIn("Last Feeding", content)
         self.assertIn("Last Sleep", content)
 
+    def test_activity_cards_need_the_activity_permission(self):
+        ActivityType.objects.create(name="Dashboard Test Bath")
+        self._login("carer", codenames=CARE_ENTRY_PERMISSIONS)
+        self.assertNotContains(self.c.get(self.url), "Dashboard Test Bath")
+
+        self._login("activities", codenames=CARE_ENTRY_PERMISSIONS + ("view_activity",))
+        self.assertContains(self.c.get(self.url), "Dashboard Test Bath")
+
     def test_statistics_card_excludes_models_without_permission(self):
         self._login("carer", codenames=CARE_ENTRY_PERMISSIONS)
         page = self.c.get(self.url)
