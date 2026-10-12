@@ -39,6 +39,63 @@ class ImportTestCase(TestCase):
         self.assertFalse(result.has_errors())
         self.assertEqual(model.objects.count(), count)
 
+    def test_activity(self):
+        self.import_data(models.ActivityType, 3)
+        self.import_data(models.Activity, 4)
+        self.assertEqual(models.Activity.objects.filter(type__slug="bath").count(), 2)
+        walk = models.Activity.objects.get(pk=2)
+        self.assertEqual(walk.type.name, "Walk")
+        self.assertEqual(walk.duration, datetime.timedelta(minutes=45))
+
+    def test_activity_unknown_type(self):
+        result = admin.ActivityImportExportResource().import_data(
+            self.get_dataset("activity"), dry_run=True
+        )
+        self.assertTrue(result.has_errors() or result.has_validation_errors())
+
+    def test_activitytype(self):
+        self.import_data(models.ActivityType, 3)
+        # A slug in the file is kept, even when it no longer matches the name;
+        # a missing one is generated from the name.
+        self.assertEqual(
+            list(
+                models.ActivityType.objects.order_by("pk").values_list(
+                    "name", "slug", "emoji", "has_duration"
+                )
+            ),
+            [
+                ("Bath time", "bath", "\U0001f6c1", False),
+                ("Walk", "walk", "", True),
+                ("Sunscreen", "sunscreen", "", False),
+            ],
+        )
+
+    def test_activitytype_invalid_emoji(self):
+        dataset = tablib.Dataset(
+            ["1", "Bath", "", "\U0001f6c1"],
+            ["2", "Walk", "", "abc"],
+            headers=["id", "name", "slug", "emoji"],
+        )
+        result = admin.ActivityTypeImportExportResource().import_data(
+            dataset, dry_run=False
+        )
+        self.assertEqual([row.number for row in result.invalid_rows], [2])
+        self.assertEqual(
+            result.invalid_rows[0].error_dict, {"emoji": ["Enter a single emoji."]}
+        )
+
+    def test_activity_export_uses_the_type_slug(self):
+        activity_type = models.ActivityType.objects.create(name="Bath")
+        activity_type.name = "Bath time"
+        activity_type.save()
+        models.Activity.objects.create(
+            child=models.Child.objects.first(),
+            type=activity_type,
+            start=datetime.datetime(2020, 2, 11, 19, tzinfo=datetime.timezone.utc),
+        )
+        dataset = admin.ActivityImportExportResource().export()
+        self.assertEqual(dataset.dict[0]["type"], "bath")
+
     def test_bmi(self):
         self.import_data(models.BMI, 5)
 
