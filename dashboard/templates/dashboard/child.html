@@ -62,9 +62,11 @@
         {% if "breastfeeding" in visible_cards and perms.core.view_feeding %}
             <div class="col-sm-6 col-lg-4">{% card_breastfeeding object %}</div>
         {% endif %}
-        {% for activity_type in visible_activity_types %}
-            <div class="col-sm-6 col-lg-4">{% card_activity_last object activity_type %}</div>
-        {% endfor %}
+        {% if perms.core.view_activity %}
+            {% for activity_type in visible_activity_types %}
+                <div class="col-sm-6 col-lg-4">{% card_activity_last object activity_type %}</div>
+            {% endfor %}
+        {% endif %}
     </div>
 {% endblock %}
 {% block javascript %}

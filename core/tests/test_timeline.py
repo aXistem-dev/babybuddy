@@ -55,6 +55,23 @@ class TimelineTestCase(TestCase):
 
                 instance.delete()
 
+    def test_activities_need_the_activity_permission(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Permission
+
+        day = timezone.make_aware(datetime.datetime(2023, 1, 1))
+        activity_type = models.ActivityType.objects.create(name="Bath")
+        models.Activity.objects.create(
+            child=self.child, type=activity_type, start=day.replace(hour=9)
+        )
+        user = get_user_model().objects.create_user(username="carer")
+        self.assertEqual(get_objects(date=day, child=self.child, user=user), [])
+
+        user.user_permissions.add(Permission.objects.get(codename="view_activity"))
+        user = get_user_model().objects.get(pk=user.pk)
+        events = get_objects(date=day, child=self.child, user=user)
+        self.assertEqual([e["model_name"] for e in events], ["activity"])
+
     def test_tummy_time_notes_appear_in_timeline(self):
         """
         Notes on a Tummy Time entry should reach the timeline events, like the

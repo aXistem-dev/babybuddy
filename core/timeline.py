@@ -36,7 +36,8 @@ def get_objects(date, child=None, user=None):
     def permitted(model_name):
         return user is None or user.has_perm(f"core.view_{model_name}")
 
-    _add_activities(min_date, max_date, events, child)
+    if permitted("activity"):
+        _add_activities(min_date, max_date, events, child)
     if permitted("diaperchange"):
         _add_diaper_changes(min_date, max_date, events, child)
     if permitted("feeding"):
