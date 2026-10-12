@@ -6929,7 +6929,7 @@ components:
         name:
           type: string
           description: The name of the activity, e.g. "Bath" or "Walk".
-          maxLength: 255
+          maxLength: 100
         slug:
           type: string
           readOnly: true

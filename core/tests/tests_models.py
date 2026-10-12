@@ -2,6 +2,7 @@
 import datetime
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
@@ -24,11 +25,51 @@ class ActivityTypeTestCase(TestCase):
         self.assertFalse(activity_type.has_duration)
         self.assertTrue(activity_type.active)
 
-    def test_activitytype_slug_updates_with_name(self):
+    def test_activitytype_slug_is_kept_on_rename(self):
         activity_type = models.ActivityType.objects.create(name="Bath")
         activity_type.name = "Bath Time"
+        activity_type.full_clean()
         activity_type.save()
-        self.assertEqual(activity_type.slug, "bath-time")
+        activity_type.refresh_from_db()
+        self.assertEqual(activity_type.name, "Bath Time")
+        self.assertEqual(activity_type.slug, "bath")
+        self.assertEqual(activity_type.card_id, "activity:bath")
+
+    def test_activitytype_slug_is_kept_on_rename_to_a_taken_slug(self):
+        models.ActivityType.objects.create(name="Bath")
+        activity_type = models.ActivityType.objects.create(name="Shower")
+        # "Bath!" would slugify to the slug of "Bath", but the slug does not
+        # change on a rename, so there is no clash.
+        activity_type.name = "Bath!"
+        activity_type.full_clean()
+        activity_type.save()
+        self.assertEqual(activity_type.slug, "shower")
+
+    def test_activitytype_clashing_or_empty_slug(self):
+        models.ActivityType.objects.create(name="Bath")
+        for name, message in (
+            ("bath!", "similar name already exists"),
+            ("🛁", "at least one letter or number"),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaisesMessage(ValidationError, message):
+                    models.ActivityType(name=name).full_clean()
+
+    def test_activitytype_name_max_length(self):
+        with self.assertRaises(ValidationError) as context:
+            models.ActivityType(name="x" * 101).full_clean()
+        self.assertIn("name", context.exception.message_dict)
+        activity_type = models.ActivityType(name="x" * 100)
+        activity_type.full_clean()
+        activity_type.save()
+        self.assertEqual(activity_type.slug, "x" * 100)
+
+    def test_activitytype_slug_fits_its_field(self):
+        # NFKC normalization can make a slug longer than the name.
+        activity_type = models.ActivityType(name="\ufb00" * 100)
+        activity_type.full_clean()
+        activity_type.save()
+        self.assertEqual(activity_type.slug, "ff" * 50)
 
     def test_activitytype_emoji_defaults_to_blank(self):
         activity_type = models.ActivityType.objects.create(name="Bath")

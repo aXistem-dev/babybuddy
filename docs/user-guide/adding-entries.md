@@ -11,7 +11,9 @@ want to track -- bath time, a walk, medicine cabinet checks, etc.
 Custom activities are defined as **activity types** from
 _Activities > Activity Types_. Each activity type has:
 
-- **Name** -- what the activity is called, e.g. "Bath".
+- **Name** -- what the activity is called, e.g. "Bath", up to 100 characters.
+  It can be changed later: links, hidden dashboard cards and integrations keep
+  referring to the type by the slug it got when it was created.
 - **Icon** and **Emoji** -- how the activity is displayed. Pick one of the
   built-in icons, or enter an emoji (e.g. 🛁) to use instead of an icon.
 - **Color** -- used for the activity's badge in lists.

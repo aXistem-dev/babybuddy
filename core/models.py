@@ -215,7 +215,7 @@ class ActivityType(models.Model):
 
     model_name = "activitytype"
     name = models.CharField(
-        max_length=255,
+        max_length=100,
         unique=True,
         verbose_name=_("Name"),
         help_text=_('The name of the activity, e.g. "Bath" or "Walk".'),
@@ -284,8 +284,33 @@ class ActivityType(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
-        self.slug = slugify(self.name, allow_unicode=True)
+        # The slug is how links, hidden dashboard cards and integrations refer
+        # to a type, so it is generated once and kept when the type is renamed.
+        if not self.slug:
+            self.slug = self.slug_from_name()
         super(ActivityType, self).save(*args, **kwargs)
+
+    def clean(self):
+        if self.slug:
+            return
+        # The slug is derived from the name, so two different names can still
+        # end up with the same slug (e.g. "Bath" and "bath!").
+        slug = self.slug_from_name()
+        if not slug:
+            raise ValidationError(
+                {"name": _("Name must contain at least one letter or number.")},
+                code="slug_empty",
+            )
+        if ActivityType.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+            raise ValidationError(
+                {"name": _("An activity type with a similar name already exists.")},
+                code="slug_conflict",
+            )
+
+    def slug_from_name(self):
+        max_length = self._meta.get_field("slug").max_length
+        slug = slugify(self.name or "", allow_unicode=True)
+        return slug[:max_length].strip("-_")
 
     @property
     def card_id(self):

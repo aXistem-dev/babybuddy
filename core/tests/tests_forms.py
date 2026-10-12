@@ -223,7 +223,8 @@ class ActivityTypeFormsTestCase(FormsTestCaseBase):
         self.assertEqual(page.status_code, 200)
         self.activity_type.refresh_from_db()
         self.assertEqual(self.activity_type.name, "Long Walk")
-        self.assertEqual(self.activity_type.slug, "long-walk")
+        # The slug is fixed when the type is created.
+        self.assertEqual(self.activity_type.slug, "walk")
         self.assertContains(page, "Long Walk updated")
 
     def test_delete(self):
