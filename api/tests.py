@@ -129,6 +129,109 @@ class ActivityTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 self.assertIn("name", response.data)
 
 
+class ActivityTypePermissionsAPITestCase(APITestCase):
+    """
+    The activity type list tells clients which management actions the user
+    may take.
+    """
+
+    fixtures = ["tests.json"]
+    endpoint = reverse("api:activitytype-list")
+
+    def setUp(self):
+        models.ActivityType.objects.create(name="Bath")
+        self.walk = models.ActivityType.objects.create(name="Walk")
+
+    def create_user(self, username, permissions=(), groups=()):
+        user = get_user_model().objects.create_user(
+            username=username, password=username, is_active=True
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core", codename__in=permissions
+            )
+        )
+        user.groups.add(*Group.objects.filter(name__in=groups))
+        self.client.login(username=username, password=username)
+        return user
+
+    def get_permissions(self, params=None):
+        response = self.client.get(self.endpoint, params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            list(response.data.keys()),
+            ["count", "next", "previous", "permissions", "results"],
+        )
+        return response.data["permissions"]
+
+    def test_admin(self):
+        self.client.login(username="admin", password="admin")
+        self.assertEqual(
+            self.get_permissions(), {"add": True, "change": True, "delete": True}
+        )
+
+    def test_caregiver(self):
+        self.create_user(
+            "caregiver", groups=[settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"]]
+        )
+        self.assertEqual(
+            self.get_permissions(), {"add": False, "change": False, "delete": False}
+        )
+
+    def test_change_without_delete(self):
+        self.create_user(
+            "editor", permissions=["view_activitytype", "change_activitytype"]
+        )
+        self.assertEqual(
+            self.get_permissions(), {"add": False, "change": True, "delete": False}
+        )
+
+    def test_every_page(self):
+        self.client.login(username="admin", password="admin")
+        expected = {"add": True, "change": True, "delete": True}
+        for offset in (0, 1, 2):
+            with self.subTest(offset=offset):
+                self.assertEqual(
+                    self.get_permissions({"limit": 1, "offset": offset}), expected
+                )
+        response = self.client.get(self.endpoint, {"limit": 1, "offset": 1})
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIsNotNone(response.data["previous"])
+
+    def test_without_pagination(self):
+        self.client.login(username="admin", password="admin")
+        with patch("api.pagination.ActivityTypePagination.default_limit", new=None):
+            permissions = self.get_permissions()
+            response = self.client.get(self.endpoint)
+        self.assertEqual(permissions, {"add": True, "change": True, "delete": True})
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["next"], None)
+        self.assertEqual(len(response.data["results"]), 2)
+
+    def test_detail_is_unchanged(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get("{}{}/".format(self.endpoint, self.walk.id))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("permissions", response.data)
+
+    def test_schema(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get(reverse("api:openapi-schema"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        schema = response.data["paths"]["/api/activity-types/"]["get"]["responses"]
+        schema = schema["200"]["content"]["application/json"]["schema"]
+        self.assertIn("permissions", schema["required"])
+        self.assertEqual(
+            set(schema["properties"]["permissions"]["properties"]),
+            {"add", "change", "delete"},
+        )
+        # Other lists keep the standard pagination.
+        schema = response.data["paths"]["/api/activities/"]["get"]["responses"]
+        schema = schema["200"]["content"]["application/json"]["schema"]
+        self.assertNotIn("permissions", schema["properties"])
+
+
 class ActivityAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
     endpoint = reverse("api:activity-list")
     model = models.Activity

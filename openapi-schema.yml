@@ -472,7 +472,7 @@ paths:
   /api/activity-types/:
     get:
       operationId: listActivityTypes
-      description: ""
+      description: List the activity types and the user's permissions to manage them.
       parameters:
         - name: limit
           required: false
@@ -525,6 +525,7 @@ paths:
                 required:
                   - count
                   - results
+                  - permissions
                 properties:
                   count:
                     type: integer
@@ -539,6 +540,25 @@ paths:
                     nullable: true
                     format: uri
                     example: http://api.example.org/accounts/?offset=200&limit=100
+                  permissions:
+                    type: object
+                    description:
+                      Whether the user may add, change and delete activity
+                      types.
+                    required:
+                      - add
+                      - change
+                      - delete
+                    properties:
+                      add:
+                        type: boolean
+                        example: true
+                      change:
+                        type: boolean
+                        example: true
+                      delete:
+                        type: boolean
+                        example: true
                   results:
                     type: array
                     items:

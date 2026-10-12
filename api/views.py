@@ -13,6 +13,7 @@ from babybuddy import models as babybuddy_models
 from webhooks import models as webhooks_models
 
 from . import serializers, filters
+from .pagination import ActivityTypePagination, with_activity_type_permissions
 
 
 class ActivityTypeViewSet(viewsets.ModelViewSet):
@@ -21,6 +22,26 @@ class ActivityTypeViewSet(viewsets.ModelViewSet):
     filterset_fields = ("name", "slug", "active", "has_duration")
     ordering_fields = ("name", "order")
     ordering = ("order", "name")
+    pagination_class = ActivityTypePagination
+
+    def list(self, request, *args, **kwargs):
+        """
+        List the activity types and the user's permissions to manage them.
+        """
+        response = super().list(request, *args, **kwargs)
+        if isinstance(response.data, list):
+            # Without a page size the list is not paginated. It still gets the
+            # paginated shape, so that the permissions are always there.
+            response.data = with_activity_type_permissions(
+                {
+                    "count": len(response.data),
+                    "next": None,
+                    "previous": None,
+                    "results": response.data,
+                },
+                request.user,
+            )
+        return response
 
 
 class ActivityViewSet(viewsets.ModelViewSet):
