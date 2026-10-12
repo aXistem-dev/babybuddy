@@ -1,0 +1,76 @@
+{% extends "babybuddy/page.html" %}
+{% load datetime i18n %}
+{% block title %}
+    {% trans "Stash adjustments" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'stash:stash' %}">{% trans "Milk stash" %}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Stash adjustments" %}</li>
+{% endblock %}
+{% block content %}
+    <h1>
+        {% trans "Stash adjustments" %}
+        {% if perms.stash.add_stashadjustment %}
+            <a href="{% url 'stash:stashadjustment-add' %}"
+               class="btn btn-sm btn-success">
+                <i class="icon-add" aria-hidden="true"></i> {% trans "Add Stash Adjustment" %}
+            </a>
+        {% endif %}
+    </h1>
+    {% include "babybuddy/filter.html" %}
+    <div class="table-responsive">
+        <table class="table table-instances table-borderless table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>{% trans "Actions" %}</th>
+                    <th>{% trans "Time" %}</th>
+                    <th>{% trans "Kind" %}</th>
+                    <th>{% trans "Amount" %}</th>
+                    <th>{% trans "Tags" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for adjustment in object_list %}
+                    <tr>
+                        <td>
+                            <div class="btn-group btn-group-sm"
+                                 role="group"
+                                 aria-label="{% trans "Actions" %}">
+                                {% if perms.stash.change_stashadjustment %}
+                                    <a href="{% url 'stash:stashadjustment-update' adjustment.id %}"
+                                       class="btn btn-primary">
+                                        <i class="icon-update" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                                {% if perms.stash.delete_stashadjustment %}
+                                    <a href="{% url 'stash:stashadjustment-delete' adjustment.id %}"
+                                       class="btn btn-danger">
+                                        <i class="icon-delete" aria-hidden="true"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <th scope="row">{{ adjustment.time|datetime_short }}</th>
+                        <td>{{ adjustment.get_kind_display }}</td>
+                        <td>{{ adjustment.amount }}</td>
+                        <td>{% include "core/render_tag_list.html" with tags=adjustment.tags.all %}</td>
+                    </tr>
+                    {% if adjustment.notes %}
+                        <tr class="row-details">
+                            <td colspan="5">
+                                <i class="icon-note me-2" aria-hidden="true"></i>{{ adjustment.notes }}
+                            </td>
+                        </tr>
+                    {% endif %}
+                {% empty %}
+                    <tr>
+                        <th colspan="5">{% trans "No stash adjustments found." %}</th>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% include "babybuddy/paginator.html" %}
+{% endblock %}
