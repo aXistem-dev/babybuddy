@@ -6975,7 +6975,7 @@ components:
           description:
             "An emoji to use in place of the icon, e.g. \U0001F6C1 or \U0001F6B6\
             . Leave blank to use the icon."
-          maxLength: 8
+          maxLength: 16
         color:
           type: string
           pattern: ^#[0-9a-fA-F]{6}$
