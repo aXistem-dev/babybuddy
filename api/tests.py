@@ -200,6 +200,7 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 "id": 2,
                 "child": 1,
                 "amount": 9.0,
+                "to_stash": False,
                 "start": "2017-11-17T15:03:00-05:00",
                 "end": "2017-11-17T15:22:00-05:00",
                 "duration": "00:19:00",
@@ -207,6 +208,26 @@ class PumpingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 "tags": [],
             },
         )
+
+    def test_post_to_stash(self):
+        data = {
+            "child": 1,
+            "amount": 120,
+            "start": "2017-11-20T22:52:00-05:00",
+            "end": "2017-11-20T23:05:00-05:00",
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(response.data["to_stash"], "Not stored unless asked")
+
+        data.update(
+            start="2017-11-21T22:52:00-05:00",
+            end="2017-11-21T23:05:00-05:00",
+            to_stash=True,
+        )
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(models.Pumping.objects.get(pk=response.data["id"]).to_stash)
 
     def test_post(self):
         data = {
@@ -333,6 +354,7 @@ class FeedingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 "type": "formula",
                 "method": "bottle",
                 "amount": 2.5,
+                "from_stash": False,
                 "notes": "forgot vitamins :(",
                 "tags": [],
             },
@@ -350,6 +372,34 @@ class FeedingAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 3)
+
+    def test_post_from_stash(self):
+        data = {
+            "child": 1,
+            "start": "2017-11-19T14:00:00-05:00",
+            "end": "2017-11-19T14:15:00-05:00",
+            "type": "breast milk",
+            "method": "bottle",
+            "amount": 60,
+            "from_stash": True,
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(models.Feeding.objects.get(pk=response.data["id"]).from_stash)
+
+        data.update(
+            start="2017-11-19T15:00:00-05:00",
+            end="2017-11-19T15:15:00-05:00",
+            type="formula",
+        )
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("type", response.data)
+
+        data.update(type="breast milk", method="left breast")
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("method", response.data)
 
     def test_post(self):
         data = {
