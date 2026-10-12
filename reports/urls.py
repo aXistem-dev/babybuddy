@@ -12,6 +12,11 @@ urlpatterns = [
         name="report-list",
     ),
     path(
+        "children/<str:slug>/reports/activities/types/",
+        views.ActivityTypesChildReport.as_view(),
+        name="report-activity-types-child",
+    ),
+    path(
         "children/<str:slug>/reports/bmi/bmi/",
         views.BMIChangeChildReport.as_view(),
         name="report-bmi-change-child",
