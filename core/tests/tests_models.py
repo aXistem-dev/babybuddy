@@ -4,7 +4,7 @@ import datetime
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from core import models
@@ -75,6 +75,16 @@ class ActivityTypeTestCase(TestCase):
         activity_type = models.ActivityType.objects.create(name="Bath")
         self.assertEqual(activity_type.emoji, "")
         self.assertEqual(activity_type.icon, "activities")
+
+    def test_activitytype_emoji(self):
+        activity_type = models.ActivityType(name="Haircut", emoji="\u2702\ufe0f")
+        activity_type.full_clean()
+        for emoji in ("cut", "\u2702\ufe0f\U0001faa5", "\U0001f642" * 17):
+            with self.subTest(emoji=emoji):
+                activity_type.emoji = emoji
+                with self.assertRaises(ValidationError) as context:
+                    activity_type.full_clean()
+                self.assertIn("emoji", context.exception.message_dict)
 
     def test_activitytype_complementary_color(self):
         activity_type = models.ActivityType.objects.create(name="Bath", color="#FFFFFF")
@@ -610,3 +620,84 @@ class MedicationTestCase(TestCase):
         )
         with self.assertRaises(ValidationError):
             medication.full_clean()
+
+
+class ValidateEmojiTestCase(SimpleTestCase):
+    def assertValid(self, value):
+        try:
+            models.validate_emoji(value)
+        except ValidationError as error:
+            self.fail("{!r} was rejected: {}".format(value, error))
+
+    def assertInvalid(self, value):
+        with self.assertRaises(ValidationError) as context:
+            models.validate_emoji(value)
+        self.assertEqual(context.exception.messages, ["Enter a single emoji."])
+
+    def test_accepted(self):
+        cases = {
+            "empty": "",
+            "plain": "\U0001f642",
+            "plain (newer)": "\U0001faa5",
+            "variation selector": "\u2702\ufe0f",
+            "text style": "\u2702",
+            "skin tone": "\U0001f44d\U0001f3fd",
+            "family": "\U0001f468\u200d\U0001f469\u200d\U0001f467\u200d\U0001f466",
+            "profession with skin tone": "\U0001f9d1\U0001f3fd\u200d\u2695\ufe0f",
+            "flag": "\U0001f1ea\U0001f1fa",
+            "keycap": "1\ufe0f\u20e3",
+            "keycap hash": "#\ufe0f\u20e3",
+            "subdivision flag": (
+                "\U0001f3f4\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074"
+                "\U000e007f"
+            ),
+            "copyright": "\u00a9\ufe0f",
+            "wavy dash": "\u3030",
+            "left right arrow": "\u2194\ufe0f",
+            "south west arrow": "\u2199\ufe0f",
+            "arrow curving left": "\u21a9\ufe0f",
+            "arrow curving right": "\u21aa",
+            "circled M": "\u24c2\ufe0f",
+            "small black square": "\u25aa\ufe0f",
+            "small white square": "\u25ab\ufe0f",
+            "play button": "\u25b6\ufe0f",
+            "reverse button": "\u25c0\ufe0f",
+            "white medium square": "\u25fb\ufe0f",
+            "black medium small square": "\u25fe",
+            "arrow curving up": "\u2934\ufe0f",
+            "arrow curving down": "\u2935\ufe0f",
+            "16 code points": "\u200d".join(["\U0001f468"] * 8) + "\ufe0f",
+        }
+        for name, value in cases.items():
+            with self.subTest(name):
+                self.assertValid(value)
+
+    def test_refused(self):
+        cases = {
+            "two emoji": "\U0001f642\U0001f642",
+            "two emoji with selectors": "\u2702\ufe0f\U0001faa5",
+            "two flags": "\U0001f1ea\U0001f1fa\U0001f1ef\U0001f1f5",
+            "letter": "a",
+            "arrow without emoji form": "\u2190",
+            "geometric shape without emoji form": "\u25a0",
+            "circled letter without emoji form": "\u24b6",
+            "text": "nail trim",
+            "digit": "1",
+            "keycap without selector": "1\u20e3",
+            "space": " ",
+            "emoji and space": "\U0001f642 ",
+            "space and emoji": " \U0001f642",
+            "newline": "\n",
+            "one regional indicator": "\U0001f1ea",
+            "lone skin tone": "\U0001f3fd",
+            "two skin tones": "\U0001f44d\U0001f3fd\U0001f3fd",
+            "two selectors": "\u2702\ufe0f\ufe0f",
+            "lone joiner": "\u200d",
+            "trailing joiner": "\U0001f642\u200d",
+            "joined text": "\U0001f642\u200da",
+            "unfinished tag sequence": "\U0001f3f4\U000e0067\U000e0062",
+            "over 16 code points": "\u200d".join(["\U0001f468"] * 9),
+        }
+        for name, value in cases.items():
+            with self.subTest(name):
+                self.assertInvalid(value)
