@@ -73,7 +73,11 @@ class WebhookSignalTestCase(TestCase):
             models.HeightPercentile,
             models.WeightPercentile,
         }
-        for candidate in apps.get_app_config("core").get_models():
+        records = [
+            *apps.get_app_config("core").get_models(),
+            *apps.get_app_config("stash").get_models(),
+        ]
+        for candidate in records:
             if not issubclass(candidate, Model):
                 continue
             if candidate in excluded:
@@ -93,7 +97,7 @@ class WebhookSignalTestCase(TestCase):
             )
         self.assertEqual(
             watched,
-            set(apps.get_app_config("core").get_models()) & watched,
+            set(records) & watched,
         )
 
     def test_the_type_uses_the_name_the_rest_of_baby_buddy_uses(self):

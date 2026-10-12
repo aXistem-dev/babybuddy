@@ -1,0 +1,22 @@
+{% extends "cards/base.html" %}
+{% load i18n %}
+{% block header %}
+    <a href="{% url "stash:stash" %}">{% trans "Milk stash" %}</a>
+{% endblock %}
+{% block title %}
+    <span class="{% if summary.balance < 0 or summary.status == 'expired' %}text-danger{% elif summary.status == 'warn' %}text-warning{% endif %}">{{ summary.balance }}</span>
+{% endblock %}
+{% block content %}
+    {% if summary.status == "expired" %}
+        <div class="text-danger">{% trans "Some milk has expired." %}</div>
+    {% elif summary.status == "warn" %}
+        <div class="text-warning">{% trans "Some milk expires soon." %}</div>
+    {% endif %}
+    {% if summary.lots %}
+        <div>
+            {% blocktrans trimmed with time=summary.lots.0.time|date:"SHORT_DATETIME_FORMAT" %}
+                Oldest milk: {{ time }}
+            {% endblocktrans %}
+        </div>
+    {% endif %}
+{% endblock %}

@@ -15,6 +15,7 @@ from taggit.serializers import TagListSerializerField, TaggitSerializer
 
 from core import models
 from babybuddy import models as babybuddy_models
+from stash import models as stash_models
 from webhooks import models as webhooks_models
 
 
@@ -264,6 +265,46 @@ class SleepSerializer(CoreModelWithDurationSerializer, TaggableSerializer):
             "notes",
             "tags",
         )
+
+
+class StashAdjustmentSerializer(TaggableSerializer):
+    class Meta:
+        model = stash_models.StashAdjustment
+        fields = ("id", "time", "amount", "kind", "notes", "tags")
+
+    def validate(self, attrs):
+        # Run the model's clean(), as CoreModelSerializer does.
+        if self.partial:
+            instance = deepcopy(self.instance)
+            for attr, value in attrs.items():
+                setattr(instance, attr, value)
+        else:
+            instance = self.Meta.model(
+                **{k: v for k, v in attrs.items() if k != "tags"}
+            )
+        instance.clean()
+        return attrs
+
+
+class StashLotSerializer(serializers.Serializer):
+    time = serializers.DateTimeField(help_text="When the milk went into the stash.")
+    amount = serializers.FloatField()
+    warn_at = serializers.DateTimeField(help_text="When it starts to expire soon.")
+    expires_at = serializers.DateTimeField(help_text="When it expires.")
+    status = serializers.ChoiceField(choices=("ok", "warn", "expired"))
+
+
+class StashSerializer(serializers.Serializer):
+    balance = serializers.FloatField(
+        help_text="Milk in the stash; below zero when more was taken out than was put in."
+    )
+    status = serializers.ChoiceField(
+        choices=("ok", "warn", "expired"), help_text="The status of the oldest milk."
+    )
+    warn_age_hours = serializers.IntegerField()
+    max_age_hours = serializers.IntegerField()
+    expired_amount = serializers.FloatField(help_text="How much of it has expired.")
+    lots = StashLotSerializer(many=True, help_text="The stored milk, oldest first.")
 
 
 class TagSerializer(serializers.HyperlinkedModelSerializer):
