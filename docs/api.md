@@ -20,6 +20,7 @@ Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 - `/api/notes/`
 - `/api/pumping/`
 - `/api/sleep/`
+- `/api/stash-adjustments/`
 - `/api/tags/`
 - `/api/temperature/`
 - `/api/timers/`
@@ -302,3 +303,46 @@ curl -X DELETE https://[...]/api/changes/947/ -H 'Authorization: Token [...]'
 Returns an empty response with HTTP status code `204` on success, or a JSON
 encoded error detail if an error occurred (e.g. `{"detail":"Not found."}` if
 the requested ID does not exist).
+
+## Milk Stash
+
+Pumping entries have a `to_stash` field and feedings a `from_stash` field. Both
+are `false` when left out, so a request that doesn't send them doesn't change
+the stash. A feeding with `from_stash` set must be a bottle of breast milk or
+fortified breast milk with an amount; anything else returns `400 Bad Request`.
+
+`/api/stash-adjustments/` takes milk added to or discarded from the stash by
+hand: `time`, `amount`, `kind` (`added` or `discarded`), `notes` and `tags`. It
+can be filtered by `kind`, `date_min` and `date_max`.
+
+`GET /api/stash` returns the stash, with the stored milk oldest first:
+
+```json
+{
+  "balance": 230.0,
+  "status": "warn",
+  "warn_age_hours": 48,
+  "max_age_hours": 72,
+  "expired_amount": 0.0,
+  "lots": [
+    {
+      "time": "2024-01-06T08:30:00-05:00",
+      "amount": 110.0,
+      "warn_at": "2024-01-08T08:30:00-05:00",
+      "expires_at": "2024-01-09T08:30:00-05:00",
+      "status": "warn"
+    },
+    {
+      "time": "2024-01-07T19:00:00-05:00",
+      "amount": 120.0,
+      "warn_at": "2024-01-09T19:00:00-05:00",
+      "expires_at": "2024-01-10T19:00:00-05:00",
+      "status": "ok"
+    }
+  ]
+}
+```
+
+`balance` is below zero when more milk was taken out than was put in; `lots`
+is then empty. Each lot's `status` is `ok`, `warn` (expires soon) or
+`expired`, and the stash's `status` is that of its oldest milk.
