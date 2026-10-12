@@ -7,6 +7,24 @@ from core import models
 from . import graphs
 
 
+class ActivityTypesChildReport(PermissionRequiredMixin, DetailView):
+    """
+    Graph of the number of activities per day, by activity type.
+    """
+
+    model = models.Child
+    permission_required = ("core.view_child", "core.view_activity")
+    template_name = "reports/activity_types.html"
+
+    def get_context_data(self, **kwargs):
+        context = super(ActivityTypesChildReport, self).get_context_data(**kwargs)
+        child = context["object"]
+        instances = models.Activity.objects.filter(child=child)
+        if instances:
+            context["html"], context["js"] = graphs.activity_types(instances)
+        return context
+
+
 class BMIChangeChildReport(PermissionRequiredMixin, DetailView):
     """
     Graph of BMI change over time.
