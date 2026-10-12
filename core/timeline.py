@@ -70,7 +70,9 @@ def get_objects(date, child=None, user=None):
 
 def _add_activities(min_date, max_date, events, child=None):
     instances = (
-        Activity.objects.filter(start__range=(min_date, max_date))
+        Activity.objects.filter(
+            Q(start__range=(min_date, max_date)) | Q(end__range=(min_date, max_date))
+        )
         .select_related("child", "type")
         .order_by("-start")
     )
@@ -104,19 +106,22 @@ def _add_activities(min_date, max_date, events, child=None):
             )
             continue
 
-        events.append(
-            {
-                **base_object,
-                "time": timezone.localtime(instance.start),
-                "event": _("%(child)s started %(activity)s.")
-                % {
-                    "child": instance.child.first_name,
-                    "activity": instance.type.name,
-                },
-                "type": "start",
-            }
-        )
+        if min_date <= instance.start <= max_date:
+            events.append(
+                {
+                    **base_object,
+                    "time": timezone.localtime(instance.start),
+                    "event": _("%(child)s started %(activity)s.")
+                    % {
+                        "child": instance.child.first_name,
+                        "activity": instance.type.name,
+                    },
+                    "type": "start",
+                }
+            )
 
+        if not min_date <= instance.end <= max_date:
+            continue
         end = {
             **base_object,
             "time": timezone.localtime(instance.end),

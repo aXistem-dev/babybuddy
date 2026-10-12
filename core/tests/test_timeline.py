@@ -27,6 +27,7 @@ class TimelineTestCase(TestCase):
             models.Sleep,
             models.TummyTime,
             models.Feeding,
+            models.Activity,
         ]
 
         for model in models_to_test:
@@ -38,6 +39,12 @@ class TimelineTestCase(TestCase):
                 }
                 if model is models.Feeding:
                     create_kwargs.update(type="formula", method="bottle")
+                if model is models.Activity:
+                    create_kwargs.update(
+                        type=models.ActivityType.objects.create(
+                            name="Walk", has_duration=True
+                        )
+                    )
                 instance = model.objects.create(**create_kwargs)
 
                 events_day_1 = get_objects(date=day_1, child=self.child)
