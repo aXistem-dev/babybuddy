@@ -60,6 +60,31 @@ class WebhookSignalTestCase(TestCase):
         self.assertEqual(event.type, "feeding.deleted")
         self.assertEqual(event.object_id, primary_key)
 
+    def test_activities_are_announced(self):
+        activity_type = models.ActivityType.objects.create(name="Bath")
+        activity = models.Activity.objects.create(
+            child=self.child, type=activity_type, start=timezone.localtime()
+        )
+        self.assertEqual(
+            list(
+                WebhookEvent.objects.filter(id__gt=self.event_count)
+                .order_by("id")
+                .values_list("type", "object_id")
+            ),
+            [
+                ("activitytype.created", str(activity_type.pk)),
+                ("activity.created", str(activity.pk)),
+            ],
+        )
+        # Deleting a type deletes its activities, and each one is announced.
+        activity_type.delete()
+        self.assertEqual(
+            list(
+                WebhookEvent.objects.order_by("-id").values_list("type", flat=True)[:2]
+            ),
+            ["activitytype.deleted", "activity.deleted"],
+        )
+
     def test_every_record_model_is_watched(self):
         # A new kind of record is a new kind of change to announce. This fails
         # until it is added on purpose, rather than quietly announcing nothing
