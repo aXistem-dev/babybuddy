@@ -2,6 +2,7 @@
 import datetime
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
@@ -182,6 +183,36 @@ class FeedingTestCase(TestCase):
         self.assertEqual(feeding, models.Feeding.objects.first())
         self.assertEqual(str(feeding), "Feeding")
         self.assertEqual(feeding.method, "both breasts")
+
+    def test_from_stash(self):
+        start = timezone.localtime() - timezone.timedelta(minutes=30)
+        feeding = models.Feeding(
+            child=self.child,
+            start=start,
+            end=start,
+            type="breast milk",
+            method="bottle",
+            amount=60,
+            from_stash=True,
+        )
+        feeding.clean()
+        feeding.type = "fortified breast milk"
+        feeding.clean()
+
+        feeding.type = "formula"
+        with self.assertRaisesMessage(ValidationError, "Only breast milk"):
+            feeding.clean()
+        feeding.type = "breast milk"
+        feeding.method = "left breast"
+        with self.assertRaisesMessage(ValidationError, "from the breast"):
+            feeding.clean()
+        feeding.method = "bottle"
+        feeding.amount = None
+        with self.assertRaisesMessage(ValidationError, "needs an amount"):
+            feeding.clean()
+
+        feeding.from_stash = False
+        feeding.clean()
 
 
 class HeadCircumferenceTestCase(TestCase):

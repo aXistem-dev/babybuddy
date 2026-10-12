@@ -279,11 +279,14 @@ class BMIForm(CoreModelForm, TaggableModelForm):
 class BottleFeedingForm(CoreModelForm, TaggableModelForm):
     fieldsets = [
         {"fields": ["child", "type", "start", "amount"], "layout": "required"},
+        {"fields": ["from_stash"]},
         {"fields": ["notes", "tags"], "layout": "advanced"},
     ]
 
     def clean(self):
         cleaned_data = super().clean()
+        # Set before the model is validated, which checks the method.
+        self.instance.method = "bottle"
         if "start" in cleaned_data:
             self.instance.end = cleaned_data["start"]
         return cleaned_data
@@ -295,7 +298,7 @@ class BottleFeedingForm(CoreModelForm, TaggableModelForm):
 
     class Meta:
         model = models.Feeding
-        fields = ["child", "start", "type", "amount", "notes", "tags"]
+        fields = ["child", "start", "type", "amount", "from_stash", "notes", "tags"]
         widgets = {
             "child": ChildRadioSelect,
             "start": DateTimeInput(),
@@ -364,13 +367,23 @@ class DiaperChangeForm(CoreModelForm, TaggableModelForm):
 class FeedingForm(CoreModelForm, TaggableModelForm):
     fieldsets = [
         {"fields": ["child", "start", "end", "type", "method"], "layout": "required"},
-        {"fields": ["amount"]},
+        {"fields": ["amount", "from_stash"]},
         {"fields": ["notes", "tags"], "layout": "advanced"},
     ]
 
     class Meta:
         model = models.Feeding
-        fields = ["child", "start", "end", "type", "method", "amount", "notes", "tags"]
+        fields = [
+            "child",
+            "start",
+            "end",
+            "type",
+            "method",
+            "amount",
+            "from_stash",
+            "notes",
+            "tags",
+        ]
         widgets = {
             "child": ChildRadioSelect,
             "start": DateTimeInput(),
@@ -479,13 +492,13 @@ class MedicationForm(CoreModelForm, TaggableModelForm):
 class PumpingForm(CoreModelForm, TaggableModelForm):
     fieldsets = [
         {"fields": ["child", "start", "end"], "layout": "required"},
-        {"fields": ["amount"]},
+        {"fields": ["amount", "to_stash"]},
         {"fields": ["notes", "tags"], "layout": "advanced"},
     ]
 
     class Meta:
         model = models.Pumping
-        fields = ["child", "start", "end", "amount", "notes", "tags"]
+        fields = ["child", "start", "end", "amount", "to_stash", "notes", "tags"]
         widgets = {
             "child": ChildRadioSelect,
             "start": DateTimeInput(),

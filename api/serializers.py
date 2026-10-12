@@ -153,6 +153,7 @@ class PumpingSerializer(CoreModelWithDurationSerializer, TaggableSerializer):
             "id",
             "child",
             "amount",
+            "to_stash",
             "start",
             "end",
             "duration",
@@ -207,6 +208,7 @@ class FeedingSerializer(CoreModelWithDurationSerializer, TaggableSerializer):
             "type",
             "method",
             "amount",
+            "from_stash",
             "notes",
             "tags",
         )

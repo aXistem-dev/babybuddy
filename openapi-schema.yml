@@ -6280,6 +6280,9 @@ components:
         amount:
           type: number
           nullable: true
+        from_stash:
+          type: boolean
+          description: For a bottle of stored breast milk.
         notes:
           type: string
           nullable: true
@@ -6412,6 +6415,9 @@ components:
           description: Required unless a Timer value is provided.
         amount:
           type: number
+        to_stash:
+          type: boolean
+          description: Store this milk to give later.
         start:
           type: string
           format: date-time
