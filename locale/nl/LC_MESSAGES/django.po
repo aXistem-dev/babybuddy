@@ -1762,7 +1762,7 @@ msgstr "Tag verwijderen"
 msgid "There is 1 item tagged with this tag."
 msgid_plural "There are %(count)s items tagged with this tag."
 msgstr[0] "Er is 1 item met deze tag."
-msgstr[1] "Er zijn %(count)d items met deze tag."
+msgstr[1] "Er zijn %(count)s items met deze tag."
 
 #: core/templates/core/tag_confirm_delete.html:29
 msgid ""
@@ -3069,3 +3069,466 @@ msgstr "WHO-gewichtspercentielen voor meisjes (kg)"
 
 #~ msgid "<b>Feeding Pattern</b>"
 #~ msgstr "<b>Voedingspatroon</b>"
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:321 stash/apps.py:29
+#: stash/models.py:38 stash/templates/cards/stash.html:4
+#: stash/templates/stash/stash.html:4 stash/templates/stash/stash.html:7
+#: stash/templates/stash/stash.html:11
+#: stash/templates/stash/stashadjustment_form.html:12
+#: stash/templates/stash/stashadjustment_list.html:8
+msgid "Milk stash"
+msgstr "Melkvoorraad"
+
+#: core/forms.py:420 core/views.py:320
+#, python-format
+msgid "%(name)s is still in use and can not be deleted."
+msgstr "%(name)s is nog in gebruik en kan niet verwijderd worden."
+
+#: core/models.py:198
+msgid "Enter a single emoji."
+msgstr "Voer één emoji in."
+
+#: core/models.py:210
+msgid "Only breast milk can come from the milk stash."
+msgstr "Alleen moedermelk kan uit de melkvoorraad komen."
+
+#: core/models.py:212
+msgid "Milk from the stash can't be given from the breast."
+msgstr "Melk uit de voorraad kan niet aan de borst gegeven worden."
+
+#: core/models.py:214
+msgid "Milk from the stash needs an amount."
+msgstr "Melk uit de voorraad heeft een hoeveelheid nodig."
+
+#: core/models.py:544
+msgid "Name must contain at least one letter or number."
+msgstr "De naam moet minstens één letter of cijfer bevatten."
+
+#: core/models.py:608
+msgid "From the milk stash"
+msgstr "Uit de melkvoorraad"
+
+#: core/models.py:609
+#, fuzzy
+msgid "For a bottle of stored breast milk."
+msgstr "Voor een fles bewaarde moedermelk."
+
+#: core/models.py:638
+msgid "Formula and solid food can't be given from the breast."
+msgstr "Kunstvoeding en vast voedsel kunnen niet via de borst gegeven worden."
+
+#: core/models.py:786
+msgid "Into the milk stash"
+msgstr "In de melkvoorraad"
+
+#: core/models.py:787
+msgid "Store this milk to give later."
+msgstr "Bewaar deze melk om later te geven."
+
+#: stash/models.py:29
+msgid "Added"
+msgstr "Toegevoegd"
+
+#: stash/models.py:30
+msgid "Discarded"
+msgstr "Weggegooid"
+
+#: stash/models.py:33 stash/templates/stash/stashadjustment_list.html:29
+msgid "Kind"
+msgstr "Soort"
+
+#: stash/models.py:45 stash/models.py:49
+msgid "Stash adjustment"
+msgstr "Voorraadaanpassing"
+
+#: stash/models.py:46
+#: stash/templates/stash/stashadjustment_confirm_delete.html:8
+#: stash/templates/stash/stashadjustment_list.html:4
+#: stash/templates/stash/stashadjustment_list.html:10
+#: stash/templates/stash/stashadjustment_list.html:14
+msgid "Stash adjustments"
+msgstr "Voorraadaanpassingen"
+
+#: stash/models.py:60
+msgid "The amount must be more than zero."
+msgstr "De hoeveelheid moet meer dan nul zijn."
+
+#: stash/site_settings.py:10
+msgid "Stored milk expires soon after (hours)"
+msgstr "Bewaarde melk verloopt bijna na (uren)"
+
+#: stash/site_settings.py:11
+msgid "Milk in the stash is marked as expiring soon at this age."
+msgstr ""
+"Melk in de voorraad wordt op deze leeftijd als bijna verlopen gemarkeerd."
+
+#: stash/site_settings.py:15
+msgid "Stored milk expires after (hours)"
+msgstr "Bewaarde melk verloopt na (uren)"
+
+#: stash/site_settings.py:16
+msgid "Milk in the stash is marked as expired at this age."
+msgstr "Melk in de voorraad wordt op deze leeftijd als verlopen gemarkeerd."
+
+#: stash/templates/cards/stash.html:11
+msgid "Some milk has expired."
+msgstr "Er is melk verlopen."
+
+#: stash/templates/cards/stash.html:13
+msgid "Some milk expires soon."
+msgstr "Er verloopt binnenkort melk."
+
+#: stash/templates/cards/stash.html:17
+#, python-format
+msgid "Oldest milk: %(time)s"
+msgstr "Oudste melk: %(time)s"
+
+#: stash/templates/stash/stash.html:15
+#, fuzzy
+msgid "Add milk"
+msgstr "Melk toevoegen"
+
+#: stash/templates/stash/stash.html:18
+msgid "Discard milk"
+msgstr "Melk weggooien"
+
+#: stash/templates/stash/stash.html:24
+msgid ""
+"More milk was taken from the stash than was put in. Add the missing milk to "
+"correct it."
+msgstr ""
+"Er is meer melk uit de voorraad gehaald dan erin is gegaan. Voeg de "
+"ontbrekende melk toe om dit te corrigeren."
+
+#: stash/templates/stash/stash.html:29
+msgid "In the stash, oldest first"
+msgstr "In de voorraad, oudste eerst"
+
+#: stash/templates/stash/stash.html:31
+#, fuzzy
+msgid "Expired milk"
+msgstr "Verlopen melk"
+
+#: stash/templates/stash/stash.html:33
+msgid "Throw away expired milk"
+msgstr "Verlopen melk weggooien"
+
+#: stash/templates/stash/stash.html:40
+msgid "Stored"
+msgstr "Bewaard"
+
+#: stash/templates/stash/stash.html:42
+msgid "Expires"
+msgstr "Verloopt"
+
+#: stash/templates/stash/stash.html:43
+#, fuzzy
+msgid "Status"
+msgstr "Status"
+
+#: stash/templates/stash/stash.html:54
+msgid "Expired"
+msgstr "Verlopen"
+
+#: stash/templates/stash/stash.html:56
+msgid "Expires soon"
+msgstr "Verloopt bijna"
+
+#: stash/templates/stash/stash.html:58
+msgid "Fresh"
+msgstr "Vers"
+
+#: stash/templates/stash/stash.html:67
+msgid "The stash is empty."
+msgstr "De voorraad is leeg."
+
+#: stash/templates/stash/stash.html:70
+msgid ""
+"Pumping marked \"Into the milk stash\" adds milk, and bottles marked \"From "
+"the milk stash\" take the oldest milk first."
+msgstr ""
+"Kolven met \"In de melkvoorraad\" voegt melk toe, en flessen met \"Uit de "
+"melkvoorraad\" nemen eerst de oudste melk."
+
+#: stash/templates/stash/stash.html:75
+msgid "Added and discarded milk"
+msgstr "Toegevoegde en weggegooide melk"
+
+#: stash/templates/stash/stashadjustment_confirm_delete.html:4
+msgid "Delete a Stash Adjustment"
+msgstr "Voorraadaanpassing verwijderen"
+
+#: stash/templates/stash/stashadjustment_form.html:7
+#: stash/templates/stash/stashadjustment_form.html:17
+#: stash/templates/stash/stashadjustment_form.html:26
+msgid "Add a Stash Adjustment"
+msgstr "Een voorraadaanpassing toevoegen"
+
+#: stash/templates/stash/stashadjustment_list.html:18
+msgid "Add Stash Adjustment"
+msgstr "Voorraadaanpassing toevoegen"
+
+#: stash/templates/stash/stashadjustment_list.html:69
+#, fuzzy
+msgid "No stash adjustments found."
+msgstr "Geen voorraadaanpassingen gevonden."
+
+#: babybuddy/forms.py:23
+msgid ""
+"Allows adding and editing care entries (feedings, diaper changes, sleep, "
+"timers, medication, temperature, weight, notes, tummy time and activities) "
+"for every child. Cannot delete entries or reach pumping, height, BMI, head "
+"circumference, user management or settings."
+msgstr ""
+"Mag verzorgingsregistraties (voedingen, luierwissels, slaap, timers, "
+"medicatie, temperatuur, gewicht, notities, buikliggen en activiteiten) "
+"toevoegen en bewerken voor elk kind. Kan geen registraties verwijderen en "
+"heeft geen toegang tot kolven, lengte, BMI, hoofdomtrek, gebruikersbeheer "
+"of instellingen."
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:50 core/models.py:477
+#: core/models.py:499 core/models.py:503
+#: core/templates/core/activity_list.html:30
+msgid "Activity"
+msgstr "Activiteit"
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:259
+msgid "Activity entry"
+msgstr "Activiteit"
+
+#: babybuddy/templates/babybuddy/nav-dropdown.html:265 core/models.py:412
+#: core/templates/core/activity_list.html:20
+#: core/templates/core/activitytype_confirm_delete.html:8
+#: core/templates/core/activitytype_form.html:12
+#: core/templates/core/activitytype_list.html:4
+#: core/templates/core/activitytype_list.html:10
+#: core/templates/core/activitytype_list.html:14
+msgid "Activity Types"
+msgstr "Activiteitstypes"
+
+#: core/forms.py:303
+msgid "Delete the activities of this type too"
+msgstr "Verwijder ook de activiteiten van dit type"
+
+#: core/forms.py:326
+msgid "Confirm that the activities of this type will be deleted too."
+msgstr "Bevestig dat de activiteiten van dit type ook verwijderd worden."
+
+#: core/forms.py:331 core/views.py:167
+msgid ""
+"The number of activities of this type has changed. Check it and confirm "
+"again."
+msgstr ""
+"Het aantal activiteiten van dit type is veranderd. Controleer het en "
+"bevestig opnieuw."
+
+#: core/forms.py:370
+msgid "Only used by activities that track a duration."
+msgstr "Alleen gebruikt door activiteiten die een duur bijhouden."
+
+#: core/forms.py:381
+msgid "This activity requires an end time."
+msgstr "Deze activiteit heeft een eindtijd nodig."
+
+#: core/models.py:306
+msgid "Calendar"
+msgstr "Kalender"
+
+#: core/models.py:307
+msgid "Camera"
+msgstr "Camera"
+
+#: core/models.py:308
+msgid "Chat"
+msgstr "Chat"
+
+#: core/models.py:314
+msgid "Graph"
+msgstr "Grafiek"
+
+#: core/models.py:317
+msgid "List"
+msgstr "Lijst"
+
+#: core/models.py:319
+msgid "Mail"
+msgstr "Mail"
+
+#: core/models.py:351
+msgid "The name of the activity, e.g. \"Bath\" or \"Walk\"."
+msgstr "De naam van de activiteit, bv. \"Badje\" of \"Wandeling\"."
+
+#: core/models.py:365
+msgid "Icon"
+msgstr "Icoon"
+
+#: core/models.py:372
+msgid "Emoji"
+msgstr "Emoji"
+
+#: core/models.py:386 core/templates/core/activitytype_list.html:32
+msgid "Track duration"
+msgstr "Duur bijhouden"
+
+#: core/models.py:388
+msgid ""
+"Record a start and end time for this activity. Otherwise only a single point "
+"in time is recorded."
+msgstr ""
+"Een start- en eindtijd bijhouden voor deze activiteit. Anders wordt alleen "
+"één tijdstip bewaard."
+
+#: core/models.py:396
+msgid ""
+"Inactive activities are hidden from add menus and dashboards but their "
+"existing entries are kept."
+msgstr ""
+"Inactieve activiteiten worden verborgen in de toevoegmenu's en dashboards, "
+"maar hun bestaande registraties blijven bewaard."
+
+#: core/models.py:402
+msgid "Sort order"
+msgstr "Volgorde"
+
+#: core/models.py:403
+msgid "Activities are sorted by this value, then by name."
+msgstr "Activiteiten worden op deze waarde gesorteerd, daarna op naam."
+
+#: core/models.py:411
+msgid "Activity Type"
+msgstr "Activiteitstype"
+
+#: core/models.py:437
+msgid "An activity type with a similar name already exists."
+msgstr "Er bestaat al een activiteitstype met een gelijkaardige naam."
+
+#: core/templates/core/activity_confirm_delete.html:4
+msgid "Delete an Activity Entry"
+msgstr "Activiteit verwijderen"
+
+#: core/templates/core/activity_form.html:5
+msgid "Update an Activity Entry"
+msgstr "Activiteit aanpassen"
+
+#: core/templates/core/activity_form.html:7
+#: core/templates/core/activity_form.html:26
+msgid "Add an Activity Entry"
+msgstr "Activiteit toevoegen"
+
+#: core/templates/core/activity_form.html:32
+msgid "No activity types have been created yet."
+msgstr "Er zijn nog geen activiteitstypes aangemaakt."
+
+#: core/templates/core/activity_form.html:34
+msgid "Add an activity type"
+msgstr "Een activiteitstype toevoegen"
+
+#: core/templates/core/activity_list.html:14
+msgid "Add Activity"
+msgstr "Activiteit toevoegen"
+
+#: core/templates/core/activity_list.html:92
+msgid "No activity entries found."
+msgstr "Geen activiteiten gevonden."
+
+#: core/templates/core/activitytype_confirm_delete.html:4
+msgid "Delete an Activity Type"
+msgstr "Activiteitstype verwijderen"
+
+#: core/templates/core/activitytype_confirm_delete.html:22
+#, python-format
+msgid "This will also delete %(counter)s activity of this type."
+msgid_plural "This will also delete %(counter)s activities of this type."
+msgstr[0] "Hiermee wordt ook %(counter)s activiteit van dit type verwijderd."
+msgstr[1] ""
+"Hiermee worden ook %(counter)s activiteiten van dit type verwijderd."
+
+#: core/templates/core/activitytype_confirm_delete.html:28
+msgid "This can't be undone."
+msgstr "Dit kan niet ongedaan gemaakt worden."
+
+#: core/templates/core/activitytype_confirm_delete.html:46
+#, python-format
+msgid "There is %(counter)s activity of this type."
+msgid_plural "There are %(counter)s activities of this type."
+msgstr[0] "Er is %(counter)s activiteit van dit type."
+msgstr[1] "Er zijn %(counter)s activiteiten van dit type."
+
+#: core/templates/core/activitytype_confirm_delete.html:53
+msgid ""
+"An activity type can only be deleted when no activities use it. Delete or "
+"change those activities first."
+msgstr ""
+"Een activiteitstype kan alleen verwijderd worden als geen enkele "
+"activiteit het gebruikt. Verwijder of wijzig die activiteiten eerst."
+
+#: core/templates/core/activitytype_form.html:5
+msgid "Update an Activity Type"
+msgstr "Activiteitstype aanpassen"
+
+#: core/templates/core/activitytype_form.html:7
+#: core/templates/core/activitytype_form.html:26
+msgid "Add an Activity Type"
+msgstr "Activiteitstype toevoegen"
+
+#: core/templates/core/activitytype_list.html:18
+msgid "Add Activity Type"
+msgstr "Activiteitstype toevoegen"
+
+#: core/templates/core/activitytype_list.html:23
+msgid ""
+"Activity types are the custom activities (e.g. bath time or a walk) that can "
+"be tracked for a child."
+msgstr ""
+"Activiteitstypes zijn de eigen activiteiten (bv. badje of een wandeling) "
+"die voor een kind bijgehouden kunnen worden."
+
+#: core/templates/core/activitytype_list.html:34
+msgid "Entries"
+msgstr "Registraties"
+
+#: core/templates/core/activitytype_list.html:80
+msgid "No activity types found."
+msgstr "Geen activiteitstypes gevonden."
+
+#: core/timeline.py:100
+#, python-format
+msgid "%(child)s had %(activity)s."
+msgstr "%(child)s had %(activity)s."
+
+#: core/timeline.py:114
+#, python-format
+msgid "%(child)s started %(activity)s."
+msgstr "%(child)s is begonnen met %(activity)s."
+
+#: core/timeline.py:128
+#, python-format
+msgid "%(child)s finished %(activity)s."
+msgstr "%(child)s is klaar met %(activity)s."
+
+#: dashboard/templates/cards/activity_last.html:26
+#, python-format
+msgid "%(counter)s time today"
+msgid_plural "%(counter)s times today"
+msgstr[0] "%(counter)s keer vandaag"
+msgstr[1] "%(counter)s keer vandaag"
+
+#: dashboard/templates/cards/activity_last.html:47
+#, python-format
+msgid "Add %(name)s"
+msgstr "%(name)s toevoegen"
+
+#: reports/graphs/activity_types.py:41
+#: reports/templates/reports/activity_types.html:4
+#: reports/templates/reports/activity_types.html:9
+#: reports/templates/reports/report_list.html:17
+msgid "Activities per Day"
+msgstr "Activiteiten per dag"
+
+#: reports/graphs/activity_types.py:50
+msgid "Number of activities"
+msgstr "Aantal activiteiten"
+
+#: stash/templates/stash/stash.html:70
+msgid "Recent changes"
+msgstr "Recente wijzigingen"
