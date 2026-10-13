@@ -21,9 +21,10 @@ class BabyBuddyUserForm(forms.ModelForm):
         label=_("Caregiver"),
         help_text=_(
             "Allows adding and editing care entries (feedings, diaper changes, "
-            "sleep, timers, medication, temperature, weight, notes and tummy "
-            "time) for every child. Cannot delete entries or reach pumping, "
-            "height, BMI, head circumference, user management or settings."
+            "sleep, timers, medication, temperature, weight, notes, tummy time "
+            "and activities) for every child. Cannot delete entries or reach "
+            "pumping, height, BMI, head circumference, user management or "
+            "settings."
         ),
     )
     access_expires = forms.DateTimeField(
@@ -129,6 +130,13 @@ class UserPasswordForm(PasswordChangeForm):
 
 
 class UserSettingsForm(forms.ModelForm):
+    dashboard_cards = forms.MultipleChoiceField(
+        label=_("Dashboard cards"),
+        help_text=_("Cards to show on child dashboards."),
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "form-check-input"}),
+    )
+
     class Meta:
         model = Settings
         fields = [
@@ -139,3 +147,30 @@ class UserSettingsForm(forms.ModelForm):
             "timezone",
             "pagination_count",
         ]
+
+    def __init__(self, *args, **kwargs):
+        super(UserSettingsForm, self).__init__(*args, **kwargs)
+        # Imported here to avoid a circular import at module load time.
+        from dashboard.cards import get_card_choices
+
+        self.fields["dashboard_cards"].choices = get_card_choices()
+        hidden = set(self.instance.dashboard_hidden_cards or [])
+        self.initial["dashboard_cards"] = [
+            card_id
+            for card_id, _label in self.fields["dashboard_cards"].choices
+            if card_id not in hidden
+        ]
+
+    def save(self, commit=True):
+        instance = super(UserSettingsForm, self).save(commit=False)
+        # Visible cards are stored as their complement so that newly added
+        # cards (and activity types) are shown by default.
+        visible = set(self.cleaned_data.get("dashboard_cards") or [])
+        instance.dashboard_hidden_cards = [
+            card_id
+            for card_id, _label in self.fields["dashboard_cards"].choices
+            if card_id not in visible
+        ]
+        if commit:
+            instance.save()
+        return instance

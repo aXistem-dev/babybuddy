@@ -85,6 +85,303 @@ class TestBase:
             self.assertIsNotNone(obj.end)
 
 
+class ActivityTypeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
+    endpoint = reverse("api:activitytype-list")
+    model = models.ActivityType
+
+    def setUp(self):
+        super().setUp()
+        self.activity_type = models.ActivityType.objects.create(
+            name="Bath", has_duration=True
+        )
+        self.delete_id = self.activity_type.id
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["results"][0]["name"], "Bath")
+        self.assertEqual(response.data["results"][0]["slug"], "bath")
+        self.assertTrue(response.data["results"][0]["has_duration"])
+
+    def test_post(self):
+        data = {"name": "Walk", "icon": "activities", "color": "#ff0000"}
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = self.model.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.name, "Walk")
+        self.assertEqual(obj.slug, "walk")
+
+    def test_patch_keeps_the_slug(self):
+        endpoint = "{}{}/".format(self.endpoint, self.activity_type.id)
+        response = self.client.patch(endpoint, {"name": "Bath Time"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.activity_type.refresh_from_db()
+        self.assertEqual(self.activity_type.name, "Bath Time")
+        self.assertEqual(self.activity_type.slug, "bath")
+
+    def test_post_refuses_a_clashing_or_empty_slug(self):
+        for name in ("bath!", "🛁", "x" * 101):
+            with self.subTest(name=name):
+                response = self.client.post(
+                    self.endpoint, {"name": name}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("name", response.data)
+
+
+class ActivityTypePermissionsAPITestCase(APITestCase):
+    """
+    The activity type list tells clients which management actions the user
+    may take.
+    """
+
+    fixtures = ["tests.json"]
+    endpoint = reverse("api:activitytype-list")
+
+    def setUp(self):
+        models.ActivityType.objects.create(name="Bath")
+        self.walk = models.ActivityType.objects.create(name="Walk")
+
+    def create_user(self, username, permissions=(), groups=()):
+        user = get_user_model().objects.create_user(
+            username=username, password=username, is_active=True
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core", codename__in=permissions
+            )
+        )
+        user.groups.add(*Group.objects.filter(name__in=groups))
+        self.client.login(username=username, password=username)
+        return user
+
+    def get_permissions(self, params=None):
+        response = self.client.get(self.endpoint, params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            list(response.data.keys()),
+            ["count", "next", "previous", "permissions", "results"],
+        )
+        return response.data["permissions"]
+
+    def test_admin(self):
+        self.client.login(username="admin", password="admin")
+        self.assertEqual(
+            self.get_permissions(),
+            {
+                "add": True,
+                "change": True,
+                "delete": True,
+                "delete_with_activities": True,
+            },
+        )
+
+    def test_caregiver(self):
+        self.create_user(
+            "caregiver", groups=[settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"]]
+        )
+        self.assertEqual(
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": False,
+                "delete": False,
+                "delete_with_activities": False,
+            },
+        )
+
+    def test_change_without_delete(self):
+        self.create_user(
+            "editor", permissions=["view_activitytype", "change_activitytype"]
+        )
+        self.assertEqual(
+            self.get_permissions(),
+            {
+                "add": False,
+                "change": True,
+                "delete": False,
+                "delete_with_activities": False,
+            },
+        )
+
+    def test_every_page(self):
+        self.client.login(username="admin", password="admin")
+        expected = {
+            "add": True,
+            "change": True,
+            "delete": True,
+            "delete_with_activities": True,
+        }
+        for offset in (0, 1, 2):
+            with self.subTest(offset=offset):
+                self.assertEqual(
+                    self.get_permissions({"limit": 1, "offset": offset}), expected
+                )
+        response = self.client.get(self.endpoint, {"limit": 1, "offset": 1})
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIsNotNone(response.data["previous"])
+
+    def test_without_pagination(self):
+        self.client.login(username="admin", password="admin")
+        with patch("api.pagination.ActivityTypePagination.default_limit", new=None):
+            permissions = self.get_permissions()
+            response = self.client.get(self.endpoint)
+        self.assertEqual(
+            permissions,
+            {
+                "add": True,
+                "change": True,
+                "delete": True,
+                "delete_with_activities": True,
+            },
+        )
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["next"], None)
+        self.assertEqual(len(response.data["results"]), 2)
+
+    def test_detail_is_unchanged(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get("{}{}/".format(self.endpoint, self.walk.id))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("permissions", response.data)
+
+    def test_schema(self):
+        self.client.login(username="admin", password="admin")
+        response = self.client.get(reverse("api:openapi-schema"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        schema = response.data["paths"]["/api/activity-types/"]["get"]["responses"]
+        schema = schema["200"]["content"]["application/json"]["schema"]
+        self.assertIn("permissions", schema["required"])
+        self.assertEqual(
+            set(schema["properties"]["permissions"]["properties"]),
+            {"add", "change", "delete", "delete_with_activities"},
+        )
+        # Other lists keep the standard pagination.
+        schema = response.data["paths"]["/api/activities/"]["get"]["responses"]
+        schema = schema["200"]["content"]["application/json"]["schema"]
+        self.assertNotIn("permissions", schema["properties"])
+
+
+class ActivityTypeDeleteAPITestCase(APITestCase):
+    """
+    An activity type that is used by activities is only deleted together with
+    them, on request and with permission to delete activities.
+    """
+
+    fixtures = ["tests.json"]
+
+    def setUp(self):
+        self.client.login(username="admin", password="admin")
+        self.activity_type = models.ActivityType.objects.create(name="Bath")
+        for hours in (1, 2):
+            models.Activity.objects.create(
+                child=models.Child.objects.first(),
+                type=self.activity_type,
+                start=timezone.localtime() - timezone.timedelta(hours=hours),
+            )
+        self.endpoint = reverse("api:activitytype-detail", args=[self.activity_type.id])
+
+    def test_in_use(self):
+        response = self.client.delete(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(response.data["activity_count"], 2)
+        self.assertTrue(models.ActivityType.objects.exists())
+
+    def test_with_activities(self):
+        response = self.client.delete(self.endpoint + "?delete_activities=true")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(models.ActivityType.objects.exists())
+        self.assertFalse(models.Activity.objects.exists())
+
+    def test_unused(self):
+        unused = models.ActivityType.objects.create(name="Walk")
+        response = self.client.delete(
+            reverse("api:activitytype-detail", args=[unused.id])
+        )
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_invalid_flag(self):
+        response = self.client.delete(self.endpoint + "?delete_activities=maybe")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("delete_activities", response.data)
+
+    def test_without_permission_to_delete_activities(self):
+        user = get_user_model().objects.create_user(
+            username="editor", password="editor"
+        )
+        user.user_permissions.add(
+            *Permission.objects.filter(
+                codename__in=["view_activitytype", "delete_activitytype"]
+            )
+        )
+        self.client.login(username="editor", password="editor")
+        response = self.client.delete(self.endpoint + "?delete_activities=true")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(models.Activity.objects.count(), 2)
+
+
+class ActivityAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
+    endpoint = reverse("api:activity-list")
+    model = models.Activity
+
+    def setUp(self):
+        super().setUp()
+        self.activity_type = models.ActivityType.objects.create(
+            name="Bath", has_duration=True
+        )
+        self.point_type = models.ActivityType.objects.create(name="Play")
+        start = timezone.now().replace(microsecond=0) - timezone.timedelta(hours=2)
+        self.activity = models.Activity.objects.create(
+            child=models.Child.objects.first(),
+            type=self.activity_type,
+            start=start,
+            end=start + timezone.timedelta(minutes=15),
+        )
+        self.delete_id = self.activity.id
+        self.timer_test_data = {"type": self.activity_type.id}
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["results"][0]["id"], self.activity.id)
+        self.assertEqual(response.data["results"][0]["type"], self.activity_type.id)
+        self.assertEqual(response.data["results"][0]["duration"], "00:15:00")
+
+    def test_post(self):
+        start = timezone.now() - timezone.timedelta(minutes=20)
+        data = {
+            "child": 1,
+            "type": self.activity_type.id,
+            "start": start.isoformat(),
+            "end": (start + timezone.timedelta(minutes=10)).isoformat(),
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = self.model.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.duration, timezone.timedelta(minutes=10))
+
+    def test_post_without_duration_does_not_require_end(self):
+        start = timezone.now() - timezone.timedelta(minutes=20)
+        data = {
+            "child": 1,
+            "type": self.point_type.id,
+            "start": start.isoformat(),
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = self.model.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.start, obj.end)
+
+    def test_patch(self):
+        endpoint = "{}{}/".format(self.endpoint, self.activity.id)
+        end = self.activity.start + timezone.timedelta(minutes=30)
+        response = self.client.patch(endpoint, {"end": end.isoformat()})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.activity.refresh_from_db()
+        self.assertEqual(self.activity.duration, timezone.timedelta(minutes=30))
+
+
 class BMIAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
     endpoint = reverse("api:bmi-list")
     model = models.BMI

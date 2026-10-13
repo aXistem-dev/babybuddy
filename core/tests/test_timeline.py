@@ -27,6 +27,7 @@ class TimelineTestCase(TestCase):
             models.Sleep,
             models.TummyTime,
             models.Feeding,
+            models.Activity,
         ]
 
         for model in models_to_test:
@@ -38,6 +39,12 @@ class TimelineTestCase(TestCase):
                 }
                 if model is models.Feeding:
                     create_kwargs.update(type="formula", method="bottle")
+                if model is models.Activity:
+                    create_kwargs.update(
+                        type=models.ActivityType.objects.create(
+                            name="Walk", has_duration=True
+                        )
+                    )
                 instance = model.objects.create(**create_kwargs)
 
                 events_day_1 = get_objects(date=day_1, child=self.child)
@@ -54,6 +61,23 @@ class TimelineTestCase(TestCase):
                 self.assertEqual(events_day_2[0]["time"], end_time)
 
                 instance.delete()
+
+    def test_activities_need_the_activity_permission(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Permission
+
+        day = timezone.make_aware(datetime.datetime(2023, 1, 1))
+        activity_type = models.ActivityType.objects.create(name="Bath")
+        models.Activity.objects.create(
+            child=self.child, type=activity_type, start=day.replace(hour=9)
+        )
+        user = get_user_model().objects.create_user(username="carer")
+        self.assertEqual(get_objects(date=day, child=self.child, user=user), [])
+
+        user.user_permissions.add(Permission.objects.get(codename="view_activity"))
+        user = get_user_model().objects.get(pk=user.pk)
+        events = get_objects(date=day, child=self.child, user=user)
+        self.assertEqual([e["model_name"] for e in events], ["activity"])
 
     def test_tummy_time_notes_appear_in_timeline(self):
         """

@@ -1,0 +1,64 @@
+{% extends "babybuddy/page.html" %}
+{% load babybuddy i18n %}
+{% block title %}
+    {% trans "Delete an Activity Type" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'core:activitytype-list' %}">{% trans "Activity Types" %}</a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Delete" %}</li>
+{% endblock %}
+{% block content %}
+    <form role="form" method="post">
+        {% csrf_token %}
+        {% for error in form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endfor %}
+        {% if object.entries__count > 0 and can_delete_activities %}
+            <h1>{% confirm_delete_text object %}</h1>
+            <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading">
+                    {% blocktrans trimmed count counter=object.entries__count %}
+                        This will also delete {{ counter }} activity of this type.
+                    {% plural %}
+                        This will also delete {{ counter }} activities of this type.
+                    {% endblocktrans %}
+                </h4>
+                <p class="mb-0">{% trans "This can't be undone." %}</p>
+            </div>
+            <input type="hidden"
+                   name="activity_count"
+                   value="{{ object.entries__count }}">
+            <div class="form-check mb-3">
+                <input type="checkbox"
+                       class="form-check-input"
+                       name="delete_activities"
+                       id="id_delete_activities"
+                       required>
+                <label class="form-check-label" for="id_delete_activities">{{ form.delete_activities.label }}</label>
+            </div>
+            <button type="submit" class="btn btn-danger">{% trans "Delete" %}</button>
+        {% elif object.entries__count > 0 %}
+            <h1>{{ object }}</h1>
+            <div class="alert alert-warning" role="alert">
+                <h4 class="alert-heading">
+                    {% blocktrans trimmed count counter=object.entries__count %}
+                        There is {{ counter }} activity of this type.
+                    {% plural %}
+                        There are {{ counter }} activities of this type.
+                    {% endblocktrans %}
+                </h4>
+                <p class="mb-0">
+                    {% blocktrans trimmed %}
+                        An activity type can only be deleted when no activities use it. Delete or change those activities first.
+                    {% endblocktrans %}
+                </p>
+            </div>
+        {% else %}
+            <h1>{% confirm_delete_text object %}</h1>
+            <button type="submit" class="btn btn-danger">{% trans "Delete" %}</button>
+        {% endif %}
+        <a href="{% url 'core:activitytype-list' %}" class="btn btn-default">{% trans "Cancel" %}</a>
+    </form>
+{% endblock %}

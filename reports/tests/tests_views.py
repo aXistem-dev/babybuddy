@@ -38,6 +38,10 @@ class ViewsTestCase(TestCase):
         page = self.c.get(base_url)
         self.assertEqual(page.status_code, 200)
 
+        page = self.c.get("{}/activities/types/".format(base_url))
+        self.assertEqual(page.status_code, 200)
+        self.assertIsNotNone(page.context.get("html"))
+
         page = self.c.get("{}/bmi/bmi/".format(base_url))
         self.assertEqual(page.status_code, 200)
 
@@ -115,6 +119,7 @@ class ReportPermissionsTestCase(TestCase):
         "/sleep/totals/",
     ]
     denied = [
+        "/activities/types/",
         "/bmi/bmi/",
         "/head-circumference/head-circumference/",
         "/height/height/",

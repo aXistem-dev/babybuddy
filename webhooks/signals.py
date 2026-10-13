@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 #: computed rather than written, and announcing them would send an event for
 #: every measurement that merely shifted a curve.
 WATCHED = (
+    core_models.Activity,
+    core_models.ActivityType,
     core_models.BMI,
     core_models.Child,
     core_models.DiaperChange,

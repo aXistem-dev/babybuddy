@@ -62,6 +62,12 @@ class StartEndFieldFilter(ChildFieldFilter):
         )
 
 
+class ActivityFilter(StartEndFieldFilter, TagsFieldFilter):
+    class Meta(StartEndFieldFilter.Meta):
+        model = models.Activity
+        fields = sorted(StartEndFieldFilter.Meta.fields + ["type"])
+
+
 class DiaperChangeFilter(TimeFieldFilter, TagsFieldFilter):
     class Meta(TimeFieldFilter.Meta):
         model = models.DiaperChange

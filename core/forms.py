@@ -70,6 +70,14 @@ def set_initial_values(kwargs, form_type):
                 last_feed_args["method"] = last_method
             kwargs["initial"].update(last_feed_args)
 
+    # Set the ActivityType for Activity instances based on the `type` kwarg.
+    if form_type == ActivityForm:
+        type_slug = kwargs.get("type", None)
+        if type_slug:
+            activity_type = models.ActivityType.objects.filter(slug=type_slug).first()
+            if activity_type:
+                kwargs["initial"].update({"type": activity_type})
+
     # Set default "nap" value for Sleep instances.
     if form_type == SleepForm and "nap" not in kwargs["initial"]:
         try:
@@ -84,7 +92,7 @@ def set_initial_values(kwargs, form_type):
         kwargs["initial"].update({"nap": nap})
 
     # Remove custom kwargs, so they do not interfere with `super` calls.
-    for key in ["child", "timer"]:
+    for key in ["child", "timer", "type"]:
         try:
             kwargs.pop(key)
         except KeyError:
@@ -255,6 +263,127 @@ class TaggableModelForm(forms.ModelForm):
         tags = self.cleaned_data["tags"]
         models.Tag.check_assignment_permissions(self.user, tags, current)
         return tags
+
+
+class ActivityTypeForm(CoreModelForm):
+    fieldsets = [
+        {
+            "fields": ["name", "icon", "emoji", "color"],
+            "layout": "required",
+        },
+        {"fields": ["has_duration", "active", "order"]},
+    ]
+
+    class Meta:
+        model = models.ActivityType
+        fields = [
+            "name",
+            "icon",
+            "emoji",
+            "color",
+            "has_duration",
+            "active",
+            "order",
+        ]
+        widgets = {
+            "color": widgets.TextInput(
+                attrs={"type": "color", "class": "form-control-color"}
+            ),
+        }
+
+
+class ActivityTypeDeleteForm(forms.Form):
+    """
+    Confirms deleting an activity type. A type that is used by activities is
+    only deleted with its activities, by a user who may delete activities,
+    after confirming the number of activities that was shown.
+    """
+
+    delete_activities = forms.BooleanField(
+        required=False, label=_("Delete the activities of this type too")
+    )
+    activity_count = forms.IntegerField(required=False, widget=forms.HiddenInput)
+
+    def __init__(self, *args, activity_type, user, **kwargs):
+        self.activity_type = activity_type
+        self.user = user
+        # The number of activities the user confirmed deleting, set by clean().
+        self.confirmed_activity_count = 0
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        count = self.activity_type.entries.count()
+        if count == 0:
+            return cleaned_data
+        if not self.user.has_perm("core.delete_activity"):
+            raise forms.ValidationError(
+                _("%(name)s is still in use and can not be deleted.")
+                % {"name": self.activity_type}
+            )
+        if not cleaned_data.get("delete_activities"):
+            raise forms.ValidationError(
+                _("Confirm that the activities of this type will be deleted too.")
+            )
+        if cleaned_data.get("activity_count") != count:
+            raise forms.ValidationError(
+                _(
+                    "The number of activities of this type has changed. Check it "
+                    "and confirm again."
+                )
+            )
+        self.confirmed_activity_count = count
+        return cleaned_data
+
+
+class ActivityForm(CoreModelForm, TaggableModelForm):
+    fieldsets = [
+        {"fields": ["child", "type", "start", "end"], "layout": "required"},
+        {"fields": ["notes", "tags"], "layout": "advanced"},
+    ]
+
+    class Meta:
+        model = models.Activity
+        fields = ["child", "type", "start", "end", "notes", "tags"]
+        widgets = {
+            "child": ChildRadioSelect,
+            "type": PillRadioSelect(),
+            "start": DateTimeInput(),
+            "end": DateTimeInput(),
+            "notes": forms.Textarea(attrs={"rows": 5}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super(ActivityForm, self).__init__(*args, **kwargs)
+
+        # Only offer active activity types, but never hide the type of an
+        # entry that is being edited.
+        types = models.ActivityType.objects.filter(active=True)
+        instance_type_id = getattr(self.instance, "type_id", None)
+        if instance_type_id:
+            types = types | models.ActivityType.objects.filter(id=instance_type_id)
+        self.fields["type"].queryset = types.distinct()
+
+        # "end" is only meaningful for activity types that track a duration.
+        self.fields["end"].required = False
+        self.fields["end"].help_text = _(
+            "Only used by activities that track a duration."
+        )
+
+    def clean(self):
+        cleaned_data = super(ActivityForm, self).clean()
+        activity_type = cleaned_data.get("type")
+        start = cleaned_data.get("start")
+        end = cleaned_data.get("end")
+        if activity_type and start:
+            if activity_type.has_duration:
+                if not end:
+                    self.add_error("end", _("This activity requires an end time."))
+            else:
+                # Entries without a duration are a single point in time.
+                cleaned_data["end"] = start
+                self.instance.end = start
+        return cleaned_data
 
 
 class BMIForm(CoreModelForm, TaggableModelForm):

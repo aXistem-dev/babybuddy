@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 from django.contrib import admin
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
-from import_export import fields, resources
+from import_export import fields, resources, widgets
 from import_export.admin import ImportExportMixin, ExportActionMixin
 
 from core import models
@@ -18,6 +19,67 @@ class ImportExportResourceBase(resources.ModelResource):
         clean_model_instances = True
         exclude = ("duration",)
         export_order = ("id", "child_id", "child_first_name", "child_last_name")
+
+
+class ActivityTypeImportExportResource(resources.ModelResource):
+    id = fields.Field(attribute="id")
+
+    class Meta:
+        model = models.ActivityType
+
+    def validate_instance(
+        self, instance, import_validation_errors=None, validate_unique=True
+    ):
+        # The model is not cleaned as a whole on import, because the slug of a
+        # row without one is only generated when the type is saved. The emoji
+        # is still checked, like on the form and in the API.
+        errors = dict(import_validation_errors or {})
+        try:
+            models.validate_emoji(instance.emoji)
+        except ValidationError as error:
+            errors["emoji"] = error
+        super().validate_instance(instance, errors, validate_unique)
+
+
+@admin.register(models.ActivityType)
+class ActivityTypeAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
+    list_display = (
+        "name",
+        "icon",
+        "emoji",
+        "color",
+        "has_duration",
+        "active",
+        "order",
+    )
+    list_filter = ("active", "has_duration")
+    search_fields = ("name",)
+    resource_class = ActivityTypeImportExportResource
+
+
+class ActivityImportExportResource(ImportExportResourceBase):
+    # By slug rather than by id, so activities move between instances whose
+    # types were created in a different order.
+    type = fields.Field(
+        attribute="type",
+        column_name="type",
+        widget=widgets.ForeignKeyWidget(models.ActivityType, field="slug"),
+    )
+
+    class Meta:
+        model = models.Activity
+
+
+@admin.register(models.Activity)
+class ActivityAdmin(ImportExportMixin, ExportActionMixin, admin.ModelAdmin):
+    list_display = ("type", "start", "end", "duration", "child")
+    list_filter = ("child", "type", "tags")
+    search_fields = (
+        "child__first_name",
+        "child__last_name",
+        "type__name",
+    )
+    resource_class = ActivityImportExportResource
 
 
 class BMIImportExportResource(ImportExportResourceBase):

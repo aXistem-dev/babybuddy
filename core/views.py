@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from django.contrib import messages
 from django.contrib.messages.views import SuccessMessageMixin
-from django.db.models import Count
+from django.db import transaction
+from django.db.models import Count, ProtectedError
 from django.db.models.functions import Lower
 from django.forms import Form, ValidationError
 from django.http import HttpResponseRedirect
@@ -59,6 +60,7 @@ class CoreAddView(
         Check for and add "child" and "timer" from request query parameters.
           - "child" may provide a slug for a Child instance.
           - "timer" may provided an ID for a Timer instance.
+          - "type" may provide a slug for an ActivityType instance.
 
         These arguments are used in some add views to pre-fill initial data in
         the form fields.
@@ -67,7 +69,7 @@ class CoreAddView(
         """
         kwargs = super(CoreAddView, self).get_form_kwargs()
         if issubclass(self.get_form_class(), forms.CoreModelForm):
-            for parameter in ["child", "timer"]:
+            for parameter in ["child", "timer", "type"]:
                 if parameter in self.request.GET:
                     kwargs[parameter] = self.request.GET[parameter]
         return kwargs
@@ -90,6 +92,147 @@ class CoreDeleteView(PermissionRequiredMixin, SuccessMessageMixin, DeleteView):
         return _("%(model)s entry deleted.") % {
             "model": self.model._meta.verbose_name.title()
         }
+
+
+class ActivityTypeList(
+    PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView
+):
+    model = models.ActivityType
+    template_name = "core/activitytype_list.html"
+    permission_required = ("core.view_activitytype",)
+    filterset_class = filters.ActivityTypeFilter
+
+    def get_queryset(self):
+        return (
+            super()
+            .get_queryset()
+            .annotate(Count("entries"))
+            .order_by("order", Lower("name"))
+        )
+
+
+class ActivityTypeAdd(CoreAddView):
+    model = models.ActivityType
+    template_name = "core/activitytype_form.html"
+    permission_required = ("core.add_activitytype",)
+    form_class = forms.ActivityTypeForm
+    success_url = reverse_lazy("core:activitytype-list")
+
+    def get_success_message(self, cleaned_data):
+        return _("%(name)s added!") % cleaned_data
+
+
+class ActivityTypeUpdate(CoreUpdateView):
+    model = models.ActivityType
+    template_name = "core/activitytype_form.html"
+    permission_required = ("core.change_activitytype",)
+    form_class = forms.ActivityTypeForm
+    success_url = reverse_lazy("core:activitytype-list")
+
+    def get_success_message(self, cleaned_data):
+        return _("%(name)s updated.") % cleaned_data
+
+
+class ActivitiesChanged(Exception):
+    """The activities of a type changed after the user confirmed deleting them."""
+
+
+class ActivityTypeDelete(CoreDeleteView):
+    model = models.ActivityType
+    form_class = forms.ActivityTypeDeleteForm
+    template_name = "core/activitytype_confirm_delete.html"
+    permission_required = ("core.delete_activitytype",)
+    success_url = reverse_lazy("core:activitytype-list")
+
+    def get_queryset(self):
+        return super().get_queryset().annotate(Count("entries"))
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs.update({"activity_type": self.object, "user": self.request.user})
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["can_delete_activities"] = self.request.user.has_perm(
+            "core.delete_activity"
+        )
+        return context
+
+    def form_valid(self, form):
+        # The type goes together with the activities the user confirmed, or
+        # nothing goes. Locking the type keeps activities from being added to
+        # it meanwhile, where the database supports it.
+        message = _(
+            "The number of activities of this type has changed. Check it and "
+            "confirm again."
+        )
+        try:
+            with transaction.atomic():
+                activity_type = models.ActivityType.objects.select_for_update().get(
+                    pk=self.object.pk
+                )
+                if form.confirmed_activity_count:
+                    if activity_type.entries.count() != form.confirmed_activity_count:
+                        raise ActivitiesChanged
+                    activity_type.entries.all().delete()
+                return super().form_valid(form)
+        except ActivitiesChanged:
+            messages.error(self.request, message)
+            return HttpResponseRedirect(self.request.path)
+        except ProtectedError:
+            # Covers activities that were added after the form was checked.
+            messages.error(
+                self.request,
+                _("%(name)s is still in use and can not be deleted.")
+                % {"name": self.object},
+            )
+            return HttpResponseRedirect(self.request.path)
+
+
+class ActivityList(
+    PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView
+):
+    model = models.Activity
+    template_name = "core/activity_list.html"
+    permission_required = ("core.view_activity",)
+    filterset_class = filters.ActivityFilter
+
+    def get_queryset(self):
+        return super().get_queryset().select_related("child", "type")
+
+
+class ActivityFormMixin:
+    def get_context_data(self, **kwargs):
+        """Provide the IDs of activity types that track a duration so the form
+        can hide the end time field for the ones that do not."""
+        context = super().get_context_data(**kwargs)
+        context["duration_type_ids"] = list(
+            models.ActivityType.objects.filter(has_duration=True).values_list(
+                "id", flat=True
+            )
+        )
+        return context
+
+
+class ActivityAdd(ActivityFormMixin, CoreAddView):
+    model = models.Activity
+    permission_required = ("core.add_activity",)
+    form_class = forms.ActivityForm
+    success_url = reverse_lazy("core:activity-list")
+
+
+class ActivityUpdate(ActivityFormMixin, CoreUpdateView):
+    model = models.Activity
+    permission_required = ("core.change_activity",)
+    form_class = forms.ActivityForm
+    success_url = reverse_lazy("core:activity-list")
+
+
+class ActivityDelete(CoreDeleteView):
+    model = models.Activity
+    permission_required = ("core.delete_activity",)
+    success_url = reverse_lazy("core:activity-list")
 
 
 class BMIList(PermissionRequiredMixin, BabyBuddyPaginatedView, BabyBuddyFilterView):
@@ -426,6 +569,7 @@ class TagAdminDetail(PermissionRequiredMixin, DetailView):
     def get_queryset(self):
         qs = super().get_queryset()
         qs = qs.annotate(
+            Count("activity"),
             Count("feeding"),
             Count("diaperchange"),
             Count("pumping"),

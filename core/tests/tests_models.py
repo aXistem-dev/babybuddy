@@ -3,11 +3,138 @@ import datetime
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
-from django.test import TestCase
+from django.db.models import ProtectedError
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from core import models
+
+
+class ActivityTypeTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+
+    def test_activitytype_create(self):
+        activity_type = models.ActivityType.objects.create(name="Bath Time")
+        self.assertEqual(
+            activity_type, models.ActivityType.objects.get(name="Bath Time")
+        )
+        self.assertEqual(activity_type.slug, "bath-time")
+        self.assertEqual(str(activity_type), "Bath Time")
+        self.assertEqual(activity_type.card_id, "activity:bath-time")
+        self.assertFalse(activity_type.has_duration)
+        self.assertTrue(activity_type.active)
+
+    def test_activitytype_slug_is_kept_on_rename(self):
+        activity_type = models.ActivityType.objects.create(name="Bath")
+        activity_type.name = "Bath Time"
+        activity_type.full_clean()
+        activity_type.save()
+        activity_type.refresh_from_db()
+        self.assertEqual(activity_type.name, "Bath Time")
+        self.assertEqual(activity_type.slug, "bath")
+        self.assertEqual(activity_type.card_id, "activity:bath")
+
+    def test_activitytype_slug_is_kept_on_rename_to_a_taken_slug(self):
+        models.ActivityType.objects.create(name="Bath")
+        activity_type = models.ActivityType.objects.create(name="Shower")
+        # "Bath!" would slugify to the slug of "Bath", but the slug does not
+        # change on a rename, so there is no clash.
+        activity_type.name = "Bath!"
+        activity_type.full_clean()
+        activity_type.save()
+        self.assertEqual(activity_type.slug, "shower")
+
+    def test_activitytype_clashing_or_empty_slug(self):
+        models.ActivityType.objects.create(name="Bath")
+        for name, message in (
+            ("bath!", "similar name already exists"),
+            ("🛁", "at least one letter or number"),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaisesMessage(ValidationError, message):
+                    models.ActivityType(name=name).full_clean()
+
+    def test_activitytype_name_max_length(self):
+        with self.assertRaises(ValidationError) as context:
+            models.ActivityType(name="x" * 101).full_clean()
+        self.assertIn("name", context.exception.message_dict)
+        activity_type = models.ActivityType(name="x" * 100)
+        activity_type.full_clean()
+        activity_type.save()
+        self.assertEqual(activity_type.slug, "x" * 100)
+
+    def test_activitytype_slug_fits_its_field(self):
+        # NFKC normalization can make a slug longer than the name.
+        activity_type = models.ActivityType(name="\ufb00" * 100)
+        activity_type.full_clean()
+        activity_type.save()
+        self.assertEqual(activity_type.slug, "ff" * 50)
+
+    def test_activitytype_emoji_defaults_to_blank(self):
+        activity_type = models.ActivityType.objects.create(name="Bath")
+        self.assertEqual(activity_type.emoji, "")
+        self.assertEqual(activity_type.icon, "activities")
+
+    def test_activitytype_emoji(self):
+        activity_type = models.ActivityType(name="Haircut", emoji="\u2702\ufe0f")
+        activity_type.full_clean()
+        for emoji in ("cut", "\u2702\ufe0f\U0001faa5", "\U0001f642" * 17):
+            with self.subTest(emoji=emoji):
+                activity_type.emoji = emoji
+                with self.assertRaises(ValidationError) as context:
+                    activity_type.full_clean()
+                self.assertIn("emoji", context.exception.message_dict)
+
+    def test_activitytype_complementary_color(self):
+        activity_type = models.ActivityType.objects.create(name="Bath", color="#FFFFFF")
+        self.assertEqual(activity_type.complementary_color, models.Tag.DARK_COLOR)
+        activity_type.color = "#000000"
+        self.assertEqual(activity_type.complementary_color, models.Tag.LIGHT_COLOR)
+
+
+class ActivityTestCase(TestCase):
+    def setUp(self):
+        call_command("migrate", verbosity=0)
+        self.child = models.Child.objects.create(
+            first_name="First", last_name="Last", birth_date=timezone.localdate()
+        )
+        self.bath = models.ActivityType.objects.create(name="Bath", has_duration=True)
+        self.play = models.ActivityType.objects.create(name="Play")
+
+    def test_activity_create_with_duration(self):
+        start = timezone.localtime() - timezone.timedelta(minutes=30)
+        end = timezone.localtime()
+        activity = models.Activity.objects.create(
+            child=self.child, type=self.bath, start=start, end=end
+        )
+        self.assertEqual(activity, models.Activity.objects.first())
+        self.assertEqual(str(activity), "Activity")
+        self.assertEqual(activity.duration, end - start)
+
+    def test_activity_without_duration_ends_at_start(self):
+        start = timezone.localtime() - timezone.timedelta(minutes=30)
+        activity = models.Activity.objects.create(
+            child=self.child,
+            type=self.play,
+            start=start,
+            end=timezone.localtime(),
+        )
+        self.assertEqual(activity.end, start)
+        self.assertEqual(activity.duration, datetime.timedelta(0))
+
+    def test_type_in_use_is_protected(self):
+        models.Activity.objects.create(
+            child=self.child,
+            type=self.play,
+            start=timezone.localtime(),
+            end=timezone.localtime(),
+        )
+        with self.assertRaises(ProtectedError):
+            self.play.delete()
+        self.assertEqual(models.Activity.objects.count(), 1)
 
 
 class BMITestCase(TestCase):
@@ -521,3 +648,84 @@ class MedicationTestCase(TestCase):
         )
         with self.assertRaises(ValidationError):
             medication.full_clean()
+
+
+class ValidateEmojiTestCase(SimpleTestCase):
+    def assertValid(self, value):
+        try:
+            models.validate_emoji(value)
+        except ValidationError as error:
+            self.fail("{!r} was rejected: {}".format(value, error))
+
+    def assertInvalid(self, value):
+        with self.assertRaises(ValidationError) as context:
+            models.validate_emoji(value)
+        self.assertEqual(context.exception.messages, ["Enter a single emoji."])
+
+    def test_accepted(self):
+        cases = {
+            "empty": "",
+            "plain": "\U0001f642",
+            "plain (newer)": "\U0001faa5",
+            "variation selector": "\u2702\ufe0f",
+            "text style": "\u2702",
+            "skin tone": "\U0001f44d\U0001f3fd",
+            "family": "\U0001f468\u200d\U0001f469\u200d\U0001f467\u200d\U0001f466",
+            "profession with skin tone": "\U0001f9d1\U0001f3fd\u200d\u2695\ufe0f",
+            "flag": "\U0001f1ea\U0001f1fa",
+            "keycap": "1\ufe0f\u20e3",
+            "keycap hash": "#\ufe0f\u20e3",
+            "subdivision flag": (
+                "\U0001f3f4\U000e0067\U000e0062\U000e0073\U000e0063\U000e0074"
+                "\U000e007f"
+            ),
+            "copyright": "\u00a9\ufe0f",
+            "wavy dash": "\u3030",
+            "left right arrow": "\u2194\ufe0f",
+            "south west arrow": "\u2199\ufe0f",
+            "arrow curving left": "\u21a9\ufe0f",
+            "arrow curving right": "\u21aa",
+            "circled M": "\u24c2\ufe0f",
+            "small black square": "\u25aa\ufe0f",
+            "small white square": "\u25ab\ufe0f",
+            "play button": "\u25b6\ufe0f",
+            "reverse button": "\u25c0\ufe0f",
+            "white medium square": "\u25fb\ufe0f",
+            "black medium small square": "\u25fe",
+            "arrow curving up": "\u2934\ufe0f",
+            "arrow curving down": "\u2935\ufe0f",
+            "16 code points": "\u200d".join(["\U0001f468"] * 8) + "\ufe0f",
+        }
+        for name, value in cases.items():
+            with self.subTest(name):
+                self.assertValid(value)
+
+    def test_refused(self):
+        cases = {
+            "two emoji": "\U0001f642\U0001f642",
+            "two emoji with selectors": "\u2702\ufe0f\U0001faa5",
+            "two flags": "\U0001f1ea\U0001f1fa\U0001f1ef\U0001f1f5",
+            "letter": "a",
+            "arrow without emoji form": "\u2190",
+            "geometric shape without emoji form": "\u25a0",
+            "circled letter without emoji form": "\u24b6",
+            "text": "nail trim",
+            "digit": "1",
+            "keycap without selector": "1\u20e3",
+            "space": " ",
+            "emoji and space": "\U0001f642 ",
+            "space and emoji": " \U0001f642",
+            "newline": "\n",
+            "one regional indicator": "\U0001f1ea",
+            "lone skin tone": "\U0001f3fd",
+            "two skin tones": "\U0001f44d\U0001f3fd\U0001f3fd",
+            "two selectors": "\u2702\ufe0f\ufe0f",
+            "lone joiner": "\u200d",
+            "trailing joiner": "\U0001f642\u200d",
+            "joined text": "\U0001f642\u200da",
+            "unfinished tag sequence": "\U0001f3f4\U000e0067\U000e0062",
+            "over 16 code points": "\u200d".join(["\U0001f468"] * 9),
+        }
+        for name, value in cases.items():
+            with self.subTest(name):
+                self.assertInvalid(value)
