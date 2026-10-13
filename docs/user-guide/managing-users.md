@@ -27,10 +27,10 @@ more.
 With the default group permissions, a caregiver can:
 
 - view children, timers, feedings, diaper changes, sleep entries, medication,
-  temperature, weight, notes and tummy time;
+  temperature, weight, notes, tummy time, activities and activity types;
 - add and edit feedings, diaper changes, sleep entries, timers, medication,
-  temperature, weight, notes and tummy time, through both the web interface and
-  the API;
+  temperature, weight, notes, tummy time and activities, through both the web
+  interface and the API;
 - open the child dashboard, the timeline and the reports for those entry types.
 
 With those defaults, a caregiver cannot:
@@ -38,8 +38,8 @@ With those defaults, a caregiver cannot:
 - delete any entry, including a timer;
 - see or record pumping, height, BMI or head circumference, in lists, on the
   dashboard, in the timeline or in reports;
-- manage children, tags, users, change site settings or reach the database
-  admin area.
+- manage children, tags, activity types or users, change site settings or reach
+  the database admin area.
 
 The group is a starting point, not a fixed role. A caregiver is an ordinary
 Django user, so the permissions can be extended per user afterwards — grant the
