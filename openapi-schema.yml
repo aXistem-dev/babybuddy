@@ -4876,6 +4876,367 @@ paths:
           description: ""
       tags:
         - api
+  /api/stash-adjustments/:
+    get:
+      operationId: listStashAdjustments
+      description: ""
+      parameters:
+        - name: limit
+          required: false
+          in: query
+          description: Number of results to return per page.
+          schema:
+            type: integer
+        - name: offset
+          required: false
+          in: query
+          description: The initial index from which to return the results.
+          schema:
+            type: integer
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - count
+                  - results
+                properties:
+                  count:
+                    type: integer
+                    example: 123
+                  next:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=400&limit=100
+                  previous:
+                    type: string
+                    nullable: true
+                    format: uri
+                    example: http://api.example.org/accounts/?offset=200&limit=100
+                  results:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+    post:
+      operationId: createStashAdjustment
+      description: ""
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+  /api/stash-adjustments/{id}/:
+    get:
+      operationId: retrieveStashAdjustment
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Stash adjustment.
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+    put:
+      operationId: updateStashAdjustment
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Stash adjustment.
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+    patch:
+      operationId: partialUpdateStashAdjustment
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Stash adjustment.
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/StashAdjustment"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StashAdjustment"
+          description: ""
+      tags:
+        - api
+    delete:
+      operationId: destroyStashAdjustment
+      description: ""
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: A unique integer value identifying this Stash adjustment.
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          description: DateTime
+          schema:
+            type: string
+        - name: date_max
+          required: false
+          in: query
+          description: Max. DateTime
+          schema:
+            type: string
+        - name: date_min
+          required: false
+          in: query
+          description: Min. DateTime
+          schema:
+            type: string
+        - name: kind
+          required: false
+          in: query
+          description: kind
+          schema:
+            type: string
+            enum:
+              - added
+              - discarded
+        - name: tags
+          required: false
+          in: query
+          description: tag
+          schema:
+            type: string
+        - name: ordering
+          required: false
+          in: query
+          description: Which field to use when ordering the results.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: ""
+      tags:
+        - api
   /api/tags/:
     get:
       operationId: listTags
@@ -6879,6 +7240,23 @@ paths:
           description: ""
       tags:
         - api
+  /api/stash:
+    get:
+      operationId: retrieveMilkStash
+      description:
+        "The milk stash: its balance and the stored milk, oldest first.
+        Anyone who
+
+        may see stash adjustments may see it."
+      parameters: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: {}
+          description: ""
+      tags:
+        - api
   /api/timers/{id}/restart/:
     patch:
       operationId: restartTimer
@@ -7208,6 +7586,9 @@ components:
         amount:
           type: number
           nullable: true
+        from_stash:
+          type: boolean
+          description: For a bottle of stored breast milk.
         notes:
           type: string
           nullable: true
@@ -7340,6 +7721,9 @@ components:
           description: Required unless a Timer value is provided.
         amount:
           type: number
+        to_stash:
+          type: boolean
+          description: Store this milk to give later.
         start:
           type: string
           format: date-time
@@ -7403,6 +7787,32 @@ components:
           type: array
           items:
             type: string
+    StashAdjustment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        time:
+          type: string
+          format: date-time
+        amount:
+          type: number
+        kind:
+          enum:
+            - added
+            - discarded
+          type: string
+        notes:
+          type: string
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+      required:
+        - amount
+        - kind
     Tag:
       type: object
       properties:

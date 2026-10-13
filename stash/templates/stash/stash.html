@@ -1,0 +1,109 @@
+{% extends "babybuddy/page.html" %}
+{% load i18n l10n %}
+{% block title %}
+    {% trans "Milk stash" %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Milk stash" %}</li>
+{% endblock %}
+{% block content %}
+    <h1>
+        {% trans "Milk stash" %}
+        {% if perms.stash.add_stashadjustment %}
+            <a href="{% url 'stash:stashadjustment-add' %}?kind=added"
+               class="btn btn-sm btn-success">
+                <i class="icon-add" aria-hidden="true"></i> {% trans "Add milk" %}
+            </a>
+            <a href="{% url 'stash:stashadjustment-add' %}?kind=discarded"
+               class="btn btn-sm btn-outline-danger">{% trans "Discard milk" %}</a>
+        {% endif %}
+    </h1>
+    <div class="display-6 mb-3{% if summary.balance < 0 %} text-danger{% endif %}">{{ summary.balance }}</div>
+    {% if summary.balance < 0 %}
+        <p class="text-danger">
+            {% trans "More milk was taken from the stash than was put in. Add the missing milk to correct it." %}
+        </p>
+    {% endif %}
+    {% if summary.lots %}
+        <h2 class="h5">
+            {% trans "In the stash, oldest first" %}
+            {% if summary.expired_amount and perms.stash.add_stashadjustment %}
+                {% trans "Expired milk" as expired_note %}
+                <a href="{% url 'stash:stashadjustment-add' %}?kind=discarded&amount={{ summary.expired_amount|unlocalize }}&notes={{ expired_note|urlencode }}"
+                   class="btn btn-sm btn-outline-danger ms-2">{% trans "Throw away expired milk" %}</a>
+            {% endif %}
+        </h2>
+        <div class="table-responsive">
+            <table class="table table-borderless table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>{% trans "Stored" %}</th>
+                        <th>{% trans "Amount" %}</th>
+                        <th>{% trans "Expires" %}</th>
+                        <th>{% trans "Status" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lot in summary.lots %}
+                        <tr>
+                            <td>{% include "stash/source_link.html" with time=lot.time source=lot.source %}</td>
+                            <td>{{ lot.amount }}</td>
+                            <td>{{ lot.expires_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                            <td>
+                                {% if lot.status == "expired" %}
+                                    <span class="badge bg-danger">{% trans "Expired" %}</span>
+                                {% elif lot.status == "warn" %}
+                                    <span class="badge bg-warning text-dark">{% trans "Expires soon" %}</span>
+                                {% else %}
+                                    <span class="badge bg-success">{% trans "Fresh" %}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>{% trans "The stash is empty." %}</p>
+    {% endif %}
+    {% if history %}
+        <h2 class="h5">{% trans "Recent changes" %}</h2>
+        <div class="table-responsive">
+            <table class="table table-borderless table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>{% trans "Time" %}</th>
+                        <th>{% trans "Kind" %}</th>
+                        <th>{% trans "Amount" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in history %}
+                        <tr>
+                            <td>{% include "stash/source_link.html" with time=entry.time source=entry.source %}</td>
+                            <td>
+                                {% if entry.kind == "pumping" %}
+                                    {% trans "Pumping" %}
+                                {% elif entry.kind == "bottle" %}
+                                    {% trans "Bottle" %}
+                                {% elif entry.kind == "added" %}
+                                    {% trans "Added" %}
+                                {% else %}
+                                    {% trans "Discarded" %}
+                                {% endif %}
+                            </td>
+                            <td>{% if entry.amount > 0 %}+{% endif %}{{ entry.amount }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+    <p class="text-muted">
+        {% blocktrans trimmed %}
+            Pumping marked "Into the milk stash" adds milk, and bottles marked "From the milk stash" take the oldest milk first.
+        {% endblocktrans %}
+    </p>
+    <a href="{% url 'stash:stashadjustment-list' %}"
+       class="btn btn-sm btn-outline-secondary">{% trans "Added and discarded milk" %}</a>
+{% endblock %}

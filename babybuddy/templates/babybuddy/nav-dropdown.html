@@ -320,6 +320,13 @@
                                     {% trans "Pumping entry" %}
                                 </a>
                             {% endif %}
+                            {% if perms.stash.view_stashadjustment %}
+                                <a class="dropdown-item{% if request.path == '/stash/' %} active{% endif %}"
+                                   href="{% url 'stash:stash' %}">
+                                    <i class="icon-pumping" aria-hidden="true"></i>
+                                    {% trans "Milk stash" %}
+                                </a>
+                            {% endif %}
                             {% if perms.core.view_sleep %}
                                 <a class="dropdown-item{% if request.path == '/sleep/' %} active{% endif %}"
                                    href="{% url 'core:sleep-list' %}"><i class="icon-sleep" aria-hidden="true"></i>

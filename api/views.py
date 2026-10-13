@@ -12,6 +12,8 @@ from rest_framework.schemas.openapi import AutoSchema
 
 from core import models
 from babybuddy import models as babybuddy_models
+from stash import models as stash_models
+from stash import stash
 from webhooks import models as webhooks_models
 
 from . import serializers, filters
@@ -215,6 +217,41 @@ class SleepViewSet(viewsets.ModelViewSet):
     filterset_class = filters.SleepFilter
     ordering_fields = ("duration", "end", "start")
     ordering = "-end"
+
+
+class StashAdjustmentViewSet(viewsets.ModelViewSet):
+    queryset = stash_models.StashAdjustment.objects.all()
+    serializer_class = serializers.StashAdjustmentSerializer
+    filterset_class = filters.StashAdjustmentFilter
+    ordering_fields = ("amount", "time")
+    ordering = "-time"
+
+    def get_view_name(self):
+        """
+        Gets the view name without changing the case of the model verbose name.
+        """
+        name = stash_models.StashAdjustment._meta.verbose_name
+        if self.suffix:
+            name += " " + self.suffix
+        return name
+
+
+class StashView(views.APIView):
+    """
+    The milk stash: its balance and the stored milk, oldest first. Anyone who
+    may see stash adjustments may see it.
+    """
+
+    schema = AutoSchema(operation_id_base="MilkStash")
+
+    action = "get"
+    basename = "stash"
+
+    queryset = stash_models.StashAdjustment.objects.all()
+    serializer_class = serializers.StashSerializer
+
+    def get(self, request):
+        return Response(self.serializer_class(stash.summary()).data)
 
 
 class TagViewSet(viewsets.ModelViewSet):

@@ -198,6 +198,24 @@ def validate_emoji(value):
         raise ValidationError(_("Enter a single emoji."), code="emoji_invalid")
 
 
+def validate_from_stash(feeding):
+    """
+    Confirm that a feeding taken from the milk stash is a bottle of breast milk
+    with an amount: only those can come from stored milk.
+    :param feeding: a Feeding instance with `from_stash` set.
+    :return:
+    """
+    errors = {}
+    if feeding.type not in ("breast milk", "fortified breast milk"):
+        errors["type"] = _("Only breast milk can come from the milk stash.")
+    if feeding.method in ("left breast", "right breast", "both breasts"):
+        errors["method"] = _("Milk from the stash can't be given from the breast.")
+    if not feeding.amount or feeding.amount <= 0:
+        errors["amount"] = _("Milk from the stash needs an amount.")
+    if errors:
+        raise ValidationError(errors, code="from_stash_invalid")
+
+
 def validate_time(time, field_name):
     """
     Confirm that a time is not in the future.
@@ -705,6 +723,11 @@ class Feeding(models.Model):
         verbose_name=_("Method"),
     )
     amount = models.FloatField(blank=True, null=True, verbose_name=_("Amount"))
+    from_stash = models.BooleanField(
+        default=False,
+        verbose_name=_("From the milk stash"),
+        help_text=_("For a bottle of stored breast milk."),
+    )
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     tags = TaggableManager(blank=True, through=Tagged)
 
@@ -735,6 +758,9 @@ class Feeding(models.Model):
                 {"method": _("Formula and solid food can't be given from the breast.")},
                 code="method_not_for_type",
             )
+
+        if self.from_stash:
+            validate_from_stash(self)
 
 
 class HeadCircumference(models.Model):
@@ -876,6 +902,11 @@ class Pumping(models.Model):
         verbose_name=_("Duration"),
     )
     amount = models.FloatField(blank=False, null=False, verbose_name=_("Amount"))
+    to_stash = models.BooleanField(
+        default=False,
+        verbose_name=_("Into the milk stash"),
+        help_text=_("Store this milk to give later."),
+    )
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     tags = TaggableManager(blank=True, through=Tagged)
 

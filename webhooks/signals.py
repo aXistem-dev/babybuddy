@@ -6,6 +6,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from core import models as core_models
+from stash import models as stash_models
 
 from webhooks.models import WebhookEndpoint, WebhookEvent
 
@@ -27,6 +28,7 @@ WATCHED = (
     core_models.Note,
     core_models.Pumping,
     core_models.Sleep,
+    stash_models.StashAdjustment,
     core_models.Temperature,
     core_models.Timer,
     core_models.TummyTime,

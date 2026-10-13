@@ -45,6 +45,8 @@ class SiteSettingsTestCase(TestCase):
         params = {
             "core.models__Sleep__nap_start_max": "20:00:00",
             "core.models__Sleep__nap_start_min": "09:00:00",
+            "stash.models__StashAdjustment__stash_warn_age_hours": "48",
+            "stash.models__StashAdjustment__stash_max_age_hours": "72",
         }
         page = self.c.post("/settings/", params, follow=True)
         self.assertEqual(page.status_code, 200)
