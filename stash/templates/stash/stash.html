@@ -46,7 +46,7 @@
                 <tbody>
                     {% for lot in summary.lots %}
                         <tr>
-                            <td>{{ lot.time|date:"SHORT_DATETIME_FORMAT" }}</td>
+                            <td>{% include "stash/source_link.html" with time=lot.time source=lot.source %}</td>
                             <td>{{ lot.amount }}</td>
                             <td>{{ lot.expires_at|date:"SHORT_DATETIME_FORMAT" }}</td>
                             <td>
@@ -65,6 +65,39 @@
         </div>
     {% else %}
         <p>{% trans "The stash is empty." %}</p>
+    {% endif %}
+    {% if history %}
+        <h2 class="h5">{% trans "Recent changes" %}</h2>
+        <div class="table-responsive">
+            <table class="table table-borderless table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>{% trans "Time" %}</th>
+                        <th>{% trans "Kind" %}</th>
+                        <th>{% trans "Amount" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in history %}
+                        <tr>
+                            <td>{% include "stash/source_link.html" with time=entry.time source=entry.source %}</td>
+                            <td>
+                                {% if entry.kind == "pumping" %}
+                                    {% trans "Pumping" %}
+                                {% elif entry.kind == "bottle" %}
+                                    {% trans "Bottle" %}
+                                {% elif entry.kind == "added" %}
+                                    {% trans "Added" %}
+                                {% else %}
+                                    {% trans "Discarded" %}
+                                {% endif %}
+                            </td>
+                            <td>{% if entry.amount > 0 %}+{% endif %}{{ entry.amount }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     {% endif %}
     <p class="text-muted">
         {% blocktrans trimmed %}

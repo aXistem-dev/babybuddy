@@ -286,12 +286,20 @@ class StashAdjustmentSerializer(TaggableSerializer):
         return attrs
 
 
+class StashSourceSerializer(serializers.Serializer):
+    type = serializers.ChoiceField(choices=("pumping", "stash_adjustment"))
+    id = serializers.IntegerField()
+
+
 class StashLotSerializer(serializers.Serializer):
     time = serializers.DateTimeField(help_text="When the milk went into the stash.")
     amount = serializers.FloatField()
     warn_at = serializers.DateTimeField(help_text="When it starts to expire soon.")
     expires_at = serializers.DateTimeField(help_text="When it expires.")
     status = serializers.ChoiceField(choices=("ok", "warn", "expired"))
+    source = StashSourceSerializer(
+        help_text="The pumping or stash adjustment the milk came from."
+    )
 
 
 class StashSerializer(serializers.Serializer):

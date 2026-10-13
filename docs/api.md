@@ -330,14 +330,16 @@ can be filtered by `kind`, `date_min` and `date_max`.
       "amount": 110.0,
       "warn_at": "2024-01-08T08:30:00-05:00",
       "expires_at": "2024-01-09T08:30:00-05:00",
-      "status": "warn"
+      "status": "warn",
+      "source": { "type": "pumping", "id": 42 }
     },
     {
       "time": "2024-01-07T19:00:00-05:00",
       "amount": 120.0,
       "warn_at": "2024-01-09T19:00:00-05:00",
       "expires_at": "2024-01-10T19:00:00-05:00",
-      "status": "ok"
+      "status": "ok",
+      "source": { "type": "stash_adjustment", "id": 7 }
     }
   ]
 }
@@ -345,4 +347,7 @@ can be filtered by `kind`, `date_min` and `date_max`.
 
 `balance` is below zero when more milk was taken out than was put in; `lots`
 is then empty. Each lot's `status` is `ok`, `warn` (expires soon) or
-`expired`, and the stash's `status` is that of its oldest milk.
+`expired`, and the stash's `status` is that of its oldest milk. Each lot is
+what is left of one pumping entry or "added" stash adjustment, named by its
+`source`: `type` is `pumping` or `stash_adjustment`, and `id` is that entry's
+`id`.

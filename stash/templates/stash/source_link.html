@@ -1,0 +1,13 @@
+{% comment %}
+    The time of a stash movement, linked to the record it comes from when the
+    user may change that record.
+{% endcomment %}
+{% if source.type == "pumping" and perms.core.change_pumping %}
+    <a href="{% url 'core:pumping-update' source.id %}">{{ time|date:"SHORT_DATETIME_FORMAT" }}</a>
+{% elif source.type == "feeding" and perms.core.change_feeding %}
+    <a href="{% url 'core:feeding-update' source.id %}">{{ time|date:"SHORT_DATETIME_FORMAT" }}</a>
+{% elif source.type == "stash_adjustment" and perms.stash.change_stashadjustment %}
+    <a href="{% url 'stash:stashadjustment-update' source.id %}">{{ time|date:"SHORT_DATETIME_FORMAT" }}</a>
+{% else %}
+    {{ time|date:"SHORT_DATETIME_FORMAT" }}
+{% endif %}

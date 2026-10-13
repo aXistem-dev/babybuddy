@@ -71,14 +71,14 @@ class StashAPITestCase(APITestCase):
 
     def test_stash(self):
         end = timezone.now() - timezone.timedelta(hours=80)
-        core_models.Pumping.objects.create(
+        pumping = core_models.Pumping.objects.create(
             child=self.child,
             start=end - timezone.timedelta(minutes=10),
             end=end,
             amount=100,
             to_stash=True,
         )
-        models.StashAdjustment.objects.create(amount=30, kind="added")
+        adjustment = models.StashAdjustment.objects.create(amount=30, kind="added")
         response = self.client.get(reverse("api:stash"))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -101,7 +101,14 @@ class StashAPITestCase(APITestCase):
         )
         self.assertEqual(
             set(response.data["lots"][0]),
-            {"time", "amount", "warn_at", "expires_at", "status"},
+            {"time", "amount", "warn_at", "expires_at", "status", "source"},
+        )
+        self.assertEqual(
+            [lot["source"] for lot in response.data["lots"]],
+            [
+                {"type": "pumping", "id": pumping.id},
+                {"type": "stash_adjustment", "id": adjustment.id},
+            ],
         )
 
     def test_stash_needs_the_view_permission(self):
