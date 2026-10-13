@@ -28,6 +28,10 @@ part expires:
 - **Expires soon**: older than the warning age (48 hours by default).
 - **Expired**: older than the maximum age (72 hours by default).
 
+Each stored part links to the pumping entry or stash adjustment it came from.
+Below it, **Recent changes** lists the last ten movements (pumping, bottles,
+added and discarded milk), each linked to its entry.
+
 Both ages can be changed in the site settings. When some milk has expired,
 **Throw away expired milk** opens a discard entry with the expired amount
 filled in.

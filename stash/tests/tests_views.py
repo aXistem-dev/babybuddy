@@ -55,6 +55,39 @@ class StashViewsTestCase(TestCase):
             "/stash/adjustments/add/?kind=discarded&amount=100.0&notes=Expired%20milk",
         )
 
+    def test_history_links_to_each_record(self):
+        pumping = self.stored(100, hours_ago=3)
+        adjustment = models.StashAdjustment.objects.create(
+            time=timezone.localtime() - timezone.timedelta(hours=2),
+            amount=10,
+            kind="discarded",
+        )
+        feeding = core_models.Feeding.objects.create(
+            child=self.child,
+            start=timezone.localtime() - timezone.timedelta(hours=1),
+            end=timezone.localtime() - timezone.timedelta(hours=1),
+            type="breast milk",
+            method="bottle",
+            amount=30,
+            from_stash=True,
+        )
+        page = self.client.get("/stash/")
+        self.assertContains(page, "Recent changes")
+        self.assertContains(page, f'href="/pumping/{pumping.id}/"', count=2)
+        self.assertContains(page, f'href="/stash/adjustments/{adjustment.id}/"')
+        self.assertContains(page, f'href="/feedings/{feeding.id}/"')
+
+        reader = get_user_model().objects.create_user(
+            username="reader", password="reader"
+        )
+        reader.groups.add(
+            Group.objects.get(name=settings.BABY_BUDDY["READ_ONLY_GROUP_NAME"])
+        )
+        self.client.login(username="reader", password="reader")
+        page = self.client.get("/stash/")
+        self.assertContains(page, "Recent changes")
+        self.assertNotContains(page, f'href="/pumping/{pumping.id}/"')
+
     def test_below_zero(self):
         core_models.Feeding.objects.create(
             child=self.child,

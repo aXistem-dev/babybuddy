@@ -94,6 +94,44 @@ class StashTestCase(TestCase):
         self.assertEqual(summary["balance"], 40)
         self.assertEqual(self.lots(), [(self.ago(4), 40)])
 
+    def test_lots_keep_their_source(self):
+        self.bottle(8, 20)
+        pumping = self.pump(6, 100)
+        adjustment = self.adjust(4, 30, "added")
+        self.bottle(2, 90)
+        self.assertEqual(
+            [(lot["amount"], lot["source"]) for lot in stash.summary(self.now)["lots"]],
+            [(20, {"type": "stash_adjustment", "id": adjustment.id})],
+        )
+        self.assertEqual(
+            stash.lots(stash.movements(self.ago(3)))[0],
+            [self.ago(6), 80, {"type": "pumping", "id": pumping.id}],
+        )
+
+    def test_history(self):
+        pumping = self.pump(10, 100)
+        added = self.adjust(8, 30, "added")
+        bottle = self.bottle(6, 40)
+        discarded = self.adjust(4, 10, "discarded")
+        self.pump(2, 50, to_stash=False)
+        self.assertEqual(
+            [
+                (entry["kind"], entry["amount"], entry["source"])
+                for entry in stash.history(at=self.now)
+            ],
+            [
+                ("discarded", -10, {"type": "stash_adjustment", "id": discarded.id}),
+                ("bottle", -40, {"type": "feeding", "id": bottle.id}),
+                ("added", 30, {"type": "stash_adjustment", "id": added.id}),
+                ("pumping", 100, {"type": "pumping", "id": pumping.id}),
+            ],
+        )
+        self.assertEqual(
+            [entry["kind"] for entry in stash.history(limit=2, at=self.now)],
+            ["discarded", "bottle"],
+        )
+        self.assertEqual(stash.history(at=self.ago(9))[0]["time"], self.ago(10))
+
     def test_pumping_counts_from_its_end(self):
         self.pump(1, 100)
         self.assertEqual(stash.summary(self.ago(2))["balance"], 0)
