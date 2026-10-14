@@ -347,19 +347,19 @@ class StashSourceSerializer(serializers.Serializer):
 
 
 class StashLotSerializer(serializers.Serializer):
-    time = serializers.DateTimeField(help_text="When the milk went into the stash.")
+    time = serializers.DateTimeField(help_text="When the milk was stored.")
     amount = serializers.FloatField()
     warn_at = serializers.DateTimeField(help_text="When it starts to expire soon.")
     expires_at = serializers.DateTimeField(help_text="When it expires.")
     status = serializers.ChoiceField(choices=("ok", "warn", "expired"))
     source = StashSourceSerializer(
-        help_text="The pumping or stash adjustment the milk came from."
+        help_text="The pumping or stored milk adjustment the milk came from."
     )
 
 
 class StashSerializer(serializers.Serializer):
     balance = serializers.FloatField(
-        help_text="Milk in the stash; below zero when more was taken out than was put in."
+        help_text="The milk stored; below zero when more was used than was stored."
     )
     status = serializers.ChoiceField(
         choices=("ok", "warn", "expired"), help_text="The status of the oldest milk."

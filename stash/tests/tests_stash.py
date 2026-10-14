@@ -181,7 +181,7 @@ class StashTestCase(TestCase):
 
     def test_adjustment(self):
         adjustment = self.adjust(1, 25, "discarded")
-        self.assertEqual(str(adjustment), "Stash adjustment")
+        self.assertEqual(str(adjustment), "Stored milk adjustment")
         self.assertEqual(adjustment.signed_amount, -25)
         adjustment.amount = 0
         with self.assertRaisesMessage(ValidationError, "more than zero"):

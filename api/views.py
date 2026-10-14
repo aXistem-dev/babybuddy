@@ -238,8 +238,8 @@ class StashAdjustmentViewSet(viewsets.ModelViewSet):
 
 class StashView(views.APIView):
     """
-    The milk stash: its balance and the stored milk, oldest first. Anyone who
-    may see stash adjustments may see it.
+    Stored milk: the balance and the milk in storage, oldest first. Anyone
+    who may see stored milk adjustments may see it.
     """
 
     schema = AutoSchema(operation_id_base="MilkStash")

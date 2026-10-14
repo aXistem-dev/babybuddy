@@ -26,7 +26,7 @@ def add_read_only_group_permissions(sender, **kwargs):
 
 class StashConfig(AppConfig):
     name = "stash"
-    verbose_name = _("Milk stash")
+    verbose_name = _("Stored milk")
 
     def ready(self):
         # No `sender` filter, for the same reason as in `core.apps`: the

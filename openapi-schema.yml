@@ -4994,7 +4994,7 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique integer value identifying this Stash adjustment.
+          description: A unique integer value identifying this Stored milk adjustment.
           schema:
             type: string
         - name: date
@@ -5052,7 +5052,7 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique integer value identifying this Stash adjustment.
+          description: A unique integer value identifying this Stored milk adjustment.
           schema:
             type: string
         - name: date
@@ -5121,7 +5121,7 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique integer value identifying this Stash adjustment.
+          description: A unique integer value identifying this Stored milk adjustment.
           schema:
             type: string
         - name: date
@@ -5190,7 +5190,7 @@ paths:
         - name: id
           in: path
           required: true
-          description: A unique integer value identifying this Stash adjustment.
+          description: A unique integer value identifying this Stored milk adjustment.
           schema:
             type: string
         - name: date
@@ -7244,10 +7244,10 @@ paths:
     get:
       operationId: retrieveMilkStash
       description:
-        "The milk stash: its balance and the stored milk, oldest first.
-        Anyone who
+        "Stored milk: the balance and the milk in storage, oldest first.
+        Anyone
 
-        may see stash adjustments may see it."
+        who may see stored milk adjustments may see it."
       parameters: []
       responses:
         "200":

@@ -352,18 +352,18 @@ and the same `start`/`end` filters as other entries with a duration. For a type
 without a duration, `end` may be left out and is set to `start`. Like sleep and
 tummy time, an activity can be created from a timer with the `timer` field.
 
-## Milk Stash
+## Stored Milk
 
 Pumping entries have a `to_stash` field and feedings a `from_stash` field. Both
 are `false` when left out, so a request that doesn't send them doesn't change
-the stash. A feeding with `from_stash` set must be a bottle of breast milk or
+the stored milk. A feeding with `from_stash` set must be a bottle of breast milk or
 fortified breast milk with an amount; anything else returns `400 Bad Request`.
 
-`/api/stash-adjustments/` takes milk added to or discarded from the stash by
+`/api/stash-adjustments/` takes milk added to or discarded from stored milk by
 hand: `time`, `amount`, `kind` (`added` or `discarded`), `notes` and `tags`. It
 can be filtered by `kind`, `date_min` and `date_max`.
 
-`GET /api/stash` returns the stash, with the stored milk oldest first:
+`GET /api/stash` returns the stored milk, oldest first:
 
 ```json
 {
@@ -395,7 +395,7 @@ can be filtered by `kind`, `date_min` and `date_max`.
 
 `balance` is below zero when more milk was taken out than was put in; `lots`
 is then empty. Each lot's `status` is `ok`, `warn` (expires soon) or
-`expired`, and the stash's `status` is that of its oldest milk. Each lot is
-what is left of one pumping entry or "added" stash adjustment, named by its
+`expired`, and the overall `status` is that of the oldest milk. Each lot is
+what is left of one pumping entry or "added" stored milk adjustment, named by its
 `source`: `type` is `pumping` or `stash_adjustment`, and `id` is that entry's
 `id`.

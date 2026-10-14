@@ -1,11 +1,11 @@
 {% extends "babybuddy/page.html" %}
 {% load babybuddy i18n %}
 {% block title %}
-    {% trans "Delete a Stash Adjustment" %}
+    {% trans "Delete a Stored Milk Adjustment" %}
 {% endblock %}
 {% block breadcrumbs %}
     <li class="breadcrumb-item">
-        <a href="{% url 'stash:stashadjustment-list' %}">{% trans "Stash adjustments" %}</a>
+        <a href="{% url 'stash:stashadjustment-list' %}">{% trans "Stored milk adjustments" %}</a>
     </li>
     <li class="breadcrumb-item active" aria-current="page">{% trans "Delete" %}</li>
 {% endblock %}
