@@ -43,7 +43,7 @@ class StashViewsTestCase(TestCase):
 
     def test_stash_page(self):
         page = self.client.get("/stash/")
-        self.assertContains(page, "The stash is empty.")
+        self.assertContains(page, "No milk is stored.")
 
         self.stored(100, hours_ago=80)
         self.stored(40)
@@ -100,7 +100,7 @@ class StashViewsTestCase(TestCase):
         )
         page = self.client.get("/stash/")
         self.assertContains(page, "-60")
-        self.assertContains(page, "More milk was taken from the stash")
+        self.assertContains(page, "More milk was used than was stored")
 
     def test_add_is_prefilled_from_the_query(self):
         page = self.client.get(
@@ -155,11 +155,11 @@ class StashViewsTestCase(TestCase):
             },
         )
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, "Only breast milk can come from the milk stash.")
+        self.assertContains(page, "Only breast milk can come from stored milk.")
 
     def test_dashboard_card(self):
         page = self.client.get(f"/children/{self.child.slug}/dashboard/")
-        card = '<a href="/stash/">Milk stash</a>'
+        card = '<a href="/stash/">Stored milk</a>'
         self.assertNotContains(page, card)
         self.stored(100)
         page = self.client.get(f"/children/{self.child.slug}/dashboard/")
