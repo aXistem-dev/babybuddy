@@ -57,13 +57,13 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Stash adjustment",
-                "verbose_name_plural": "Stash adjustments",
+                "verbose_name": "Stored milk adjustment",
+                "verbose_name_plural": "Stored milk adjustments",
                 "ordering": ["-time"],
                 "permissions": [
                     (
                         "can_edit_stashadjustment_settings",
-                        "Can edit Stash adjustment settings",
+                        "Can edit Stored milk adjustment settings",
                     )
                 ],
                 "default_permissions": ("view", "add", "change", "delete"),

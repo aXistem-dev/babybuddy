@@ -95,11 +95,11 @@ def validate_from_stash(feeding):
     """
     errors = {}
     if feeding.type not in ("breast milk", "fortified breast milk"):
-        errors["type"] = _("Only breast milk can come from the milk stash.")
+        errors["type"] = _("Only breast milk can come from stored milk.")
     if feeding.method in ("left breast", "right breast", "both breasts"):
-        errors["method"] = _("Milk from the stash can't be given from the breast.")
+        errors["method"] = _("Stored milk can't be given from the breast.")
     if not feeding.amount or feeding.amount <= 0:
-        errors["amount"] = _("Milk from the stash needs an amount.")
+        errors["amount"] = _("Stored milk needs an amount.")
     if errors:
         raise ValidationError(errors, code="from_stash_invalid")
 
@@ -386,7 +386,7 @@ class Feeding(models.Model):
     amount = models.FloatField(blank=True, null=True, verbose_name=_("Amount"))
     from_stash = models.BooleanField(
         default=False,
-        verbose_name=_("From the milk stash"),
+        verbose_name=_("From stored milk"),
         help_text=_("For a bottle of stored breast milk."),
     )
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
@@ -559,7 +559,7 @@ class Pumping(models.Model):
     amount = models.FloatField(blank=False, null=False, verbose_name=_("Amount"))
     to_stash = models.BooleanField(
         default=False,
-        verbose_name=_("Into the milk stash"),
+        verbose_name=_("Store this milk"),
         help_text=_("Store this milk to give later."),
     )
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))

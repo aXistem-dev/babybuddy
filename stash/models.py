@@ -35,18 +35,18 @@ class StashAdjustment(models.Model):
     notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
     tags = TaggableManager(blank=True, through=Tagged)
 
-    settings = StashSettings(_("Milk stash"))
+    settings = StashSettings(_("Stored milk"))
 
     objects = models.Manager()
 
     class Meta:
         default_permissions = ("view", "add", "change", "delete")
         ordering = ["-time"]
-        verbose_name = _("Stash adjustment")
-        verbose_name_plural = _("Stash adjustments")
+        verbose_name = _("Stored milk adjustment")
+        verbose_name_plural = _("Stored milk adjustments")
 
     def __str__(self):
-        return str(_("Stash adjustment"))
+        return str(_("Stored milk adjustment"))
 
     @property
     def signed_amount(self):

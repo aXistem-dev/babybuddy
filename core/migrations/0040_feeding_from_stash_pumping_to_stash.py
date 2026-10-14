@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
             field=models.BooleanField(
                 default=False,
                 help_text="For a bottle of stored breast milk.",
-                verbose_name="From the milk stash",
+                verbose_name="From stored milk",
             ),
         ),
         migrations.AddField(
@@ -25,7 +25,7 @@ class Migration(migrations.Migration):
             field=models.BooleanField(
                 default=False,
                 help_text="Store this milk to give later.",
-                verbose_name="Into the milk stash",
+                verbose_name="Store this milk",
             ),
         ),
     ]

@@ -1,14 +1,14 @@
 {% extends "babybuddy/page.html" %}
 {% load i18n l10n %}
 {% block title %}
-    {% trans "Milk stash" %}
+    {% trans "Stored milk" %}
 {% endblock %}
 {% block breadcrumbs %}
-    <li class="breadcrumb-item active" aria-current="page">{% trans "Milk stash" %}</li>
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Stored milk" %}</li>
 {% endblock %}
 {% block content %}
     <h1>
-        {% trans "Milk stash" %}
+        {% trans "Stored milk" %}
         {% if perms.stash.add_stashadjustment %}
             <a href="{% url 'stash:stashadjustment-add' %}?kind=added"
                class="btn btn-sm btn-success">
@@ -20,13 +20,11 @@
     </h1>
     <div class="display-6 mb-3{% if summary.balance < 0 %} text-danger{% endif %}">{{ summary.balance }}</div>
     {% if summary.balance < 0 %}
-        <p class="text-danger">
-            {% trans "More milk was taken from the stash than was put in. Add the missing milk to correct it." %}
-        </p>
+        <p class="text-danger">{% trans "More milk was used than was stored. Add the missing milk to correct it." %}</p>
     {% endif %}
     {% if summary.lots %}
         <h2 class="h5">
-            {% trans "In the stash, oldest first" %}
+            {% trans "In storage, oldest first" %}
             {% if summary.expired_amount and perms.stash.add_stashadjustment %}
                 {% trans "Expired milk" as expired_note %}
                 <a href="{% url 'stash:stashadjustment-add' %}?kind=discarded&amount={{ summary.expired_amount|unlocalize }}&notes={{ expired_note|urlencode }}"
@@ -64,7 +62,7 @@
             </table>
         </div>
     {% else %}
-        <p>{% trans "The stash is empty." %}</p>
+        <p>{% trans "No milk is stored." %}</p>
     {% endif %}
     {% if history %}
         <h2 class="h5">{% trans "Recent changes" %}</h2>
@@ -101,7 +99,7 @@
     {% endif %}
     <p class="text-muted">
         {% blocktrans trimmed %}
-            Pumping marked "Into the milk stash" adds milk, and bottles marked "From the milk stash" take the oldest milk first.
+            Pumping marked "Store this milk" adds milk, and bottles marked "From stored milk" take the oldest milk first.
         {% endblocktrans %}
     </p>
     <a href="{% url 'stash:stashadjustment-list' %}"

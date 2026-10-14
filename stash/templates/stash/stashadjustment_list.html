@@ -1,21 +1,21 @@
 {% extends "babybuddy/page.html" %}
 {% load datetime i18n %}
 {% block title %}
-    {% trans "Stash adjustments" %}
+    {% trans "Stored milk adjustments" %}
 {% endblock %}
 {% block breadcrumbs %}
     <li class="breadcrumb-item">
-        <a href="{% url 'stash:stash' %}">{% trans "Milk stash" %}</a>
+        <a href="{% url 'stash:stash' %}">{% trans "Stored milk" %}</a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page">{% trans "Stash adjustments" %}</li>
+    <li class="breadcrumb-item active" aria-current="page">{% trans "Stored milk adjustments" %}</li>
 {% endblock %}
 {% block content %}
     <h1>
-        {% trans "Stash adjustments" %}
+        {% trans "Stored milk adjustments" %}
         {% if perms.stash.add_stashadjustment %}
             <a href="{% url 'stash:stashadjustment-add' %}"
                class="btn btn-sm btn-success">
-                <i class="icon-add" aria-hidden="true"></i> {% trans "Add Stash Adjustment" %}
+                <i class="icon-add" aria-hidden="true"></i> {% trans "Add Stored Milk Adjustment" %}
             </a>
         {% endif %}
     </h1>
@@ -66,7 +66,7 @@
                     {% endif %}
                 {% empty %}
                     <tr>
-                        <th colspan="5">{% trans "No stash adjustments found." %}</th>
+                        <th colspan="5">{% trans "No stored milk adjustments found." %}</th>
                     </tr>
                 {% endfor %}
             </tbody>
