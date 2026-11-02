@@ -12,7 +12,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("core", "0036_medication"),
+        ("core", "0039_child_due_date"),
     ]
 
     operations = [

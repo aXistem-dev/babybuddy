@@ -1,7 +1,7 @@
-{% extends 'babybuddy/page.html' %}
+{% extends "babybuddy/page.html" %}
 {% load i18n %}
 {% block title %}
-    {% if request.resolver_match.url_name == 'activitytype-update' %}
+    {% if request.resolver_match.url_name == "activitytype-update" %}
         {% trans "Update an Activity Type" %}
     {% else %}
         {% trans "Add an Activity Type" %}
@@ -25,5 +25,5 @@
     {% else %}
         <h1>{% trans "Add an Activity Type" %}</h1>
     {% endif %}
-    {% include 'babybuddy/form.html' %}
+    {% include "babybuddy/form.html" %}
 {% endblock %}

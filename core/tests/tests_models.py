@@ -115,6 +115,25 @@ class ChildTestCase(TestCase):
         self.assertEqual(child.name(), "First Last")
         self.assertEqual(child.name(reverse=True), "Last, First")
 
+    def test_child_due_date_optional(self):
+        # Due date is optional and defaults to None.
+        child = models.Child.objects.create(
+            first_name="No", last_name="Duedate", birth_date=timezone.localdate()
+        )
+        self.assertIsNone(child.due_date)
+
+    def test_child_due_date_stored(self):
+        birth_date = datetime.date(2025, 6, 1)
+        due_date = datetime.date(2025, 6, 24)
+        child = models.Child.objects.create(
+            first_name="Preterm",
+            last_name="Child",
+            birth_date=birth_date,
+            due_date=due_date,
+        )
+        child.refresh_from_db()
+        self.assertEqual(child.due_date, due_date)
+
     def test_child_create_without_last_name(self):
         child = models.Child.objects.create(
             first_name="Nolastname", birth_date=timezone.localdate()
@@ -183,6 +202,27 @@ class DiaperChangeTestCase(TestCase):
 
     def test_diaperchange_attributes(self):
         self.assertListEqual(self.change.attributes(), ["Wet", "Solid", "Black"])
+
+    def test_diaperchange_color_choices(self):
+        colors = [
+            choice[0] for choice in models.DiaperChange._meta.get_field("color").choices
+        ]
+        # Create a fresh child so the setUp fixture's DiaperChange doesn't
+        # interfere with the count.
+        child = models.Child.objects.create(
+            first_name="Color", last_name="Test", birth_date=timezone.localdate()
+        )
+        for color in colors:
+            models.DiaperChange.objects.create(
+                child=child,
+                time=timezone.localtime(),
+                wet=False,
+                solid=False,
+                color=color,
+            )
+        self.assertEqual(
+            models.DiaperChange.objects.filter(child=child).count(), len(colors)
+        )
 
 
 class FeedingTestCase(TestCase):

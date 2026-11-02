@@ -1,4 +1,4 @@
-{% extends 'babybuddy/page.html' %}
+{% extends "babybuddy/page.html" %}
 {% load datetime duration i18n widget_tweaks %}
 {% block title %}
     {% trans "Activities" %}
@@ -21,7 +21,7 @@
             </a>
         {% endif %}
     </h1>
-    {% include 'babybuddy/filter.html' %}
+    {% include "babybuddy/filter.html" %}
     <div class="table-responsive">
         <table class="table table-instances table-borderless table-striped table-hover align-middle">
             <thead>
@@ -75,7 +75,7 @@
                             {% if activity.type.has_duration %}
                                 {{ activity.duration|duration_string }}
                             {% else %}
-                                <span class="text-muted">&mdash;</span>
+                                <span class="text-muted">—</span>
                             {% endif %}
                         </td>
                         <td>{% include "core/render_tag_list.html" with tags=activity.tags.all %}</td>
@@ -95,5 +95,5 @@
             </tbody>
         </table>
     </div>
-    {% include 'babybuddy/paginator.html' %}
+    {% include "babybuddy/paginator.html" %}
 {% endblock %}

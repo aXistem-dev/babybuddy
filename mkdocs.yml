@@ -22,6 +22,7 @@ nav:
       - "configuration/homeassistant.md"
       - "configuration/security.md"
       - "configuration/storage.md"
+      - "configuration/webhooks.md"
   - "User Guide":
       - "user-guide/getting-started.md"
       - "user-guide/managing-users.md"
@@ -34,6 +35,7 @@ nav:
       - "contributing/gulp-command-reference.md"
   - "import-export.md"
   - "api.md"
+  - "login-qr-code.md"
   - "mcp.md"
 theme:
   name: material

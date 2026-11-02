@@ -2,6 +2,7 @@
     <div class="card card-dashboard card-{{ type }}">
         <div class="card-header">
             {% block icon %}<i class="icon-{{ type }} pull-left" aria-hidden="true"></i>{% endblock %}
+            {% block actions %}{% endblock %}
             {% block header %}{% endblock %}
         </div>
         <div class="card-body">

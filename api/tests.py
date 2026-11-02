@@ -1,10 +1,19 @@
 # -*- coding: utf-8 -*-
+from unittest.mock import patch
+
 from babybuddy.models import get_user_model
+from api import serializers
 from core import models
+from django.conf import settings
+from django.contrib.auth.forms import PasswordResetForm
+from django.contrib.auth.models import Group, Permission
+from django.core.exceptions import PermissionDenied
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIRequestFactory, APITestCase
+
+from webhooks.models import WebhookEndpoint
 
 
 class TestBase:
@@ -235,6 +244,7 @@ class ChildAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 "last_name": "Child",
                 "birth_date": "2017-11-11",
                 "birth_time": None,
+                "due_date": None,
                 "slug": "fake-child",
                 "picture": None,
             },
@@ -945,6 +955,7 @@ class TummyTimeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
                 "end": "2017-11-18T15:30:45-05:00",
                 "duration": "00:00:45",
                 "milestone": "",
+                "notes": None,
                 "tags": [],
             },
         )
@@ -960,6 +971,19 @@ class TummyTimeAPITestCase(TestBase.BabyBuddyAPITestCaseBase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         obj = models.TummyTime.objects.get(pk=response.data["id"])
         self.assertEqual(str(obj.duration), "0:05:30")
+
+    def test_post_notes(self):
+        data = {
+            "child": 1,
+            "start": "2017-11-18T12:30:00-05:00",
+            "end": "2017-11-18T12:35:30-05:00",
+            "milestone": "Rolled over.",
+            "notes": "First time on the play mat.",
+        }
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = models.TummyTime.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.notes, data["notes"])
 
     def test_patch(self):
         endpoint = "{}{}/".format(self.endpoint, 3)
@@ -1069,3 +1093,706 @@ class TestProfileAPITestCase(APITestCase):
         self.assertIn("api_key", response.data)
         self.assertTrue(isinstance(response.data["api_key"], str))
         self.assertGreater(len(response.data["api_key"]), 30)
+
+
+class CaregiverAPITestCase(APITestCase):
+    """
+    A caregiver can log care entries, including medication, and use timers
+    via the stock API, but cannot delete entries or manage users or tags.
+    """
+
+    fixtures = ["tests.json"]
+
+    def setUp(self):
+        self.caregiver = get_user_model().objects.create_user(
+            username="caregiver", password="caregiver", is_active=True
+        )
+        self.caregiver.groups.add(
+            Group.objects.get(name=settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"])
+        )
+        # Re-fetch so group permissions are visible to the permission checks.
+        self.caregiver = get_user_model().objects.get(username="caregiver")
+        self.client.login(username="caregiver", password="caregiver")
+
+    def test_caregiver_can_add_feeding(self):
+        data = {
+            "child": 1,
+            "start": "2017-11-19T14:00:00-05:00",
+            "end": "2017-11-19T14:15:00-05:00",
+            "type": "breast milk",
+            "method": "left breast",
+            "notes": "with vitamins",
+        }
+        response = self.client.post(reverse("api:feeding-list"), data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        obj = models.Feeding.objects.get(pk=response.data["id"])
+        self.assertEqual(obj.type, data["type"])
+
+    def test_caregiver_can_add_diaper_change(self):
+        data = {
+            "child": 1,
+            "time": "2017-11-18T12:00:00-05:00",
+            "wet": True,
+            "solid": True,
+            "color": "brown",
+        }
+        response = self.client.post(
+            reverse("api:diaperchange-list"), data, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_caregiver_can_add_sleep(self):
+        data = {
+            "child": 1,
+            "start": "2017-11-21T19:30:00-05:00",
+            "end": "2017-11-21T23:00:00-05:00",
+            "notes": "used new swaddle",
+        }
+        response = self.client.post(reverse("api:sleep-list"), data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_caregiver_can_use_timers(self):
+        response = self.client.post(
+            reverse("api:timer-list"), {"name": "Nap timer"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        timer_id = response.data["id"]
+        response = self.client.get(f"{reverse('api:timer-list')}{timer_id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_caregiver_can_view_child_dashboard_data(self):
+        response = self.client.get(reverse("api:child-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.get(reverse("api:feeding-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.get(reverse("api:sleep-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_caregiver_cannot_delete_entries(self):
+        endpoint = "{}3/".format(reverse("api:feeding-list"))
+        self.assertEqual(self.client.get(endpoint).status_code, status.HTTP_200_OK)
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_caregiver_can_add_medication(self):
+        data = {"child": 1, "name": "Tylenol", "time": "2017-11-18T12:00:00-05:00"}
+        response = self.client.post(reverse("api:medication-list"), data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.get(reverse("api:medication-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_caregiver_can_add_temperature_note_and_tummy_time(self):
+        endpoints_and_data = (
+            (reverse("api:temperature-list"), {"child": 1, "temperature": 38.5}),
+            (reverse("api:note-list"), {"child": 1, "note": "A note"}),
+            (
+                reverse("api:tummytime-list"),
+                {
+                    "child": 1,
+                    "start": "2017-11-18T12:00:00-05:00",
+                    "end": "2017-11-18T12:15:00-05:00",
+                },
+            ),
+        )
+        for endpoint, data in endpoints_and_data:
+            response = self.client.post(endpoint, data, format="json")
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED, endpoint)
+
+    def test_caregiver_can_add_weight(self):
+        response = self.client.post(
+            reverse("api:weight-list"),
+            {"child": 1, "weight": 8.5, "date": "2017-11-18"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_caregiver_cannot_delete_medication(self):
+        endpoint = "{}1/".format(reverse("api:medication-list"))
+        response = self.client.delete(endpoint)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def grant(self, *codenames):
+        self.caregiver.user_permissions.add(
+            *Permission.objects.filter(
+                content_type__app_label="core", codename__in=codenames
+            )
+        )
+
+    def test_timer_consumption_without_delete_permission_is_limited_to_owner(self):
+        self.grant("add_pumping")
+        admin = get_user_model().objects.get(username="admin")
+        for model, endpoint, extra in (
+            (
+                models.Feeding,
+                "feeding",
+                {"type": "breast milk", "method": "left breast"},
+            ),
+            (models.Sleep, "sleep", {}),
+            (models.TummyTime, "tummytime", {}),
+            (models.Pumping, "pumping", {"amount": 2}),
+        ):
+            for owner, allowed in ((self.caregiver, True), (admin, False)):
+                with self.subTest(endpoint=endpoint, owner=owner.username):
+                    timer = models.Timer.objects.create(
+                        child_id=1,
+                        user=owner,
+                        start=timezone.now() - timezone.timedelta(minutes=5),
+                    )
+                    count = model.objects.count()
+                    response = self.client.post(
+                        reverse(f"api:{endpoint}-list"),
+                        {"timer": timer.pk, **extra},
+                        format="json",
+                    )
+                    if allowed:
+                        self.assertEqual(response.status_code, 201, response.data)
+                        self.assertEqual(model.objects.count(), count + 1)
+                    else:
+                        self.assertEqual(response.status_code, 403)
+                        self.assertEqual(model.objects.count(), count)
+                    self.assertEqual(
+                        models.Timer.objects.filter(pk=timer.pk).exists(), not allowed
+                    )
+
+    def test_timer_owner_is_kept_without_delete_permission(self):
+        admin = get_user_model().objects.get(username="admin")
+        timer = models.Timer.objects.create(
+            child_id=1, user=admin, start=timezone.now() - timezone.timedelta(minutes=5)
+        )
+        endpoint = f"{reverse('api:timer-list')}{timer.pk}/"
+        response = self.client.patch(endpoint, {"name": "Renamed"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        timer.refresh_from_db()
+        self.assertEqual(timer.user, admin)
+        response = self.client.patch(
+            endpoint, {"user": self.caregiver.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)
+        timer.refresh_from_db()
+        self.assertEqual(timer.user, admin)
+        response = self.client.post(
+            reverse("api:sleep-list"), {"timer": timer.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(models.Timer.objects.filter(pk=timer.pk).exists())
+
+    def request_as_caregiver(self):
+        request = APIRequestFactory().post("/")
+        request.user = self.caregiver
+        return {"request": request}
+
+    def test_timer_reassigned_after_validation_is_not_consumed(self):
+        admin = get_user_model().objects.get(username="admin")
+        timer = models.Timer.objects.create(
+            child_id=1,
+            user=self.caregiver,
+            start=timezone.now() - timezone.timedelta(minutes=5),
+        )
+        serializer = serializers.SleepSerializer(
+            data={"timer": timer.pk}, context=self.request_as_caregiver()
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        models.Timer.objects.filter(pk=timer.pk).update(user=admin)
+        count = models.Sleep.objects.count()
+        with self.assertRaises(PermissionDenied):
+            serializer.save()
+        self.assertEqual(models.Sleep.objects.count(), count)
+        self.assertTrue(models.Timer.objects.filter(pk=timer.pk).exists())
+
+    def test_timer_update_does_not_restore_a_stale_owner(self):
+        admin = get_user_model().objects.get(username="admin")
+        timer = models.Timer.objects.create(child_id=1, user=self.caregiver)
+        serializer = serializers.TimerSerializer(
+            timer,
+            data={"name": "Renamed"},
+            partial=True,
+            context=self.request_as_caregiver(),
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        models.Timer.objects.filter(pk=timer.pk).update(user=admin)
+        serializer.save()
+        timer.refresh_from_db()
+        self.assertEqual(timer.name, "Renamed")
+        self.assertEqual(timer.user, admin)
+
+    def test_timer_reassigned_after_validation_cannot_be_taken_back(self):
+        admin = get_user_model().objects.get(username="admin")
+        timer = models.Timer.objects.create(child_id=1, user=self.caregiver)
+        serializer = serializers.TimerSerializer(
+            timer,
+            data={"user": self.caregiver.pk},
+            partial=True,
+            context=self.request_as_caregiver(),
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        models.Timer.objects.filter(pk=timer.pk).update(user=admin)
+        with self.assertRaises(PermissionDenied):
+            serializer.save()
+        timer.refresh_from_db()
+        self.assertEqual(timer.user, admin)
+
+    def test_delete_timer_grant_allows_changing_timer_user(self):
+        self.grant("delete_timer")
+        admin = get_user_model().objects.get(username="admin")
+        timer = models.Timer.objects.create(child_id=1, user=admin)
+        response = self.client.patch(
+            f"{reverse('api:timer-list')}{timer.pk}/",
+            {"user": self.caregiver.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        timer.refresh_from_db()
+        self.assertEqual(timer.user, self.caregiver)
+
+    def test_timer_grant_consumes_only_after_successful_validation(self):
+        self.grant("delete_timer")
+        timer = models.Timer.objects.create(
+            user=self.caregiver, start=timezone.now() - timezone.timedelta(minutes=5)
+        )
+        url = reverse("api:sleep-list")
+        response = self.client.post(url, {"timer": timer.pk}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(models.Timer.objects.filter(pk=timer.pk).exists())
+        response = self.client.post(url, {"timer": timer.pk, "child": 1}, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertFalse(models.Timer.objects.filter(pk=timer.pk).exists())
+
+    def test_invalid_and_missing_timer_input(self):
+        self.grant("delete_timer")
+        for data in ({}, {"timer": None}, {"timer": "bad"}, {"timer": 999999}):
+            with self.subTest(data=data):
+                response = self.client.post(
+                    reverse("api:sleep-list"), data, format="json"
+                )
+                self.assertEqual(response.status_code, 400)
+
+    def test_tag_permissions_on_post_and_patch(self):
+        models.Tag.objects.create(name="existing")
+        url = reverse("api:note-list")
+        for tags in (["existing"], ["new"]):
+            response = self.client.post(
+                url, {"child": 1, "note": "note", "tags": tags}, format="json"
+            )
+            self.assertEqual(response.status_code, 403)
+        self.assertFalse(models.Tag.objects.filter(name="new").exists())
+        note = models.Note.objects.create(child_id=1, note="original")
+        note.tags.add("existing")
+        detail = f"{url}{note.pk}/"
+        for tags in ([], ["new"]):
+            response = self.client.patch(
+                detail, {"child": 1, "note": "changed", "tags": tags}, format="json"
+            )
+            self.assertEqual(response.status_code, 403)
+            note.refresh_from_db()
+            self.assertEqual(note.note, "original")
+            self.assertEqual(list(note.tags.names()), ["existing"])
+        for extra in ({}, {"tags": ["existing"]}):
+            response = self.client.patch(
+                detail, {"child": 1, "note": "original", **extra}, format="json"
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(list(note.tags.names()), ["existing"])
+
+    def test_put_remains_unsupported_and_does_not_change_tags(self):
+        note = models.Note.objects.create(child_id=1, note="original")
+        note.tags.add("existing")
+        for extra in ({}, {"tags": []}, {"tags": ["new"]}):
+            response = self.client.put(
+                f"{reverse('api:note-list')}{note.pk}/",
+                {"child": 1, "note": "changed", **extra},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 405)
+            note.refresh_from_db()
+            self.assertEqual(note.note, "original")
+            self.assertEqual(list(note.tags.names()), ["existing"])
+        self.assertFalse(models.Tag.objects.filter(name="new").exists())
+
+    def test_timer_save_failure_rolls_back_entry_and_retains_timer(self):
+        self.grant("delete_timer")
+        timer = models.Timer.objects.create(
+            child_id=1,
+            user=self.caregiver,
+            start=timezone.now() - timezone.timedelta(minutes=5),
+        )
+        count = models.Sleep.objects.count()
+        original_save = models.Sleep.save
+
+        def failing_save(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise RuntimeError("save failed")
+
+        with patch.object(models.Sleep, "save", failing_save):
+            with self.assertRaisesMessage(RuntimeError, "save failed"):
+                self.client.post(
+                    reverse("api:sleep-list"), {"timer": timer.pk}, format="json"
+                )
+        self.assertEqual(models.Sleep.objects.count(), count)
+        self.assertTrue(models.Timer.objects.filter(pk=timer.pk).exists())
+
+    def test_tag_permission_grants(self):
+        models.Tag.objects.create(name="existing")
+        self.grant("change_tag")
+        url = reverse("api:note-list")
+        response = self.client.post(
+            url, {"child": 1, "note": "note", "tags": ["existing"]}, format="json"
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        detail = f"{url}{response.data['id']}/"
+        response = self.client.patch(detail, {"tags": []}, format="json")
+        self.assertEqual(response.status_code, 200)
+        response = self.client.patch(detail, {"tags": ["new"]}, format="json")
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(models.Tag.objects.filter(name="new").exists())
+        self.grant("add_tag")
+        response = self.client.patch(detail, {"tags": ["new"]}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["tags"], ["new"])
+
+    def test_caregiver_cannot_tag_admin(self):
+        response = self.client.get(reverse("api:tag-list"))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class CaregiverWebTestCase(APITestCase):
+    """
+    The same caregiver scope applies to the web UI: care entries, reports
+    and the (child) dashboard are reachable, while user management and
+    site settings are not.
+    """
+
+    fixtures = ["tests.json"]
+
+    def setUp(self):
+        self.caregiver = get_user_model().objects.create_user(
+            username="caregiver", password="caregiver", is_active=True
+        )
+        self.caregiver.groups.add(
+            Group.objects.get(name=settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"])
+        )
+        self.client.login(username="caregiver", password="caregiver")
+
+    def test_caregiver_can_open_care_entry_pages(self):
+        for url in [
+            "/feedings/add/",
+            "/changes/add/",
+            "/sleep/add/",
+            "/timers/add/",
+            "/dashboard/",
+            # Personal preferences stay available to every logged-in user.
+            "/user/settings/",
+        ]:
+            page = self.client.get(url)
+            self.assertIn(
+                page.status_code,
+                (status.HTTP_200_OK, status.HTTP_302_FOUND),
+                f"caregiver should reach {url}",
+            )
+
+    def test_caregiver_cannot_open_user_management(self):
+        for url in ["/users/", "/users/add/", "/settings/"]:
+            page = self.client.get(url)
+            self.assertIn(
+                page.status_code,
+                (status.HTTP_302_FOUND, status.HTTP_403_FORBIDDEN),
+                f"caregiver should be blocked from {url}",
+            )
+
+
+class WebhookEndpointAPITestCase(APITestCase):
+    """
+    Another application can set up its own webhook endpoint, and nobody can
+    read a secret back once it has been set.
+    """
+
+    fixtures = ["tests.json"]
+    endpoint = reverse("api:webhookendpoint-list")
+
+    def setUp(self):
+        self.client.login(username="admin", password="admin")
+
+    def test_create_returns_the_generated_secret_once(self):
+        response = self.client.post(
+            self.endpoint,
+            {"name": "Phone", "url": "https://push.example.com/hook/abc"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        endpoint = WebhookEndpoint.objects.get(pk=response.data["id"])
+        self.assertEqual(response.data["secret"], endpoint.secret)
+        self.assertGreaterEqual(len(endpoint.secret), 16)
+        detail = self.client.get("{}{}/".format(self.endpoint, endpoint.pk))
+        self.assertNotIn("secret", detail.data)
+        listed = self.client.get(self.endpoint)
+        self.assertNotIn("secret", listed.data["results"][0])
+
+    def test_create_keeps_a_secret_the_client_chose(self):
+        secret = "a-secret-the-receiver-issued-0123"
+        response = self.client.post(
+            self.endpoint,
+            {
+                "name": "Phone",
+                "url": "https://push.example.com/hook/abc",
+                "secret": secret,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            WebhookEndpoint.objects.get(pk=response.data["id"]).secret, secret
+        )
+        self.assertEqual(response.data["secret"], secret)
+
+    def test_a_short_secret_or_a_url_nothing_is_sent_to_is_refused(self):
+        for data in (
+            {
+                "name": "Short",
+                "url": "https://push.example.com/hook",
+                "secret": "too-short",
+            },
+            {"name": "FTP", "url": "ftp://push.example.com/hook"},
+        ):
+            response = self.client.post(self.endpoint, data, format="json")
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, data)
+        self.assertFalse(WebhookEndpoint.objects.exists())
+
+    def test_patch_switches_off_and_replaces_the_secret(self):
+        endpoint = WebhookEndpoint.objects.create(
+            name="Phone", url="https://push.example.com/hook/abc"
+        )
+        new_secret = "a-replacement-secret-0123456789"
+        response = self.client.patch(
+            "{}{}/".format(self.endpoint, endpoint.pk),
+            {"active": False, "secret": new_secret},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("secret", response.data)
+        endpoint.refresh_from_db()
+        self.assertFalse(endpoint.active)
+        self.assertEqual(endpoint.secret, new_secret)
+
+    def test_delete(self):
+        endpoint = WebhookEndpoint.objects.create(
+            name="Phone", url="https://push.example.com/hook/abc"
+        )
+        response = self.client.delete("{}{}/".format(self.endpoint, endpoint.pk))
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(WebhookEndpoint.objects.exists())
+
+    def test_caregivers_and_read_only_users_cannot_see_or_add_endpoints(self):
+        WebhookEndpoint.objects.create(name="Phone", url="https://push.example.com/a")
+        for group in ("CAREGIVER_GROUP_NAME", "READ_ONLY_GROUP_NAME"):
+            user = get_user_model().objects.create_user(
+                username=group.lower(), password="password"
+            )
+            user.groups.add(Group.objects.get(name=settings.BABY_BUDDY[group]))
+            self.client.login(username=group.lower(), password="password")
+            self.assertEqual(
+                self.client.get(self.endpoint).status_code, status.HTTP_403_FORBIDDEN
+            )
+            response = self.client.post(
+                self.endpoint,
+                {"name": "Mine", "url": "https://elsewhere.example.com/"},
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(WebhookEndpoint.objects.count(), 1)
+
+
+class CaregiverManagementAPITestCase(APITestCase):
+    """
+    A caregiver account can be created and withdrawn through the API, and
+    that route reaches caregiver accounts and nothing else.
+    """
+
+    fixtures = ["tests.json"]
+    endpoint = reverse("api:caregiver-list")
+
+    def setUp(self):
+        self.client.login(username="admin", password="admin")
+
+    def create(self, **extra):
+        data = {"username": "grandma", "first_name": "Grandma", **extra}
+        response = self.client.post(self.endpoint, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        return response
+
+    def with_key(self, key):
+        client = self.client_class()
+        client.credentials(HTTP_AUTHORIZATION="Token " + key)
+        return client
+
+    def test_create_makes_a_caregiver_and_returns_their_key_once(self):
+        response = self.create()
+        user = get_user_model().objects.get(username="grandma")
+        self.assertTrue(
+            user.groups.filter(
+                name=settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"]
+            ).exists()
+        )
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertFalse(user.has_usable_password())
+        self.assertEqual(response.data["api_key"], user.settings.api_key().key)
+        detail = self.client.get("{}{}/".format(self.endpoint, user.pk))
+        self.assertNotIn("api_key", detail.data)
+
+        # The key works within the caregiver's scope and not beyond it.
+        sitter = self.with_key(response.data["api_key"])
+        self.assertEqual(
+            sitter.get(reverse("api:feeding-list")).status_code, status.HTTP_200_OK
+        )
+        self.assertEqual(
+            sitter.get(self.endpoint).status_code, status.HTTP_403_FORBIDDEN
+        )
+
+    def test_an_email_lets_the_caregiver_claim_the_account(self):
+        self.create(email="grandma@example.com")
+        user = get_user_model().objects.get(username="grandma")
+        self.assertEqual(user.email, "grandma@example.com")
+        self.assertTrue(user.has_usable_password())
+
+        # This is what the address buys: the reset form skips accounts whose
+        # password is unusable, and this one has a password nobody knows, so
+        # the mailbox holder is the one who can set a real one.
+        form = PasswordResetForm({"email": "grandma@example.com"})
+        self.assertTrue(form.is_valid())
+        self.assertEqual(list(form.get_users("grandma@example.com")), [user])
+
+    def test_an_email_added_later_opens_the_same_route(self):
+        self.create()
+        user = get_user_model().objects.get(username="grandma")
+        self.assertFalse(user.has_usable_password())
+
+        response = self.client.patch(
+            "{}{}/".format(self.endpoint, user.pk),
+            {"email": "grandma@example.com"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertTrue(user.has_usable_password())
+        self.assertEqual(
+            list(PasswordResetForm({"email": user.email}).get_users(user.email)),
+            [user],
+        )
+
+    def test_the_role_cannot_be_raised_through_the_request(self):
+        self.create(is_staff=True, is_superuser=True, groups=[1])
+        user = get_user_model().objects.get(username="grandma")
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertEqual(
+            list(user.groups.values_list("name", flat=True)),
+            [settings.BABY_BUDDY["CAREGIVER_GROUP_NAME"]],
+        )
+        response = self.client.patch(
+            "{}{}/".format(self.endpoint, user.pk),
+            {"is_staff": True, "is_superuser": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertFalse(user.is_staff or user.is_superuser)
+
+    def test_other_accounts_are_out_of_reach(self):
+        admin = get_user_model().objects.get(username="admin")
+        self.assertEqual(
+            self.client.get("{}{}/".format(self.endpoint, admin.pk)).status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        response = self.client.patch(
+            "{}{}/".format(self.endpoint, admin.pk), {"is_active": False}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        admin.refresh_from_db()
+        self.assertTrue(admin.is_active)
+        self.create()
+        listed = self.client.get(self.endpoint)
+        self.assertEqual(
+            [row["username"] for row in listed.data["results"]], ["grandma"]
+        )
+
+    def test_deactivating_or_an_expiry_in_the_past_ends_access(self):
+        key = self.create().data["api_key"]
+        user = get_user_model().objects.get(username="grandma")
+        detail = "{}{}/".format(self.endpoint, user.pk)
+        self.client.patch(
+            detail,
+            {
+                "access_expires": (
+                    timezone.now() - timezone.timedelta(hours=1)
+                ).isoformat()
+            },
+            format="json",
+        )
+        self.assertIn(
+            self.with_key(key).get(reverse("api:feeding-list")).status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+        self.client.patch(
+            detail, {"access_expires": None, "is_active": False}, format="json"
+        )
+        self.assertIn(
+            self.with_key(key).get(reverse("api:feeding-list")).status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )
+        self.client.patch(detail, {"is_active": True}, format="json")
+        self.assertEqual(
+            self.with_key(key).get(reverse("api:feeding-list")).status_code,
+            status.HTTP_200_OK,
+        )
+
+    def test_an_expiry_can_be_set_when_the_account_is_created(self):
+        expires = timezone.now() + timezone.timedelta(days=1)
+        response = self.create(access_expires=expires.isoformat())
+        user = get_user_model().objects.get(username="grandma")
+        self.assertEqual(user.settings.access_expires, expires)
+        self.assertIsNotNone(response.data["access_expires"])
+
+    def test_there_is_no_delete(self):
+        self.create()
+        user = get_user_model().objects.get(username="grandma")
+        response = self.client.delete("{}{}/".format(self.endpoint, user.pk))
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(get_user_model().objects.filter(username="grandma").exists())
+
+    def test_caregivers_and_read_only_users_cannot_manage_caregivers(self):
+        for group in ("CAREGIVER_GROUP_NAME", "READ_ONLY_GROUP_NAME"):
+            user = get_user_model().objects.create_user(
+                username=group.lower(), password="password"
+            )
+            user.groups.add(Group.objects.get(name=settings.BABY_BUDDY[group]))
+            self.client.login(username=group.lower(), password="password")
+            response = self.client.post(
+                self.endpoint, {"username": "someone"}, format="json"
+            )
+            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(get_user_model().objects.filter(username="someone").exists())
+
+
+class TestSchemaAPITestCase(APITestCase):
+    endpoint = reverse("api:openapi-schema")
+
+    def setUp(self):
+        self.client.login(username="admin", password="admin")
+
+    def test_get(self):
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_get_includes_filter_parameters(self):
+        """
+        Filter parameters must appear in the schema.
+
+        django-filter removed its built-in schema generation methods in 25.1,
+        which made this endpoint raise an AttributeError.
+        """
+        response = self.client.get(self.endpoint)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        parameters = response.data["paths"]["/api/feedings/"]["get"]["parameters"]
+        names = [parameter["name"] for parameter in parameters]
+        for name in ("child", "start", "start_min", "end", "end_max", "tags"):
+            self.assertIn(name, names)
