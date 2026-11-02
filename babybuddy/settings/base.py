@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "dashboard",
     "reports",
+    "stash.apps.StashConfig",
     "webhooks.apps.WebhooksConfig",
     "axes",
     "django_filters",

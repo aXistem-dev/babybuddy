@@ -1,0 +1,29 @@
+{% extends "babybuddy/page.html" %}
+{% load i18n %}
+{% block title %}
+    {% if object %}
+        {{ object }}
+    {% else %}
+        {% trans "Add a Stored Milk Adjustment" %}
+    {% endif %}
+{% endblock %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'stash:stash' %}">{% trans "Stored milk" %}</a>
+    </li>
+    {% if object %}
+        <li class="breadcrumb-item active" aria-current="page">{% trans "Update" %}</li>
+    {% else %}
+        <li class="breadcrumb-item active" aria-current="page">{% trans "Add a Stored Milk Adjustment" %}</li>
+    {% endif %}
+{% endblock %}
+{% block content %}
+    {% if object %}
+        <h1>
+            {% trans "Update" %} <span class="text-info">{{ object }}</span>
+        </h1>
+    {% else %}
+        <h1>{% trans "Add a Stored Milk Adjustment" %}</h1>
+    {% endif %}
+    {% include "babybuddy/form.html" %}
+{% endblock %}

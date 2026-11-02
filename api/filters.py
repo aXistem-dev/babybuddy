@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from core import models
+from stash import models as stash_models
 from django_filters import rest_framework as filters
 
 
@@ -101,6 +102,20 @@ class PumpingFilter(StartEndFieldFilter):
 class SleepFilter(StartEndFieldFilter, TagsFieldFilter):
     class Meta(StartEndFieldFilter.Meta):
         model = models.Sleep
+
+
+class StashAdjustmentFilter(TagsFieldFilter):
+    date = filters.IsoDateTimeFilter(field_name="time", label="DateTime")
+    date_max = filters.IsoDateTimeFilter(
+        field_name="time", label="Max. DateTime", lookup_expr="lte"
+    )
+    date_min = filters.IsoDateTimeFilter(
+        field_name="time", label="Min. DateTime", lookup_expr="gte"
+    )
+
+    class Meta:
+        model = stash_models.StashAdjustment
+        fields = ["date", "date_max", "date_min", "kind"]
 
 
 class TemperatureFilter(TimeFieldFilter, TagsFieldFilter):

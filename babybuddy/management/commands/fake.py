@@ -166,7 +166,12 @@ class Command(BaseCommand):
 
         if end < self.time_now:
             models.Pumping.objects.create(
-                child=self.child, amount=self.amount, start=start, end=end, notes=notes
+                child=self.child,
+                amount=self.amount,
+                start=start,
+                end=end,
+                notes=notes,
+                to_stash=choice([True, False]),
             ).save()
 
     @transaction.atomic
@@ -221,14 +226,23 @@ class Command(BaseCommand):
         if choice([True, False, False, False]):
             notes = " ".join(self.faker.sentences(randint(1, 5)))
 
+        feeding_type = choice(types)
+        from_stash = (
+            method == "bottle"
+            and feeding_type in ("breast milk", "fortified breast milk")
+            and amount > 0
+            and choice([True, False])
+        )
+
         if end < self.time_now:
             instance = models.Feeding.objects.create(
                 child=self.child,
                 start=start,
                 end=end,
-                type=choice(types),
+                type=feeding_type,
                 method=method,
                 amount=amount,
+                from_stash=from_stash,
                 notes=notes,
             )
             instance.save()

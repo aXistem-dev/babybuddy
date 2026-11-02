@@ -22,6 +22,7 @@ Currently, the following endpoints are available for `GET`, `OPTIONS`, and
 - `/api/notes/`
 - `/api/pumping/`
 - `/api/sleep/`
+- `/api/stash-adjustments/`
 - `/api/tags/`
 - `/api/temperature/`
 - `/api/timers/`
@@ -350,3 +351,51 @@ An activity has `child`, `type` (the activity type's `id`), `start`, `end`,
 and the same `start`/`end` filters as other entries with a duration. For a type
 without a duration, `end` may be left out and is set to `start`. Like sleep and
 tummy time, an activity can be created from a timer with the `timer` field.
+
+## Stored Milk
+
+Pumping entries have a `to_stash` field and feedings a `from_stash` field. Both
+are `false` when left out, so a request that doesn't send them doesn't change
+the stored milk. A feeding with `from_stash` set must be a bottle of breast milk or
+fortified breast milk with an amount; anything else returns `400 Bad Request`.
+
+`/api/stash-adjustments/` takes milk added to or discarded from stored milk by
+hand: `time`, `amount`, `kind` (`added` or `discarded`), `notes` and `tags`. It
+can be filtered by `kind`, `date_min` and `date_max`.
+
+`GET /api/stash` returns the stored milk, oldest first:
+
+```json
+{
+  "balance": 230.0,
+  "status": "warn",
+  "warn_age_hours": 48,
+  "max_age_hours": 72,
+  "expired_amount": 0.0,
+  "lots": [
+    {
+      "time": "2024-01-06T08:30:00-05:00",
+      "amount": 110.0,
+      "warn_at": "2024-01-08T08:30:00-05:00",
+      "expires_at": "2024-01-09T08:30:00-05:00",
+      "status": "warn",
+      "source": { "type": "pumping", "id": 42 }
+    },
+    {
+      "time": "2024-01-07T19:00:00-05:00",
+      "amount": 120.0,
+      "warn_at": "2024-01-09T19:00:00-05:00",
+      "expires_at": "2024-01-10T19:00:00-05:00",
+      "status": "ok",
+      "source": { "type": "stash_adjustment", "id": 7 }
+    }
+  ]
+}
+```
+
+`balance` is below zero when more milk was taken out than was put in; `lots`
+is then empty. Each lot's `status` is `ok`, `warn` (expires soon) or
+`expired`, and the overall `status` is that of the oldest milk. Each lot is
+what is left of one pumping entry or "added" stored milk adjustment, named by its
+`source`: `type` is `pumping` or `stash_adjustment`, and `id` is that entry's
+`id`.
