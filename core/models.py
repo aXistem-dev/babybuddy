@@ -86,6 +86,118 @@ def validate_unique_period(queryset, model):
             )
 
 
+EMOJI_MAX_CODE_POINTS = 16
+EMOJI_BASE_RANGES = (
+    (0x1F000, 0x1FAFF),
+    (0x2600, 0x27BF),
+    (0x2300, 0x23FF),
+    (0x2B00, 0x2BFF),
+    (0x2194, 0x2199),  # arrows
+    (0x21A9, 0x21AA),  # curved arrows
+    (0x25FB, 0x25FE),  # medium squares
+    (0x2934, 0x2935),  # arrows curving up and down
+)
+EMOJI_BASE_CODE_POINTS = {
+    0x00A9,  # copyright sign
+    0x00AE,  # registered sign
+    0x203C,  # double exclamation mark
+    0x2049,  # exclamation question mark
+    0x2122,  # trade mark sign
+    0x2139,  # information source
+    0x24C2,  # circled M
+    0x25AA,  # small black square
+    0x25AB,  # small white square
+    0x25B6,  # play button
+    0x25C0,  # reverse button
+    0x3030,  # wavy dash
+    0x303D,  # part alternation mark
+    0x3297,  # circled ideograph congratulation
+    0x3299,  # circled ideograph secret
+}
+EMOJI_KEYCAP_BASES = {ord(c) for c in "0123456789#*"}
+EMOJI_REGIONAL_INDICATORS = (0x1F1E6, 0x1F1FF)
+EMOJI_SKIN_TONES = (0x1F3FB, 0x1F3FF)
+EMOJI_TAGS = (0xE0020, 0xE007E)
+EMOJI_CANCEL_TAG = 0xE007F
+EMOJI_KEYCAP = 0x20E3
+EMOJI_VS16 = 0xFE0F
+EMOJI_ZWJ = 0x200D
+
+
+def _in_range(code_point, code_point_range):
+    return code_point_range[0] <= code_point <= code_point_range[1]
+
+
+def _is_emoji_base(code_point):
+    if _in_range(code_point, EMOJI_REGIONAL_INDICATORS) or _in_range(
+        code_point, EMOJI_SKIN_TONES
+    ):
+        return False
+    return code_point in EMOJI_BASE_CODE_POINTS or any(
+        _in_range(code_point, r) for r in EMOJI_BASE_RANGES
+    )
+
+
+def _is_single_emoji(value):
+    """
+    Check that a string is exactly one emoji grapheme. This follows the shape
+    of emoji sequences rather than Unicode's full emoji data, so it is a little
+    permissive: one base emoji, optionally followed by a variation selector, a
+    skin tone, a keycap mark or a tag sequence, and more of those joined with
+    zero width joiners. Flags are two regional indicators and keycaps are a
+    digit, "#" or "*" with a variation selector and a keycap mark.
+    """
+    code_points = [ord(c) for c in value]
+    if not code_points or len(code_points) > EMOJI_MAX_CODE_POINTS:
+        return False
+    if all(_in_range(c, EMOJI_REGIONAL_INDICATORS) for c in code_points):
+        return len(code_points) == 2
+    if code_points[0] in EMOJI_KEYCAP_BASES:
+        return code_points[1:] == [EMOJI_VS16, EMOJI_KEYCAP]
+
+    i = 0
+    while True:
+        if i >= len(code_points) or not _is_emoji_base(code_points[i]):
+            return False
+        i += 1
+        seen = set()
+        while i < len(code_points):
+            code_point = code_points[i]
+            if _in_range(code_point, EMOJI_SKIN_TONES):
+                kind = "skin_tone"
+            elif code_point in (EMOJI_VS16, EMOJI_KEYCAP):
+                kind = code_point
+            elif _in_range(code_point, EMOJI_TAGS):
+                # A tag sequence (e.g. a subdivision flag) ends with a cancel
+                # tag.
+                while i < len(code_points) and _in_range(code_points[i], EMOJI_TAGS):
+                    i += 1
+                if i >= len(code_points) or code_points[i] != EMOJI_CANCEL_TAG:
+                    return False
+                kind = "tags"
+            else:
+                break
+            if kind in seen:
+                return False
+            seen.add(kind)
+            i += 1
+        if i == len(code_points):
+            return True
+        if code_points[i] != EMOJI_ZWJ:
+            return False
+        i += 1
+
+
+def validate_emoji(value):
+    """
+    Confirm that a value is empty or a single emoji.
+    :param value: the string to check.
+    :return:
+    """
+    if value and not _is_single_emoji(value):
+        raise ValidationError(_("Enter a single emoji."), code="emoji_invalid")
+
+
 def validate_time(time, field_name):
     """
     Confirm that a time is not in the future.
@@ -165,6 +277,230 @@ class Tagged(GenericTaggedItemBase):
 
 class TaggableManager(TaggitTaggableManager):
     pass
+
+
+# Icons available to ActivityType instances. These are limited to the glyphs
+# that are built in to Baby Buddy's icon font -- the "emoji" field can be used
+# for anything that is not covered here.
+ACTIVITY_ICONS = [
+    ("activities", _("Activities")),
+    ("bmi", _("BMI")),
+    ("calendar", _("Calendar")),
+    ("camera", _("Camera")),
+    ("chat", _("Chat")),
+    ("child", _("Child")),
+    ("clock", _("Clock")),
+    ("dashboard", _("Dashboard")),
+    ("diaperchange", _("Diaper Change")),
+    ("feeding", _("Feeding")),
+    ("graph", _("Graph")),
+    ("head-circumference", _("Head Circumference")),
+    ("height", _("Height")),
+    ("list", _("List")),
+    ("lock", _("Lock")),
+    ("mail", _("Mail")),
+    ("measurements", _("Measurements")),
+    ("medication", _("Medication")),
+    ("note", _("Note")),
+    ("pumping", _("Pumping")),
+    ("refresh", _("Refresh")),
+    ("sad", _("Sad")),
+    ("sleep", _("Sleep")),
+    ("source", _("Source")),
+    ("stop", _("Stop")),
+    ("tag", _("Tag")),
+    ("temperature", _("Temperature")),
+    ("timeline", _("Timeline")),
+    ("timer", _("Timer")),
+    ("today", _("Today")),
+    ("tummytime", _("Tummy Time")),
+    ("user", _("User")),
+    ("weight", _("Weight")),
+]
+
+
+class ActivityType(models.Model):
+    """
+    A user-defined kind of activity (e.g. "Bath", "Walk", "Bottle wash"), used
+    to categorize `Activity` entries.
+    """
+
+    model_name = "activitytype"
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name=_("Name"),
+        help_text=_('The name of the activity, e.g. "Bath" or "Walk".'),
+    )
+    slug = models.SlugField(
+        allow_unicode=True,
+        blank=False,
+        editable=False,
+        max_length=100,
+        unique=True,
+        verbose_name=_("Slug"),
+    )
+    icon = models.CharField(
+        choices=ACTIVITY_ICONS,
+        default="activities",
+        max_length=64,
+        verbose_name=_("Icon"),
+    )
+    emoji = models.CharField(
+        blank=True,
+        default="",
+        max_length=EMOJI_MAX_CODE_POINTS,
+        validators=[validate_emoji],
+        verbose_name=_("Emoji"),
+        help_text=_(
+            "An emoji to use in place of the icon, e.g. 🛁 or 🚶. Leave blank to "
+            "use the icon."
+        ),
+    )
+    color = models.CharField(
+        verbose_name=_("Color"),
+        max_length=32,
+        default=random_color,
+        validators=[RegexValidator(r"^#[0-9a-fA-F]{6}$")],
+    )
+    has_duration = models.BooleanField(
+        default=False,
+        verbose_name=_("Track duration"),
+        help_text=_(
+            "Record a start and end time for this activity. Otherwise only a "
+            "single point in time is recorded."
+        ),
+    )
+    active = models.BooleanField(
+        default=True,
+        verbose_name=_("Active"),
+        help_text=_(
+            "Inactive activities are hidden from add menus and dashboards but "
+            "their existing entries are kept."
+        ),
+    )
+    order = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("Sort order"),
+        help_text=_("Activities are sorted by this value, then by name."),
+    )
+
+    objects = models.Manager()
+
+    class Meta:
+        default_permissions = ("view", "add", "change", "delete")
+        ordering = ["order", Lower("name")]
+        verbose_name = _("Activity Type")
+        verbose_name_plural = _("Activity Types")
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        # The slug is how links, hidden dashboard cards and integrations refer
+        # to a type, so it is generated once and kept when the type is renamed.
+        if not self.slug:
+            self.slug = self.slug_from_name()
+        super(ActivityType, self).save(*args, **kwargs)
+
+    def clean(self):
+        if self.slug:
+            return
+        # The slug is derived from the name, so two different names can still
+        # end up with the same slug (e.g. "Bath" and "bath!").
+        slug = self.slug_from_name()
+        if not slug:
+            raise ValidationError(
+                {"name": _("Name must contain at least one letter or number.")},
+                code="slug_empty",
+            )
+        if ActivityType.objects.filter(slug=slug).exclude(pk=self.pk).exists():
+            raise ValidationError(
+                {"name": _("An activity type with a similar name already exists.")},
+                code="slug_conflict",
+            )
+
+    def slug_from_name(self):
+        max_length = self._meta.get_field("slug").max_length
+        slug = slugify(self.name or "", allow_unicode=True)
+        return slug[:max_length].strip("-_")
+
+    @property
+    def card_id(self):
+        """Identifier used to reference this type's dashboard card."""
+        return "activity:{}".format(self.slug)
+
+    @property
+    def complementary_color(self):
+        """A readable text color for use on top of `color`."""
+        if not self.color:
+            return Tag.DARK_COLOR
+        r, g, b = [int(x, 16) for x in re.match("#(..)(..)(..)", self.color).groups()]
+        yiq = ((r * 299) + (g * 587) + (b * 114)) // 1000
+        return Tag.DARK_COLOR if yiq >= 128 else Tag.LIGHT_COLOR
+
+
+class Activity(models.Model):
+    """
+    An entry for a user-defined `ActivityType`.
+    """
+
+    model_name = "activity"
+    child = models.ForeignKey(
+        "Child",
+        on_delete=models.CASCADE,
+        related_name="activity",
+        verbose_name=_("Child"),
+    )
+    type = models.ForeignKey(
+        "ActivityType",
+        on_delete=models.PROTECT,
+        related_name="entries",
+        verbose_name=_("Activity"),
+    )
+    start = models.DateTimeField(
+        blank=False,
+        default=timezone.localtime,
+        null=False,
+        verbose_name=_("Start time"),
+    )
+    end = models.DateTimeField(
+        blank=False, default=timezone.localtime, null=False, verbose_name=_("End time")
+    )
+    duration = models.DurationField(
+        editable=False, null=True, verbose_name=_("Duration")
+    )
+    notes = models.TextField(blank=True, null=True, verbose_name=_("Notes"))
+    tags = TaggableManager(blank=True, through=Tagged)
+
+    objects = models.Manager()
+
+    class Meta:
+        default_permissions = ("view", "add", "change", "delete")
+        ordering = ["-start"]
+        verbose_name = _("Activity")
+        verbose_name_plural = _("Activities")
+
+    def __str__(self):
+        return str(_("Activity"))
+
+    def save(self, *args, **kwargs):
+        # Activity types without a duration are stored as a single point in
+        # time (start == end) so that they sort and filter like other entries.
+        if self.type_id and not self.type.has_duration:
+            self.end = self.start
+        if self.start and self.end:
+            self.duration = timezone_aware_duration(self.start, self.end)
+        super(Activity, self).save(*args, **kwargs)
+
+    def clean(self):
+        validate_time(self.start, "start")
+        validate_time(self.end, "end")
+        validate_duration(self)
+        if self.type_id:
+            validate_unique_period(
+                Activity.objects.filter(child=self.child, type=self.type), self
+            )
 
 
 class BMI(models.Model):
